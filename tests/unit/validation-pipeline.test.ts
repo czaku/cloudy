@@ -1,0 +1,158 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Task, ValidationConfig } from '../../src/core/types.js';
+
+// Mock all external calls
+vi.mock('../../src/validator/strategies/type-check.js', () => ({
+  runTypeCheck: vi.fn(async () => ({ strategy: 'typecheck', passed: true, output: 'No type errors', durationMs: 100 })),
+}));
+vi.mock('../../src/validator/strategies/lint-check.js', () => ({
+  runLintCheck: vi.fn(async () => ({ strategy: 'lint', passed: true, output: 'No lint errors', durationMs: 50 })),
+}));
+vi.mock('../../src/validator/strategies/build-check.js', () => ({
+  runBuildCheck: vi.fn(async () => ({ strategy: 'build', passed: true, output: 'Build succeeded', durationMs: 200 })),
+}));
+vi.mock('../../src/validator/strategies/test-runner.js', () => ({
+  runTestRunner: vi.fn(async () => ({ strategy: 'test', passed: true, output: 'All tests passed', durationMs: 500 })),
+}));
+vi.mock('../../src/validator/strategies/ai-review.js', () => ({
+  runAiReview: vi.fn(async () => ({ strategy: 'ai-review', passed: true, output: 'Looks good', durationMs: 300 })),
+}));
+vi.mock('../../src/validator/strategies/artifact-check.js', () => ({
+  runArtifactCheck: vi.fn(async () => ({ strategy: 'artifacts', passed: true, output: 'All artifacts present', durationMs: 10 })),
+}));
+vi.mock('../../src/git/git.js', () => ({
+  getGitDiff: vi.fn(async () => 'diff --git a/file.ts b/file.ts'),
+  getChangedFiles: vi.fn(async () => []),
+}));
+vi.mock('../../src/utils/logger.js', () => ({
+  log: { info: vi.fn(async () => {}), warn: vi.fn(async () => {}), error: vi.fn(async () => {}) },
+}));
+
+import { validateTask } from '../../src/validator/validator.js';
+import { runArtifactCheck } from '../../src/validator/strategies/artifact-check.js';
+import { runTypeCheck } from '../../src/validator/strategies/type-check.js';
+import { runAiReview } from '../../src/validator/strategies/ai-review.js';
+
+function makeTask(overrides: Partial<Task> = {}): Task {
+  return {
+    id: 'task-1',
+    title: 'Test task',
+    description: 'A test task',
+    acceptanceCriteria: ['It works'],
+    dependencies: [],
+    contextPatterns: [],
+    status: 'completed',
+    retries: 0,
+    maxRetries: 2,
+    ifFailed: 'halt',
+    timeout: 3600000,
+    ...overrides,
+  };
+}
+
+const ALL_ON: ValidationConfig = {
+  typecheck: true,
+  lint: true,
+  build: true,
+  test: true,
+  aiReview: true,
+  commands: [],
+};
+
+const ALL_OFF: ValidationConfig = {
+  typecheck: false,
+  lint: false,
+  build: false,
+  test: false,
+  aiReview: false,
+  commands: [],
+};
+
+describe('validateTask — full pipeline integration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('passes when all checks are enabled and all pass', async () => {
+    const report = await validateTask({
+      task: makeTask(),
+      config: ALL_ON,
+      model: 'haiku',
+      cwd: '/tmp',
+    });
+    expect(report.passed).toBe(true);
+    expect(report.results.length).toBeGreaterThan(0);
+  });
+
+  it('skips all checks when all disabled', async () => {
+    const report = await validateTask({
+      task: makeTask(),
+      config: ALL_OFF,
+      model: 'haiku',
+      cwd: '/tmp',
+    });
+    expect(report.passed).toBe(true);
+    expect(report.results).toHaveLength(0);
+  });
+
+  it('phase 0: runs artifact check when outputArtifacts present', async () => {
+    const task = makeTask({ outputArtifacts: ['src/foo.ts'] });
+    await validateTask({ task, config: ALL_OFF, model: 'haiku', cwd: '/tmp' });
+    expect(runArtifactCheck).toHaveBeenCalledWith(['src/foo.ts'], '/tmp');
+  });
+
+  it('phase 0: short-circuits on missing artifacts without running later phases', async () => {
+    vi.mocked(runArtifactCheck).mockResolvedValueOnce({
+      strategy: 'artifacts',
+      passed: false,
+      output: 'Missing: src/foo.ts',
+      durationMs: 5,
+    });
+    const task = makeTask({ outputArtifacts: ['src/foo.ts'] });
+    const report = await validateTask({ task, config: ALL_ON, model: 'haiku', cwd: '/tmp' });
+    expect(report.passed).toBe(false);
+    expect(runTypeCheck).not.toHaveBeenCalled();
+    expect(runAiReview).not.toHaveBeenCalled();
+  });
+
+  it('short-circuits after first deterministic failure without running AI review', async () => {
+    vi.mocked(runTypeCheck).mockResolvedValueOnce({
+      strategy: 'typecheck',
+      passed: false,
+      output: 'error TS2345: ...',
+      durationMs: 100,
+    });
+    const report = await validateTask({ task: makeTask(), config: ALL_ON, model: 'haiku', cwd: '/tmp' });
+    expect(report.passed).toBe(false);
+    expect(runAiReview).not.toHaveBeenCalled();
+  });
+
+  it('skips AI review when aiReview is disabled', async () => {
+    const config = { ...ALL_ON, aiReview: false };
+    await validateTask({ task: makeTask(), config, model: 'haiku', cwd: '/tmp' });
+    expect(runAiReview).not.toHaveBeenCalled();
+  });
+
+  it('only runs AI review when all deterministic checks pass', async () => {
+    const report = await validateTask({ task: makeTask(), config: ALL_ON, model: 'haiku', cwd: '/tmp' });
+    expect(runAiReview).toHaveBeenCalledOnce();
+    expect(report.passed).toBe(true);
+  });
+
+  it('report contains taskId matching the task', async () => {
+    const task = makeTask({ id: 'task-42' });
+    const report = await validateTask({ task, config: ALL_OFF, model: 'haiku', cwd: '/tmp' });
+    expect(report.taskId).toBe('task-42');
+  });
+
+  it('AI review failure marks report as failed', async () => {
+    vi.mocked(runAiReview).mockResolvedValueOnce({
+      strategy: 'ai-review',
+      passed: false,
+      output: 'Criterion not met: ...',
+      durationMs: 300,
+    });
+    const report = await validateTask({ task: makeTask(), config: ALL_ON, model: 'haiku', cwd: '/tmp' });
+    expect(report.passed).toBe(false);
+  });
+});

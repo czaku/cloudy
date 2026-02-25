@@ -1,0 +1,223 @@
+/**
+ * Run logger — appends one JSONL line per task event to `.cloudy/runs/{runId}.jsonl`.
+ *
+ * Designed for post-run AI analysis: each line is self-contained JSON with full context
+ * about what was attempted, what passed/failed, why, and what files changed.
+ *
+ * Files written:
+ *   .cloudy/runs/run-YYYYMMDD-HHmmss.jsonl   ← timestamped archive
+ *   .cloudy/runs/latest.jsonl                ← always the most recent run (overwritten)
+ */
+
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { CLAWDASH_DIR } from '../config/defaults.js';
+import { ensureDir } from '../utils/fs.js';
+import type { AcceptanceCriterionResult, CostSummary } from '../core/types.js';
+
+const RUNS_DIR = 'runs';
+const LATEST = 'latest.jsonl';
+
+// ── Entry shapes ──────────────────────────────────────────────────────────────
+
+interface RetryEntry {
+  attempt: number;
+  timestamp: string;
+  failureType: string;
+  aiReview?: string;     // extracted ai-review feedback for this attempt
+  reason?: string;
+}
+
+export interface TaskCompletedEntry {
+  ts: string;
+  event: 'task_completed';
+  taskId: string;
+  title: string;
+  attempt: number;        // which attempt succeeded (1 = first try)
+  durationMs: number;
+  costUsd: number;
+  model: string;
+  engine: string;
+  filesChanged: string[];
+  criteriaResults: AcceptanceCriterionResult[];
+  resultSummary: string;
+  validationStrategies: string[];  // which validators ran
+}
+
+export interface TaskFailedEntry {
+  ts: string;
+  event: 'task_failed';
+  taskId: string;
+  title: string;
+  totalAttempts: number;
+  totalDurationMs: number;
+  costUsd: number;
+  finalError: string;
+  retryHistory: RetryEntry[];
+  criteriaResults: AcceptanceCriterionResult[];
+  // Diagnosis hint — last ai-review message, useful for understanding the failure
+  lastAiReview: string;
+}
+
+export interface RunCompletedEntry {
+  ts: string;
+  event: 'run_completed';
+  runId: string;
+  totalTasks: number;
+  completed: number;
+  failed: number;
+  skipped: number;
+  totalCostUsd: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheReadTokens: number;
+  durationMs: number;
+  failedTaskIds: string[];
+  costByModel: Record<string, number>;
+  costByPhase: Record<string, number>;
+}
+
+export interface RunFailedEntry {
+  ts: string;
+  event: 'run_failed';
+  runId: string;
+  error: string;
+  durationMs: number;
+}
+
+type LogEntry = TaskCompletedEntry | TaskFailedEntry | RunCompletedEntry | RunFailedEntry;
+
+// ── RunLogger ─────────────────────────────────────────────────────────────────
+
+export class RunLogger {
+  private runId: string;
+  private logPath: string;
+  private latestPath: string;
+  private startMs: number;
+
+  constructor(cwd: string) {
+    const now = new Date();
+    const stamp = now.toISOString()
+      .replace('T', '-')
+      .replace(/:/g, '')
+      .slice(0, 15);             // "20260226-110000"
+    this.runId = `run-${stamp}`;
+    const runsDir = path.join(cwd, CLAWDASH_DIR, RUNS_DIR);
+    this.logPath = path.join(runsDir, `${this.runId}.jsonl`);
+    this.latestPath = path.join(runsDir, LATEST);
+    this.startMs = Date.now();
+  }
+
+  async init(): Promise<void> {
+    await ensureDir(path.dirname(this.logPath));
+  }
+
+  getId(): string { return this.runId; }
+
+  async logTaskCompleted(opts: {
+    taskId: string;
+    title: string;
+    attempt: number;
+    durationMs: number;
+    costUsd: number;
+    model: string;
+    engine: string;
+    filesChanged: string[];
+    criteriaResults: AcceptanceCriterionResult[];
+    resultSummary: string;
+    validationStrategies: string[];
+  }): Promise<void> {
+    const entry: TaskCompletedEntry = {
+      ts: new Date().toISOString(),
+      event: 'task_completed',
+      ...opts,
+    };
+    await this.append(entry);
+  }
+
+  async logTaskFailed(opts: {
+    taskId: string;
+    title: string;
+    totalAttempts: number;
+    totalDurationMs: number;
+    costUsd: number;
+    finalError: string;
+    retryHistory: Array<{ attempt: number; timestamp: string; failureType: string; fullError?: string; reason?: string }>;
+    criteriaResults: AcceptanceCriterionResult[];
+  }): Promise<void> {
+    // Extract the last ai-review message for quick diagnosis
+    const lastEntry = opts.retryHistory[opts.retryHistory.length - 1];
+    const lastAiReview = lastEntry
+      ? (lastEntry.fullError ?? lastEntry.reason ?? '').slice(0, 600)
+      : '';
+
+    const retryHistory: RetryEntry[] = opts.retryHistory.map((r) => ({
+      attempt: r.attempt,
+      timestamp: r.timestamp,
+      failureType: r.failureType,
+      // Pull out just the ai-review line (first 400 chars)
+      aiReview: (r.fullError ?? r.reason ?? '').slice(0, 400),
+    }));
+
+    const entry: TaskFailedEntry = {
+      ts: new Date().toISOString(),
+      event: 'task_failed',
+      taskId: opts.taskId,
+      title: opts.title,
+      totalAttempts: opts.totalAttempts,
+      totalDurationMs: opts.totalDurationMs,
+      costUsd: opts.costUsd,
+      finalError: opts.finalError,
+      retryHistory,
+      criteriaResults: opts.criteriaResults,
+      lastAiReview,
+    };
+    await this.append(entry);
+  }
+
+  async logRunCompleted(opts: {
+    totalTasks: number;
+    completed: number;
+    failed: number;
+    skipped: number;
+    failedTaskIds: string[];
+    costSummary: CostSummary;
+  }): Promise<void> {
+    const entry: RunCompletedEntry = {
+      ts: new Date().toISOString(),
+      event: 'run_completed',
+      runId: this.runId,
+      totalTasks: opts.totalTasks,
+      completed: opts.completed,
+      failed: opts.failed,
+      skipped: opts.skipped,
+      totalCostUsd: opts.costSummary.totalEstimatedUsd,
+      totalInputTokens: opts.costSummary.totalInputTokens,
+      totalOutputTokens: opts.costSummary.totalOutputTokens,
+      totalCacheReadTokens: opts.costSummary.totalCacheReadTokens,
+      durationMs: Date.now() - this.startMs,
+      failedTaskIds: opts.failedTaskIds,
+      costByModel: opts.costSummary.byModel,
+      costByPhase: opts.costSummary.byPhase,
+    };
+    await this.append(entry);
+  }
+
+  async logRunFailed(error: string): Promise<void> {
+    const entry: RunFailedEntry = {
+      ts: new Date().toISOString(),
+      event: 'run_failed',
+      runId: this.runId,
+      error,
+      durationMs: Date.now() - this.startMs,
+    };
+    await this.append(entry);
+  }
+
+  private async append(entry: LogEntry): Promise<void> {
+    const line = JSON.stringify(entry) + '\n';
+    await fs.appendFile(this.logPath, line, 'utf-8');
+    // Keep latest.jsonl in sync (overwrite with full content each time for atomicity)
+    await fs.copyFile(this.logPath, this.latestPath);
+  }
+}

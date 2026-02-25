@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "plan": {
+    "goal": "Build a hello world express server",
+    "tasks": [
+      {
+        "id": "task-1",
+        "title": "Initialize project with package.json and TypeScript",
+        "description": "Create package.json with express dependency, tsconfig.json, and basic project structure",
+        "acceptanceCriteria": [
+          "package.json exists with express as dependency",
+          "tsconfig.json exists with strict mode"
+        ],
+        "dependencies": [],
+        "status": "completed",
+        "retries": 0,
+        "maxRetries": 2,
+        "checkpointSha": "abc1234",
+        "startedAt": "2026-01-01T00:00:00.000Z",
+        "completedAt": "2026-01-01T00:01:00.000Z"
+      },
+      {
+        "id": "task-2",
+        "title": "Create Express server with hello world route",
+        "description": "Create src/index.ts with Express server listening on port 3000 with GET / returning hello world",
+        "acceptanceCriteria": [
+          "GET / returns 'Hello World'",
+          "Server listens on port 3000"
+        ],
+        "dependencies": ["task-1"],
+        "status": "pending",
+        "retries": 0,
+        "maxRetries": 2
+      }
+    ],
+    "createdAt": "2026-01-01T00:00:00.000Z",
+    "updatedAt": "2026-01-01T00:01:00.000Z"
+  },
+  "config": {
+    "models": {
+      "planning": "sonnet",
+      "execution": "sonnet",
+      "validation": "haiku"
+    },
+    "validation": {
+      "typecheck": true,
+      "lint": true,
+      "build": true,
+      "test": true,
+      "aiReview": true
+    },
+    "maxRetries": 2,
+    "parallel": false,
+    "maxParallel": 3
+  },
+  "costSummary": {
+    "totalInputTokens": 1500,
+    "totalOutputTokens": 800,
+    "totalCacheReadTokens": 0,
+    "totalCacheWriteTokens": 0,
+    "totalEstimatedUsd": 0.0165,
+    "byPhase": {
+      "planning": 0.0165
+    },
+    "byModel": {
+      "sonnet": 0.0165
+    }
+  }
+}
