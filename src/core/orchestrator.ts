@@ -788,7 +788,10 @@ export class Orchestrator {
 
       this.onEvent({ type: 'validation_result', taskId: task.id, report });
 
-      if (this.aborted) return;
+      // Do NOT check this.aborted here — if validation already passed we must
+      // save the completed state so the task isn't left as in_progress on the
+      // next run.  Abort is checked before starting new tasks, not after a task
+      // has already finished successfully.
 
       if (report.passed) {
         task.durationMs = Date.now() - taskStartTime;

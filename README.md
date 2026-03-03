@@ -26,11 +26,37 @@ Cloudy breaks a project goal into a dependency-ordered task graph, then works th
 
 ---
 
+## Prerequisites
+
+- **Node.js 18+**
+- **[Claude Code](https://claude.ai/code)** — `claude` must be on your PATH
+
+---
+
 ## Install
 
+**One-liner:**
+
 ```bash
-npm install && npm run build
+git clone https://github.com/czaku/cloudy.git ~/cloudy && cd ~/cloudy && npm install && npm run build && npm link
+```
+
+This clones the repo, builds it, and links `cloudy` globally so you can run it from any directory.
+
+**Manual steps:**
+
+```bash
+git clone https://github.com/czaku/cloudy.git
+cd cloudy
+npm install
+npm run build
 npm link          # makes `cloudy` available globally
+```
+
+After install, verify:
+
+```bash
+cloudy --version
 ```
 
 ---
@@ -52,6 +78,12 @@ Or skip the planning step entirely:
 
 ```bash
 cloudy run --goal "add user authentication with JWT"
+```
+
+Or point at a spec file:
+
+```bash
+cloudy init --spec ./PRD.md && cloudy run --verbose
 ```
 
 ---
@@ -116,10 +148,17 @@ cloudy run --no-dashboard
 | `--no-validate` | Skip all validation |
 | `--no-dashboard` | Disable the web dashboard |
 | `--verbose` | Stream live Claude output per task |
-| `--model <m>` | Model for all phases |
-| `--model-execution <m>` | Model for execution |
-| `--model-validation <m>` | Model for validation |
+| `--model <m>` | Model for all phases (`opus`, `sonnet`, `haiku`) |
+| `--model-execution <m>` | Model for execution phase |
+| `--model-validation <m>` | Model for validation phase |
 | `--model-auto` | Auto-route model by task complexity |
+| `--engine <e>` | Execution engine: `claude-code` (default) or `pi-mono` |
+| `--pi-provider <p>` | Pi-mono provider (e.g. `openai`, `anthropic`, `google`) |
+| `--pi-model <m>` | Pi-mono model ID (e.g. `gpt-4o-mini`) |
+| `--pi-base-url <url>` | Custom base URL for pi-mono provider |
+| `--tui` | Force terminal UI on (auto-enabled when TTY) |
+| `--no-tui` | Disable terminal UI |
+| `--no-dashboard` | Disable the web dashboard |
 
 ---
 
@@ -205,7 +244,62 @@ A real-time web UI starts automatically at `http://localhost:3117`. It shows liv
 cloudy run                        # dashboard on by default, browser auto-opens
 cloudy run --no-dashboard         # disable
 cloudy run --dashboard-port 4000  # custom port
-cloudy run --dashboard-only       # open dashboard and wait for browser to start the run
+```
+
+---
+
+## Terminal UI (TUI)
+
+When running in a terminal, cloudy shows a two-panel TUI automatically:
+
+```
+┌─ Tasks ──────────────┐ ┌─ Output — task-2 ─────────────────────────────┐
+│ ✅ task-1  Setup DB   │ │ Implementing JWT auth routes...               │
+│ ⚡ task-2  Auth       │ │ Adding /api/auth/login endpoint               │
+│ ○  task-3  Upload     │ │ Token stored in httpOnly cookie               │
+│ ○  task-4  CRUD       │ │                                               │
+│ ○  task-5  Tests      │ │                                               │
+└───────────────────────┘ └────────────────────────────────────────────────┘
+  ↑/↓ navigate · p pause · s skip · q quit
+```
+
+The TUI is enabled automatically when stdout is a TTY. To control it:
+
+```bash
+cloudy run --no-tui       # disable (useful for CI or piping output)
+cloudy run --tui          # force on even in non-TTY contexts
+```
+
+---
+
+## Execution Engines
+
+Cloudy supports two execution engines:
+
+### Claude Code (default)
+
+Uses the `claude` CLI with `--dangerously-skip-permissions` for full autonomous operation.
+
+```bash
+cloudy run --engine claude-code --model-execution sonnet
+```
+
+### Pi-mono
+
+Abstraction layer that supports OpenAI, Google, Ollama, and other providers — useful when you want to drive tasks with a different model family.
+
+```bash
+cloudy run --engine pi-mono --pi-provider openai --pi-model gpt-4o-mini
+cloudy run --engine pi-mono --pi-provider google --pi-model gemini-2.0-flash
+cloudy run --engine pi-mono --pi-provider ollama --pi-model llama3.2 --pi-base-url http://localhost:11434
+```
+
+Persist the engine in config:
+
+```bash
+cloudy config --set engine=pi-mono
+cloudy config --set piMono.provider=openai
+cloudy config --set piMono.model=gpt-4o-mini
 ```
 
 ---
@@ -251,6 +345,21 @@ Cloudy parses this, adds the subtasks to the live queue, and runs them in order.
 
 ---
 
+## Wrap-up
+
+Add a `wrapUpPrompt` to your plan to run a final prompt after all tasks complete — useful for generating a summary, running a smoke test, or sending a notification:
+
+```json
+// .cloudy/state.json  (or set via plan edit)
+{
+  "wrapUpPrompt": "Run make smoke. If it passes, write a one-paragraph summary of what was built to SUMMARY.md."
+}
+```
+
+The wrap-up runs in the same working directory as the rest of the plan, using the execution engine and model.
+
+---
+
 ## Other Commands
 
 ```bash
@@ -270,6 +379,9 @@ cloudy status --cost
 # Convergence loop: run until a condition passes
 cloudy loop "make all tests pass" --until "npm test" --max-iterations 5
 
+# Preview what cloudy would do without executing
+cloudy dry-run
+
 # View/update config
 cloudy config
 cloudy config --set parallel=true
@@ -280,7 +392,103 @@ cloudy reset --force
 
 ---
 
+## Writing Good Specs
+
+Cloudy is only as good as the specs you give it. The most common cause of incomplete
+implementations isn't a model failure — it's an incomplete spec. Claude will implement
+exactly what you describe, no more.
+
+### Complete the Files list
+
+Every file in the full data pipeline must be listed. The most common mistake is describing
+a feature at the UI or API layer without tracing where the data actually comes from.
+
+**Example:** adding a `requires` field to tasks ingested from a spec file.
+
+❌ **Incomplete** — agent builds the UI correctly but field is always empty:
+```markdown
+**Files:**
+- `web/src/components/SpecIngestionDialog.tsx`  (add checkbox)
+- `api/routes.py`  (no changes needed)
+```
+
+✅ **Complete** — agent traces the full pipeline:
+```markdown
+**Files:**
+- `api/planner/spec_parser.py`  (extract `requires` from **Dependencies:** lines)
+- `api/routes.py`  (pass `requires` through to create_task; dep-zero status logic)
+- `web/src/components/SpecIngestionDialog.tsx`  (checkbox + filter on requires)
+```
+
+**Rule:** before writing the Files list, trace the data from its source (parser, DB,
+external API) to where it's consumed (UI, test). Every layer that transforms or passes
+it through must be listed.
+
+Watch out for `(no changes needed)` — it's often wrong. If a feature depends on a field
+existing, the file that produces that field must be in the list even if everything else
+about that file stays the same.
+
+---
+
+### Write behaviour-based acceptance criteria
+
+Acceptance criteria are how Cloudy validates each task. If they only check that files
+exist or UI elements render, validation will pass even when the feature is broken.
+
+**Every criterion should be falsifiable by running a command or making an API call.**
+
+❌ **Surface checks** — pass even when broken:
+```markdown
+- Checkbox is present in the dialog (default unchecked)
+- `requires` field added to Task model
+- TaskDependencyBadge component exists
+```
+
+✅ **Behaviour checks** — actually verify the feature works:
+```markdown
+- `POST /api/v1/spaces/{id}/ingest-spec` with a spec containing
+  `**Dependencies:** TASK-2601` creates a task with `requires: ["TASK-2601"]`
+  in the API response
+- With autoQueue=true: dep-zero tasks created as `ready`, tasks with requires
+  set as `backlog` — verified by checking `GET /api/v1/tasks` after import
+- `parse_spec()` on a spec with `**Dependencies:** TASK-2601, TASK-2602` returns
+  `requires: ["TASK-2601", "TASK-2602"]` for that task
+```
+
+**Rules:**
+- New API field? → criterion must read it back from the API response
+- New data pipeline? → criterion must verify data flows end-to-end (source → API → consumer)
+- New UI backed by API data? → two separate criteria: one for the API contract, one for the UI behaviour
+- Parser/transformer change? → criterion must include a concrete input → expected output example
+
+---
+
+### Configure validation commands
+
+Pair behaviour-based criteria with project-specific validation commands so Cloudy can
+run them automatically after each task:
+
+```json
+// .cloudy/config.json
+{
+  "validation": {
+    "commands": [
+      "cd api && python -m pytest api/tests/ -x -q",
+      "cd web && bunx tsc --noEmit",
+      "make smoke"
+    ]
+  }
+}
+```
+
+If you add a new API endpoint, add it to your smoke test before writing the task spec —
+that way the validator catches regressions automatically.
+
+---
+
 ## Configuration
+
+Full config reference (`.cloudy/config.json`):
 
 ```json
 {
@@ -288,6 +496,12 @@ cloudy reset --force
     "planning": "sonnet",
     "execution": "sonnet",
     "validation": "haiku"
+  },
+  "engine": "claude-code",
+  "piMono": {
+    "provider": "openai",
+    "model": "gpt-4o-mini",
+    "baseUrl": ""
   },
   "parallel": false,
   "maxParallel": 3,
