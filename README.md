@@ -35,28 +35,40 @@ Cloudy breaks a project goal into a dependency-ordered task graph, then works th
 
 ## Install
 
-**One-liner:**
-
 ```bash
-git clone https://github.com/czaku/cloudy.git ~/cloudy && cd ~/cloudy && npm install && npm run build && npm link
+npm install -g czaku/cloudy
 ```
 
-This clones the repo, builds it, and links `cloudy` globally so you can run it from any directory.
+That's it. npm clones from GitHub, builds from source, and links `cloudy` globally.
 
-**Manual steps:**
+Verify:
+
+```bash
+cloudy --version
+```
+
+**Requirements:** Node.js 18+, `claude` on your PATH ([Claude Code](https://claude.ai/code))
+
+**To update:**
+
+```bash
+npm install -g czaku/cloudy
+```
+
+**To uninstall:**
+
+```bash
+npm uninstall -g cloudy
+```
+
+**Local development:**
 
 ```bash
 git clone https://github.com/czaku/cloudy.git
 cd cloudy
 npm install
 npm run build
-npm link          # makes `cloudy` available globally
-```
-
-After install, verify:
-
-```bash
-cloudy --version
+npm link
 ```
 
 ---
