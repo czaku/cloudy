@@ -89,6 +89,7 @@ export function buildValidationPrompt(
   priorArtifacts?: PriorArtifact[],
   artifactCheckPassed?: boolean,
   taskOutputArtifacts?: string[],
+  commandResults?: Array<{ label: string; passed: boolean; output: string }>,
 ): string {
   const fileSection = changedFileSections && changedFileSections.length > 0
     ? `\n# Changed Files (relevant sections)\n${changedFileSections.map(
@@ -116,11 +117,22 @@ export function buildValidationPrompt(
       }\n`
     : '';
 
+  // Ground-truth evidence from deterministic checks run before this AI review.
+  // If a smoke test confirms an HTTP endpoint returns 200, that is stronger evidence
+  // than the diff alone. Do not fail a criterion that a passing command already proves.
+  const commandSection = commandResults && commandResults.length > 0
+    ? `\n# Deterministic Check Results (run before this review — treat as ground truth)\n${
+        commandResults.map((r) =>
+          `${r.passed ? '✓' : '✗'} [${r.label}] ${r.output.slice(0, 400)}${r.output.length > 400 ? '…' : ''}`
+        ).join('\n')
+      }\n`
+    : '';
+
   return `You are reviewing code changes for the task: "${taskTitle}"
 
 # Acceptance Criteria
 ${acceptanceCriteria.map((c) => `- ${c}`).join('\n')}
-${responsibilitiesSection}${priorSection}${artifactSection}
+${responsibilitiesSection}${priorSection}${artifactSection}${commandSection}
 # Git Diff
 \`\`\`
 ${gitDiff}
@@ -128,16 +140,18 @@ ${gitDiff}
 ${fileSection}
 # Instructions
 
-Review the changes against the acceptance criteria. Use the changed file sections (if provided) to verify correctness in context.
+Review the changes against the acceptance criteria. Use the changed file sections and deterministic check results (if provided) to verify correctness.
 
 IMPORTANT rules:
-- Only evaluate what THIS task was responsible for. Do not fail a criterion because a pre-existing file (listed above) is absent from the diff — it was created by an earlier task and already exists.
+- Only evaluate what THIS task was responsible for. Do not fail a criterion because a pre-existing file (listed above) is absent from the diff — it was created by an earlier task and already exists on disk.
 - If the artifact check confirms all output files exist on disk, do not fail on "file is missing".
 - The changed file sections show the most relevant parts of modified files around the actual changes — not necessarily the whole file head.
 - For criteria referencing behaviour (e.g. "function X returns Y"), verify the implementation exists somewhere in the diff or the shown file sections.
+- If deterministic check results above show a command passed (e.g. a smoke test returning HTTP 200 for an endpoint), treat that as conclusive evidence that the criterion is met — do not fail it just because the endpoint code isn't visible in the shown diff sections.
+- The diff may not show every file that changed (large tasks touch many files). If a criterion is about something that is plausibly implemented given the other evidence, give the benefit of the doubt.
 
 Check for:
-- Does each criterion have a concrete implementation in the diff or shown file sections?
+- Does each criterion have concrete evidence of implementation (diff, file sections, or passing commands)?
 - Are there obvious bugs (wrong types, missing awaits, unhandled errors)?
 - Are edge cases handled?
 
@@ -150,7 +164,7 @@ Respond with ONLY valid JSON:
     {
       "criterion": "The criterion text",
       "met": true/false,
-      "reason": "Why it is or isn't met — cite specific code if failing"
+      "reason": "Why it is or isn't met — cite specific code or command output if failing"
     }
   ]
 }

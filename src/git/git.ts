@@ -52,17 +52,25 @@ export async function commitAll(
 
 /**
  * Get git diff from a reference point (or all uncommitted changes).
+ *
+ * Uses `git diff <sha> HEAD` (not `git diff <sha>`) so that changes
+ * committed by Claude during execution are always captured — even when
+ * the working tree is clean at validation time. Also appends any
+ * remaining uncommitted changes on top of HEAD.
  */
 export async function getGitDiff(
   cwd: string,
   fromSha?: string,
 ): Promise<string> {
   if (fromSha) {
-    const { stdout } = await execa('git', [...GIT_OPTS, 'diff', fromSha], { cwd });
-    return stdout;
+    // Committed changes since checkpoint (what Claude already committed)
+    const { stdout: committed } = await execa('git', [...GIT_OPTS, 'diff', fromSha, 'HEAD'], { cwd });
+    // Any remaining uncommitted changes in the working tree
+    const { stdout: uncommitted } = await execa('git', [...GIT_OPTS, 'diff', 'HEAD'], { cwd });
+    return committed + (uncommitted ? '\n' + uncommitted : '');
   }
 
-  // Get all uncommitted changes
+  // No checkpoint — get all uncommitted changes
   const { stdout } = await execa('git', [...GIT_OPTS, 'diff', 'HEAD'], { cwd });
   return stdout;
 }
@@ -75,11 +83,14 @@ export async function getChangedFiles(
   fromSha?: string,
 ): Promise<string[]> {
   try {
-    const ref = fromSha ? fromSha : 'HEAD';
-    const args = fromSha
-      ? [...GIT_OPTS, 'diff', '--name-only', fromSha]
-      : [...GIT_OPTS, 'diff', '--name-only', 'HEAD'];
-    const { stdout } = await execa('git', args, { cwd });
+    if (fromSha) {
+      // Files in commits since checkpoint + any uncommitted files
+      const { stdout: committed } = await execa('git', [...GIT_OPTS, 'diff', '--name-only', fromSha, 'HEAD'], { cwd });
+      const { stdout: uncommitted } = await execa('git', [...GIT_OPTS, 'diff', '--name-only', 'HEAD'], { cwd });
+      const all = [...committed.trim().split('\n'), ...uncommitted.trim().split('\n')].filter(Boolean);
+      return [...new Set(all)];
+    }
+    const { stdout } = await execa('git', [...GIT_OPTS, 'diff', '--name-only', 'HEAD'], { cwd });
     return stdout.trim().split('\n').filter(Boolean);
   } catch {
     return [];

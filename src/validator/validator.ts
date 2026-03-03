@@ -18,7 +18,7 @@ import { getGitDiff, getChangedFiles } from '../git/git.js';
 import { log } from '../utils/logger.js';
 import type { PriorArtifact } from '../planner/prompts.js';
 
-const MAX_FILES_FOR_REVIEW = 6;
+const MAX_FILES_FOR_REVIEW = 12;
 const CONTEXT_LINES = 40;          // lines of context around each changed hunk
 const MAX_SECTION_CHARS = 40_000;  // per-file budget (covers even large files like orchestrator.py)
 
@@ -289,9 +289,18 @@ export async function validateTask(
     const changedFiles = await getChangedFiles(cwd, checkpointSha);
     const changedFileSections = await readChangedFileSections(changedFiles, cwd, diff);
     const artifactCheckPassed = results.find((r) => r.strategy === 'artifacts')?.passed;
+
+    // Collect deterministic command results to give the AI reviewer ground-truth evidence.
+    // If a smoke test confirms "POST /api/v1/skills → 200", the reviewer shouldn't
+    // fail on "endpoint missing" just because it can't find it in the diff.
+    const commandResults = results
+      .filter((r) => r.strategy === 'command' || r.strategy === 'typecheck' || r.strategy === 'lint')
+      .map((r) => ({ label: r.strategy, passed: r.passed, output: r.output }));
+
     await log.info(
       `  AI review: diff + ${changedFileSections.length} file section(s)` +
-      (priorArtifacts?.length ? ` + ${priorArtifacts.length} prior artifact(s)` : ''),
+      (priorArtifacts?.length ? ` + ${priorArtifacts.length} prior artifact(s)` : '') +
+      (commandResults.length ? ` + ${commandResults.length} command result(s)` : ''),
     );
 
     const result = await runAiReview(
@@ -304,6 +313,7 @@ export async function validateTask(
       priorArtifacts,
       artifactCheckPassed,
       task.outputArtifacts,
+      commandResults,
     );
     results.push(result);
 

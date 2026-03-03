@@ -12,6 +12,7 @@ export async function runAiReview(
   priorArtifacts?: PriorArtifact[],
   artifactCheckPassed?: boolean,
   taskOutputArtifacts?: string[],
+  commandResults?: Array<{ label: string; passed: boolean; output: string }>,
 ): Promise<ValidationResult> {
   const start = Date.now();
 
@@ -32,6 +33,7 @@ export async function runAiReview(
     priorArtifacts,
     artifactCheckPassed,
     taskOutputArtifacts,
+    commandResults,
   );
 
   try {
