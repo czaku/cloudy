@@ -397,6 +397,12 @@ export const runCommand = new Command('run')
                   }
                 }
               }
+              if (event.criteriaResults && event.criteriaResults.length > 0) {
+                for (const cr of event.criteriaResults) {
+                  const icon = cr.passed ? c(green, '✓') : c(red, '✗');
+                  console.log(`       ${icon} ${c(dim, cr.criterion.length > 80 ? cr.criterion.slice(0, 77) + '...' : cr.criterion)}`);
+                }
+              }
               break;
             }
 

@@ -818,7 +818,7 @@ export class Orchestrator {
         }
       }
 
-      this.onEvent({ type: 'validation_result', taskId: task.id, report });
+      this.onEvent({ type: 'validation_result', taskId: task.id, report, criteriaResults: task.acceptanceCriteriaResults });
 
       // Do NOT check this.aborted here — if validation already passed we must
       // save the completed state so the task isn't left as in_progress on the

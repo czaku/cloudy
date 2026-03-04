@@ -207,9 +207,10 @@ function reducer(state: AppState, action: Action): AppState {
           ),
         ),
       ];
-      // Store validation report on task
+      // Store validation report + criteria results on task
       const plan = updateTask(state.plan, action.taskId, {
         validationReport: action.report,
+        ...(action.criteriaResults ? { acceptanceCriteriaResults: action.criteriaResults } : {}),
       });
       return { ...state, plan, outputLines: appendLines(state.outputLines, lines) };
     }

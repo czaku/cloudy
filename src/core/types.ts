@@ -218,7 +218,7 @@ export type OrchestratorEvent =
   | { type: 'task_failed'; taskId: string; title: string; error: string; attempt: number; maxAttempts: number; willRetry: boolean }
   | { type: 'task_retrying'; taskId: string; title: string; delaySec: number; attempt: number }
   | { type: 'validation_started'; taskId: string }
-  | { type: 'validation_result'; taskId: string; report: ValidationReport }
+  | { type: 'validation_result'; taskId: string; report: ValidationReport; criteriaResults?: AcceptanceCriterionResult[] }
   | { type: 'cost_update'; summary: CostSummary }
   | { type: 'progress'; completed: number; total: number; percentage: number }
   | { type: 'run_completed'; summary: CostSummary }

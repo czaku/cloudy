@@ -26,7 +26,7 @@ export function TaskCard({ task, expanded, onToggle }: TaskCardProps) {
             <span className="task-title">{task.title}</span>
           </div>
           <div className="task-meta">
-            {(task.status === 'in_progress' || task.status === 'failed') && (
+            {(task.status === 'in_progress' || task.status === 'failed' || task.retries > 0) && (
               <span className="task-badge badge-attempt">
                 Attempt {task.retries + 1}/{task.maxRetries + 1}
               </span>
