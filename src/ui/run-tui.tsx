@@ -115,6 +115,7 @@ function TuiRunner({ cwd, state, config, externalHandler }: TuiRunnerProps) {
 
   return (
     <App
+      planGoal={state.plan?.goal}
       tasks={uiState.tasks}
       activeTaskId={uiState.activeTaskId}
       selectedTaskId={uiState.selectedTaskId}

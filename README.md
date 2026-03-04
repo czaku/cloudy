@@ -109,6 +109,9 @@ cloudy init "build a payment integration"
 # From a spec or PRD
 cloudy init --spec ./PRD.md
 
+# Combine multiple specs into one plan
+cloudy init --spec ./phase38-spec.md --spec ./phase38b-spec.md
+
 # Skip interactive review
 cloudy init --spec ./PRD.md --no-review
 
@@ -117,6 +120,8 @@ cloudy init --spec ./PRD.md --model-planning sonnet
 ```
 
 The planner uses Claude to decompose your goal into concrete, ordered tasks — each with a title, description, acceptance criteria, context file patterns, expected output artifacts, and a time estimate. If you don't pass `--no-review`, you can approve the plan or describe changes in plain English and iterate before running.
+
+**Init flow:** `init` only asks for the planning model upfront. After plan approval, if you choose to run immediately, it asks for execution model, validation model (per-task), final review model, and whether to launch the dashboard — then hands off to `cloudy run`.
 
 ---
 
@@ -162,7 +167,9 @@ cloudy run --no-dashboard
 | `--verbose` | Stream live Claude output per task |
 | `--model <m>` | Model for all phases (`opus`, `sonnet`, `haiku`) |
 | `--model-execution <m>` | Model for execution phase |
-| `--model-validation <m>` | Model for validation phase |
+| `--model-validation <m>` | Model for per-task validation |
+| `--review-model <m>` | Model for holistic post-run review (`haiku`/`sonnet`/`opus`) |
+| `--no-post-review` | Skip the holistic post-run review |
 | `--model-auto` | Auto-route model by task complexity |
 | `--engine <e>` | Execution engine: `claude-code` (default) or `pi-mono` |
 | `--pi-provider <p>` | Pi-mono provider (e.g. `openai`, `anthropic`, `google`) |

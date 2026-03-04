@@ -19,6 +19,7 @@ interface PendingApproval {
 }
 
 interface AppProps {
+  planGoal?: string;
   tasks: Task[];
   activeTaskId: string | null;
   selectedTaskId: string | null;
@@ -41,6 +42,7 @@ interface AppProps {
 }
 
 export function App({
+  planGoal,
   tasks,
   activeTaskId,
   selectedTaskId,
@@ -108,6 +110,7 @@ export function App({
       {/* Header */}
       <Box marginBottom={1}>
         <Text bold color="cyan">☁️  cloudy</Text>
+        {planGoal && <Text bold>  {planGoal}</Text>}
         <Text dimColor>  ·  {tasks.length} tasks</Text>
         {paused && <Text color="yellow" bold>  [paused]</Text>}
       </Box>
