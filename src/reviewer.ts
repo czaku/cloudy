@@ -171,6 +171,15 @@ export async function runHolisticReview(
     gitDiff = '(unable to retrieve git diff)';
   }
 
+  // Truncate diff if too large to avoid exceeding Claude's context window
+  const MAX_DIFF_CHARS = 60_000;
+  if (gitDiff.length > MAX_DIFF_CHARS) {
+    const totalKb = Math.round(gitDiff.length / 1024);
+    const shownKb = Math.round(MAX_DIFF_CHARS / 1024);
+    gitDiff = gitDiff.slice(0, MAX_DIFF_CHARS) +
+      `\n\n... [diff truncated — ${totalKb}KB total, showing first ${shownKb}KB]`;
+  }
+
   // 5. Build task summary
   const taskSummary = buildTaskSummary(plan);
 
