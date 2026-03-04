@@ -106,8 +106,8 @@ export const runCommand = new Command('run')
       // ── Interactive model selection (when not provided via flags) ────────────
       const MODEL_OPTIONS = [
         { value: 'sonnet', label: 'sonnet', hint: 'recommended' },
-        { value: 'haiku', label: 'haiku', hint: 'fast & cheap' },
-        { value: 'opus', label: 'opus', hint: 'most capable' },
+        { value: 'haiku',  label: 'haiku',  hint: 'fast & cheap' },
+        { value: 'opus',   label: 'opus',   hint: 'most capable' },
       ];
 
       if (!opts.model && !opts.modelExecution && !opts.goal) {
@@ -126,8 +126,9 @@ export const runCommand = new Command('run')
           const valModel = await p.select({
             message: 'Validation model (per-task):',
             options: [
-              { value: 'haiku', label: 'haiku', hint: 'recommended — saves cost' },
-              { value: 'sonnet', label: 'sonnet', hint: 'higher quality' },
+              { value: 'haiku',  label: 'haiku',  hint: 'recommended — saves cost' },
+              { value: 'sonnet', label: 'sonnet',  hint: 'higher quality' },
+              { value: 'opus',   label: 'opus',    hint: 'most capable' },
             ],
             initialValue: config.models.validation ?? 'haiku',
           });
@@ -140,8 +141,8 @@ export const runCommand = new Command('run')
             message: 'Final review model (holistic post-run review):',
             options: [
               { value: 'sonnet', label: 'sonnet', hint: 'recommended — reads full spec + diff' },
-              { value: 'opus',   label: 'opus',   hint: 'deepest review, highest cost' },
               { value: 'haiku',  label: 'haiku',  hint: 'fast & cheap, less thorough' },
+              { value: 'opus',   label: 'opus',   hint: 'deepest review, highest cost' },
               { value: 'skip',   label: 'skip',   hint: 'disable post-run review' },
             ],
             initialValue: config.review?.model ?? 'sonnet',
