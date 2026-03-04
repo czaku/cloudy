@@ -20,6 +20,14 @@ const STATUS_COLOR: Record<string, string> = {
   rolled_back: 'magenta',
 };
 
+const REVIEW_ICON: Record<string, string> = {
+  idle: '◎',
+  model_select: '◎',
+  running: '◐',
+  completed: '◈',
+  failed: '✗',
+};
+
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(0)}s`;
@@ -37,6 +45,10 @@ interface TaskListProps {
   engineByTask?: Record<string, string>;
   /** Max visible rows (for virtual scrolling) */
   maxVisible?: number;
+  /** Review status for virtual review row at bottom */
+  reviewStatus?: 'idle' | 'model_select' | 'running' | 'completed' | 'failed';
+  /** Verdict from review result for coloring the completed row */
+  reviewVerdict?: 'PASS' | 'PASS_WITH_NOTES' | 'FAIL';
 }
 
 export function TaskList({
@@ -47,6 +59,8 @@ export function TaskList({
   durationByTask = {},
   engineByTask = {},
   maxVisible = 14,
+  reviewStatus,
+  reviewVerdict,
 }: TaskListProps) {
   const completed = tasks.filter((t) => t.status === 'completed').length;
 
@@ -131,6 +145,41 @@ export function TaskList({
       {/* Scroll indicator bottom */}
       {showScrollDown && (
         <Text dimColor>  ↓{tasks.length - offset - maxVisible} more</Text>
+      )}
+
+      {/* Virtual review row — shown when review is active */}
+      {reviewStatus && reviewStatus !== 'idle' && (
+        <Box flexDirection="column" marginTop={1}>
+          <Box flexDirection="row">
+            <Box flexShrink={0}>
+              <Text dimColor>  </Text>
+            </Box>
+            <Box flexShrink={0}>
+              <Text color={
+                reviewStatus === 'running' ? 'cyan'
+                : reviewStatus === 'completed'
+                  ? (reviewVerdict === 'FAIL' ? 'red' : reviewVerdict === 'PASS_WITH_NOTES' ? 'yellow' : 'green')
+                : reviewStatus === 'failed' ? 'red'
+                : reviewStatus === 'model_select' ? 'yellow'
+                : 'gray'
+              }>
+                {REVIEW_ICON[reviewStatus] ?? '◎'}{' '}
+              </Text>
+            </Box>
+            <Text
+              color={
+                reviewStatus === 'running' ? 'cyan'
+                : reviewStatus === 'completed'
+                  ? (reviewVerdict === 'FAIL' ? 'red' : reviewVerdict === 'PASS_WITH_NOTES' ? 'yellow' : 'green')
+                : reviewStatus === 'failed' ? 'red'
+                : 'gray'
+              }
+              dimColor={reviewStatus === 'model_select'}
+            >
+              review
+            </Text>
+          </Box>
+        </Box>
       )}
     </Box>
   );

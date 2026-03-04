@@ -10,10 +10,11 @@ import {
 } from '../../config/model-config.js';
 import { loadOrCreateState, saveState, updatePlan } from '../../core/state.js';
 import { initLogger, log } from '../../utils/logger.js';
-import { fileExists } from '../../utils/fs.js';
+import { fileExists, ensureDir } from '../../utils/fs.js';
 import { c, bold, dim, red, green, yellow, cyan } from '../../utils/colors.js';
 import { acquireLock } from '../../utils/lock.js';
 import type { ClaudeModel } from '../../core/types.js';
+import { CLAWDASH_DIR } from '../../config/defaults.js';
 import { createStreamFormatter } from '../../utils/stream-formatter.js';
 import type { Plan } from '../../core/types.js';
 
@@ -57,7 +58,7 @@ export const initCommand = new Command('init')
   .argument('[goal]', 'The project goal to decompose into tasks')
   .option('--model <model>', 'Model for all phases')
   .option('--model-planning <model>', 'Model for planning phase')
-  .option('--spec <file>', 'Path to a spec/PRD file to use as planning context')
+  .option('--spec <file>', 'Spec/PRD file (repeatable: --spec A --spec B)', (v: string, prev: string[]) => [...prev, v], [] as string[])
   .option('--no-review', 'Auto-approve the generated plan without interactive review')
   .option('--verbose', 'Show live Claude output during planning')
   .option('--engine <engine>', 'Execution engine for run phase: claude-code (default) or pi-mono')
@@ -67,7 +68,7 @@ export const initCommand = new Command('init')
   .action(async (goalArg: string | undefined, opts: {
     model?: string;
     modelPlanning?: string;
-    spec?: string;
+    spec: string[];
     review: boolean;
     verbose?: boolean;
     engine?: string;
@@ -92,35 +93,74 @@ export const initCommand = new Command('init')
 
     const config = await loadConfig(cwd);
 
-    // ── Spec file ─────────────────────────────────────────────────────────────
+    // ── Spec file(s) ──────────────────────────────────────────────────────────
     let specContent: string | undefined;
-    let specPath = opts.spec;
+    let specPaths: string[] = opts.spec;
 
-    if (!specPath && !goalArg) {
+    if (specPaths.length === 0 && !goalArg) {
       const input = await p.text({
         message: 'Spec file path (or leave blank to type a goal):',
         placeholder: '/tmp/my-spec.md',
       });
       if (p.isCancel(input)) { p.cancel('Cancelled.'); process.exit(0); }
-      specPath = (input as string).trim() || undefined;
+      const entered = (input as string).trim();
+      if (entered) specPaths = [entered];
     }
 
     let wrapUpPrompt: string | undefined;
 
-    if (specPath) {
-      try {
-        specContent = await fs.readFile(specPath, 'utf-8');
-        // Extract ## Wrap-up section before passing to planner so it isn't treated as a task
-        const wrapUpMatch = specContent.match(/^##\s+Wrap-?up\b.*\n([\s\S]*?)(?=\n##\s|\s*$)/im);
-        if (wrapUpMatch) {
-          wrapUpPrompt = wrapUpMatch[1].trim();
-          specContent = specContent.replace(/^##\s+Wrap-?up\b[\s\S]*$/im, '').trim();
-          p.log.info(`Wrap-up section extracted (will run after all tasks complete)`);
+    if (specPaths.length > 0) {
+      const parts: string[] = [];
+      const multipleSpecs = specPaths.length > 1;
+
+      if (multipleSpecs) {
+        parts.push(`<!-- Combined spec from ${specPaths.length} files: ${specPaths.map(p => path.basename(p)).join(', ')} -->\n`);
+      }
+
+      for (const specPath of specPaths) {
+        try {
+          let content = await fs.readFile(specPath, 'utf-8');
+          // Extract ## Wrap-up section
+          const wrapUpMatch = content.match(/^##\s+Wrap-?up\b.*\n([\s\S]*?)(?=\n##\s|\s*$)/im);
+          if (wrapUpMatch) {
+            wrapUpPrompt = (wrapUpPrompt ? wrapUpPrompt + '\n\n' : '') + wrapUpMatch[1].trim();
+            content = content.replace(/^##\s+Wrap-?up\b[\s\S]*$/im, '').trim();
+          }
+          if (multipleSpecs) {
+            parts.push(`<!-- spec: ${path.basename(specPath)} -->\n${content}`);
+          } else {
+            parts.push(content);
+          }
+          p.log.info(`Spec loaded: ${specPath}  (${Math.round(content.length / 1024)}KB)`);
+        } catch (err) {
+          p.log.error(`Cannot read spec file "${specPath}": ${err instanceof Error ? err.message : String(err)}`);
+          process.exit(1);
         }
-        p.log.info(`Spec loaded: ${specPath}  (${Math.round(specContent.length / 1024)}KB)`);
-      } catch (err) {
-        p.log.error(`Cannot read spec file "${specPath}": ${err instanceof Error ? err.message : String(err)}`);
+      }
+
+      if (wrapUpPrompt) {
+        p.log.info(`Wrap-up section extracted (will run after all tasks complete)`);
+      }
+
+      specContent = parts.join('\n\n---\n\n');
+
+      // Guard: reject if combined spec is too large for the planner context
+      const MAX_SPEC_BYTES = 150_000; // ~37K tokens — safe planning budget
+      if (specContent.length > MAX_SPEC_BYTES) {
+        p.log.error(
+          `Combined spec is ${Math.round(specContent.length / 1024)}KB — exceeds the ${Math.round(MAX_SPEC_BYTES / 1024)}KB limit.\n` +
+          `  Split into separate cloudy init runs, or trim the specs.`
+        );
         process.exit(1);
+      }
+
+      // Save combined spec to .cloudy/spec.md for the holistic reviewer
+      try {
+        const cloudyDir = path.join(cwd, CLAWDASH_DIR);
+        await ensureDir(cloudyDir);
+        await fs.writeFile(path.join(cloudyDir, 'spec.md'), specContent, 'utf-8');
+      } catch {
+        // Non-fatal — reviewer falls back to task descriptions
       }
     }
 
@@ -128,8 +168,17 @@ export const initCommand = new Command('init')
     let goal = goalArg;
     if (!goal) {
       if (specContent) {
-        const firstLine = specContent.split('\n').find((l) => l.trim().length > 0);
+        // Skip HTML comments and blank lines to find the real title
+        const firstLine = specContent.split('\n').find((l) => {
+          const t = l.trim();
+          return t.length > 0 && !t.startsWith('<!--');
+        });
         goal = firstLine?.replace(/^#+\s*/, '').trim() ?? 'Implement the specification';
+        // For multiple specs, combine their titles
+        if (specPaths.length > 1) {
+          const titles = specPaths.map(p => path.basename(p, '.md').replace(/^aiyayai-/, ''));
+          goal = titles.join(' + ');
+        }
       } else {
         const input = await p.text({
           message: 'What do you want to build?',
@@ -160,39 +209,10 @@ export const initCommand = new Command('init')
       planningModel = selected as ClaudeModel;
     }
 
-    // ── Execution model (saved for cloudy run) ────────────────────────────────
-    let executionModel: ClaudeModel = opts.model ? parseModelFlag(opts.model) : config.models.execution;
-    if (!opts.model && !opts.modelPlanning) {
-      const selected = await p.select({
-        message: 'Execution model (used by cloudy run):',
-        options: MODEL_OPTIONS,
-        initialValue: executionModel ?? 'sonnet',
-      });
-      if (p.isCancel(selected)) { p.cancel('Cancelled.'); process.exit(0); }
-      executionModel = selected as ClaudeModel;
-    }
-
-    // ── Validation model ──────────────────────────────────────────────────────
-    let validationModel: ClaudeModel = config.models.validation;
-    if (!opts.model && !opts.modelPlanning) {
-      const selected = await p.select({
-        message: 'Validation model:',
-        options: [
-          { value: 'haiku', label: 'haiku', hint: 'recommended — saves cost' },
-          { value: 'sonnet', label: 'sonnet', hint: 'higher quality review' },
-        ],
-        initialValue: 'haiku',
-      });
-      if (p.isCancel(selected)) { p.cancel('Cancelled.'); process.exit(0); }
-      validationModel = selected as ClaudeModel;
-    }
-
-    // Apply model config
+    // Apply planning model config only — execution/validation/review are asked at run time
     config.models = mergeModelConfig(config.models, {
       model: opts.model ? parseModelFlag(opts.model) : undefined,
       modelPlanning: planningModel,
-      modelExecution: executionModel,
-      modelValidation: validationModel,
     });
 
     // ── Engine config ─────────────────────────────────────────────────────────
@@ -345,23 +365,11 @@ export const initCommand = new Command('init')
       return;
     }
 
-    const withDashboard = await p.confirm({
-      message: 'Launch web dashboard?',
-      initialValue: true,
-    });
-    if (p.isCancel(withDashboard)) { p.cancel('Cancelled.'); process.exit(0); }
+    p.outro(`${c(cyan + bold, '🚀  launching...')}  ${plan.tasks.length} tasks`);
 
-    p.outro(`${c(cyan + bold, '🚀  launching...')}  ${plan.tasks.length} tasks  ·  ${withDashboard ? 'dashboard on' : 'no dashboard'}`);
-
-    // Spawn `cloudy run` inheriting this terminal (TUI + dashboard work normally).
-    // Pass model flags so `run` skips its interactive prompts (avoids double dashboard ask).
+    // Spawn `cloudy run` — it will ask for execution/validation/review models interactively
     const { execa } = await import('execa');
-    const runArgs = [
-      'run',
-      '--model-execution', config.models?.execution ?? 'sonnet',
-      '--model-validation', config.models?.validation ?? 'haiku',
-    ];
-    if (!withDashboard) runArgs.push('--no-dashboard');
+    const runArgs = ['run'];
     // Release init lock before spawning run — run acquires its own slot
     releaseLock?.();
     try {

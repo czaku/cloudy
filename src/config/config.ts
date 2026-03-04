@@ -72,6 +72,7 @@ export async function loadConfig(cwd: string): Promise<CloudyConfig> {
     approval: { ...DEFAULT_CONFIG.approval, ...saved.approval },
     engine: saved.engine ?? DEFAULT_CONFIG.engine,
     piMono: { ...DEFAULT_CONFIG.piMono, ...saved.piMono },
+    review: { ...DEFAULT_CONFIG.review, ...saved.review },
   };
 
   const errors = validateConfig(config);

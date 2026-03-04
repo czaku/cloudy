@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react';
 import type {
   CostSummary,
   OrchestratorEvent,
+  ReviewResult,
   Task,
 } from '../../core/types.js';
 import { filterStreamOutput } from '../stream-filter.js';
@@ -32,6 +33,11 @@ interface OrchestratorState {
   error: string | null;
   prevTaskCostUsd: number;
   pendingApproval: PendingApproval | null;
+  reviewStatus: 'idle' | 'model_select' | 'running' | 'completed' | 'failed';
+  reviewResult: ReviewResult | null;
+  reviewOutput: string[];
+  reviewError: string | null;
+  reviewModel: string | null;
 }
 
 const INITIAL_COST: CostSummary = {
@@ -61,6 +67,11 @@ export function useOrchestrator(initialTasks: Task[]) {
     error: null,
     prevTaskCostUsd: 0,
     pendingApproval: null,
+    reviewStatus: 'idle',
+    reviewResult: null,
+    reviewOutput: [],
+    reviewError: null,
+    reviewModel: null,
   });
 
   const handleEvent = useCallback((event: OrchestratorEvent) => {
@@ -160,6 +171,37 @@ export function useOrchestrator(initialTasks: Task[]) {
         case 'approval_resolved':
           return { ...prev, pendingApproval: null };
 
+        case 'review_model_requested':
+          return { ...prev, reviewStatus: 'model_select' };
+
+        case 'review_started':
+          return {
+            ...prev,
+            reviewStatus: 'running',
+            reviewModel: event.model,
+            reviewOutput: [],
+          };
+
+        case 'review_output':
+          return {
+            ...prev,
+            reviewOutput: [...prev.reviewOutput, event.text].slice(-200),
+          };
+
+        case 'review_completed':
+          return {
+            ...prev,
+            reviewStatus: 'completed',
+            reviewResult: event.result,
+          };
+
+        case 'review_failed':
+          return {
+            ...prev,
+            reviewStatus: 'failed',
+            reviewError: event.error,
+          };
+
         default:
           return prev;
       }
@@ -192,3 +234,5 @@ export function useOrchestrator(initialTasks: Task[]) {
 
   return { state, handleEvent, selectTask, togglePause };
 }
+
+export type { OrchestratorState };

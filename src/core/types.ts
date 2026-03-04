@@ -147,6 +147,11 @@ export interface NotificationsConfig {
   sound: boolean;
 }
 
+export interface ReviewConfig {
+  enabled: boolean;   // default true
+  model: ClaudeModel; // default 'sonnet'
+}
+
 export interface CloudyConfig {
   models: ModelConfig;
   validation: ValidationConfig;
@@ -165,6 +170,7 @@ export interface CloudyConfig {
   approval: ApprovalConfig;
   engine: Engine;              // execution engine (default: claude-code)
   piMono: PiMonoConfig;        // pi-mono engine configuration
+  review: ReviewConfig;        // post-run holistic review configuration
 }
 
 // ── State types ──────────────────────────────────────────────────────
@@ -209,6 +215,19 @@ export interface ClaudeRunResult {
   costUsd: number;
 }
 
+// ── Review types ─────────────────────────────────────────────────────
+export interface ReviewResult {
+  verdict: 'PASS' | 'PASS_WITH_NOTES' | 'FAIL';
+  summary: string;
+  criteriaResults: Array<{ criterion: string; passed: boolean; note: string }>;
+  issues: Array<{ severity: 'critical' | 'major' | 'minor'; description: string; location?: string }>;
+  conventionViolations: string[];
+  suggestions: string[];
+  costUsd: number;
+  durationMs: number;
+  model: string;
+}
+
 // ── Event types (for UI) ─────────────────────────────────────────────
 export type OrchestratorEvent =
   | { type: 'plan_created'; plan: Plan }
@@ -226,7 +245,12 @@ export type OrchestratorEvent =
   | { type: 'run_status'; status: 'idle' | 'running' | 'completed' | 'failed' | 'stopped' }
   | { type: 'subtasks_created'; parentTaskId: string; count: number; ids: string[] }
   | { type: 'approval_requested'; taskId: string; title: string; stage: 'pre_task' | 'failure_escalation'; context?: string; timeoutSec: number }
-  | { type: 'approval_resolved'; taskId: string; action: string; autoTriggered: boolean };
+  | { type: 'approval_resolved'; taskId: string; action: string; autoTriggered: boolean }
+  | { type: 'review_started'; model: string }
+  | { type: 'review_output'; text: string }
+  | { type: 'review_completed'; result: ReviewResult }
+  | { type: 'review_failed'; error: string }
+  | { type: 'review_model_requested' };
 
 export type OrchestratorEventHandler = (event: OrchestratorEvent) => void;
 

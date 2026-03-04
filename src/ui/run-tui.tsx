@@ -21,7 +21,6 @@ function TuiRunner({ cwd, state, config, externalHandler }: TuiRunnerProps) {
   const orchestratorRef = useRef<Orchestrator | null>(null);
   // Holds the resolver for the current pending approval promise
   const approvalResolveRef = useRef<((action: ApprovalAction) => void) | null>(null);
-
   useKeyboard({
     onQuit: () => process.exit(0),
     onAbort: () => {
@@ -32,12 +31,10 @@ function TuiRunner({ cwd, state, config, externalHandler }: TuiRunnerProps) {
     onPause: togglePause,
     onSkip: () => {
       if (approvalResolveRef.current) {
-        // If approval is pending, skip resolves it
         const resolve = approvalResolveRef.current;
         approvalResolveRef.current = null;
         resolve({ action: 'skipped' });
       } else {
-        // No approval pending — abort the orchestrator (skips current task via halt)
         orchestratorRef.current?.abort();
       }
     },
@@ -56,6 +53,7 @@ function TuiRunner({ cwd, state, config, externalHandler }: TuiRunnerProps) {
       }
     },
   });
+
 
   useEffect(() => {
     const orchestrator = new Orchestrator({
@@ -130,6 +128,12 @@ function TuiRunner({ cwd, state, config, externalHandler }: TuiRunnerProps) {
       paused={uiState.paused}
       error={uiState.error}
       pendingApproval={uiState.pendingApproval}
+      reviewStatus={uiState.reviewStatus}
+      reviewResult={uiState.reviewResult}
+      reviewOutput={uiState.reviewOutput}
+      reviewError={uiState.reviewError}
+      reviewModel={uiState.reviewModel}
+      onReviewModelSelect={undefined}
     />
   );
 }

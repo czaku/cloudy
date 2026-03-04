@@ -140,6 +140,7 @@ export interface OrchestratorOptions {
   onEvent?: OrchestratorEventHandler;
   dryRun?: boolean;
   onApprovalRequest?: ApprovalHandler;
+  onReviewModelRequest?: () => Promise<ClaudeModel | 'skip'>;
 }
 
 export class Orchestrator {
@@ -151,6 +152,7 @@ export class Orchestrator {
   private dryRun: boolean;
   private abortController = new AbortController();
   private onApprovalRequest?: ApprovalHandler;
+  private onReviewModelRequest?: () => Promise<ClaudeModel | 'skip'>;
   private runLogger!: RunLogger;
   private taskStartCostUsd = new Map<string, number>();
 
@@ -162,6 +164,7 @@ export class Orchestrator {
     this.costTracker = new CostTracker();
     this.dryRun = options.dryRun ?? false;
     this.onApprovalRequest = options.onApprovalRequest;
+    this.onReviewModelRequest = options.onReviewModelRequest;
   }
 
   private needsApproval(task: Task): boolean {
@@ -271,6 +274,11 @@ export class Orchestrator {
       await this.runWrapUp(plan.wrapUpPrompt);
     }
 
+    // Post-run holistic review
+    if (!this.aborted && this.config.review?.enabled !== false) {
+      await this.runHolisticReview();
+    }
+
     if (this.aborted) {
       this.onEvent({ type: 'run_status', status: 'stopped' });
       await log.info('Run stopped by user');
@@ -287,6 +295,34 @@ export class Orchestrator {
       }
       this.onEvent({ type: 'run_failed', error: msg });
       await log.error(msg);
+    }
+  }
+
+  private async runHolisticReview(): Promise<void> {
+    let reviewModel: ClaudeModel | 'skip' = this.config.review?.model ?? 'sonnet';
+
+    // If TUI is connected with model selector, ask for model choice
+    if (this.onReviewModelRequest) {
+      this.onEvent({ type: 'review_model_requested' });
+      reviewModel = await this.onReviewModelRequest();
+    }
+
+    if (reviewModel === 'skip') return;
+
+    this.onEvent({ type: 'review_started', model: reviewModel });
+
+    try {
+      const { runHolisticReview } = await import('../reviewer.js');
+      const result = await runHolisticReview(
+        this.cwd,
+        this.state.plan!,
+        reviewModel,
+        (text) => this.onEvent({ type: 'review_output', text }),
+      );
+      this.onEvent({ type: 'review_completed', result });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.onEvent({ type: 'review_failed', error: msg });
     }
   }
 

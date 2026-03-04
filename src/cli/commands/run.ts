@@ -51,6 +51,8 @@ export const runCommand = new Command('run')
   .option('--pi-provider <provider>', 'Pi-mono provider: anthropic, openai, google, ollama, etc.')
   .option('--pi-model <model>', 'Pi-mono model ID: gpt-4o-mini, gemini-2.0-flash, qwen2.5-coder:7b, etc.')
   .option('--pi-base-url <url>', 'Pi-mono base URL for OpenAI-compatible endpoints')
+  .option('--review-model <model>', 'Model for post-run holistic review (haiku/sonnet/opus)')
+  .option('--no-post-review', 'Skip post-run holistic review')
   .action(
     async (opts: {
       model?: string;
@@ -76,6 +78,8 @@ export const runCommand = new Command('run')
       piProvider?: string;
       piModel?: string;
       piBaseUrl?: string;
+      reviewModel?: string;
+      postReview?: boolean; // false when --no-post-review
     }) => {
       const cwd = process.cwd();
       await initLogger(cwd);
@@ -120,7 +124,7 @@ export const runCommand = new Command('run')
 
         if (!opts.modelValidation) {
           const valModel = await p.select({
-            message: 'Validation model:',
+            message: 'Validation model (per-task):',
             options: [
               { value: 'haiku', label: 'haiku', hint: 'recommended — saves cost' },
               { value: 'sonnet', label: 'sonnet', hint: 'higher quality' },
@@ -129,6 +133,25 @@ export const runCommand = new Command('run')
           });
           if (p.isCancel(valModel)) { p.cancel('Cancelled.'); process.exit(0); }
           opts.modelValidation = valModel as string;
+        }
+
+        if (!opts.reviewModel && opts.postReview !== false) {
+          const reviewModel = await p.select({
+            message: 'Final review model (holistic post-run review):',
+            options: [
+              { value: 'sonnet', label: 'sonnet', hint: 'recommended — reads full spec + diff' },
+              { value: 'opus',   label: 'opus',   hint: 'deepest review, highest cost' },
+              { value: 'haiku',  label: 'haiku',  hint: 'fast & cheap, less thorough' },
+              { value: 'skip',   label: 'skip',   hint: 'disable post-run review' },
+            ],
+            initialValue: config.review?.model ?? 'sonnet',
+          });
+          if (p.isCancel(reviewModel)) { p.cancel('Cancelled.'); process.exit(0); }
+          if (reviewModel === 'skip') {
+            opts.postReview = false;
+          } else {
+            opts.reviewModel = reviewModel as string;
+          }
         }
 
         const dashChoice = await p.confirm({
@@ -206,6 +229,20 @@ export const runCommand = new Command('run')
       if (opts.piProvider) config.piMono = { ...config.piMono, provider: opts.piProvider };
       if (opts.piModel) config.piMono = { ...config.piMono, model: opts.piModel };
       if (opts.piBaseUrl) config.piMono = { ...config.piMono, baseUrl: opts.piBaseUrl };
+
+      // Apply review configuration
+      if (opts.postReview === false) {
+        config.review = { ...config.review, enabled: false };
+      }
+      if (opts.reviewModel) {
+        const parsed = opts.reviewModel.toLowerCase();
+        if (parsed === 'haiku' || parsed === 'sonnet' || parsed === 'opus') {
+          config.review = { ...config.review, model: parsed };
+        } else {
+          console.error(c(red, `✖  unknown review model "${opts.reviewModel}" — use haiku, sonnet, or opus`));
+          process.exit(1);
+        }
+      }
 
       // TUI: auto-enable when running in a TTY, unless --no-tui is passed
       const useTui = opts.tui === true || (opts.tui !== false && process.stdout.isTTY);
@@ -435,6 +472,49 @@ export const runCommand = new Command('run')
               if (event.status === 'stopped') {
                 console.log(`\n${c(yellow, '⏸️')}  ${c(yellow, 'halted by user')}`);
               }
+              break;
+
+            case 'review_started':
+              console.log(`\n${c(cyan, '🔎')}  ${c(cyan + bold, 'holistic review')}  ${c(dim, `model: ${event.model}`)}`);
+              break;
+
+            case 'review_output':
+              if (opts.verbose && taskFormatter) {
+                taskFormatter(event.text);
+              }
+              break;
+
+            case 'review_completed': {
+              const { result } = event;
+              const verdictColor = result.verdict === 'PASS'
+                ? green
+                : result.verdict === 'FAIL'
+                  ? red
+                  : yellow;
+              const verdictIcon = result.verdict === 'PASS' ? '✅' : result.verdict === 'FAIL' ? '❌' : '⚠️';
+              console.log(`\n${c(verdictColor, verdictIcon)}  ${c(verdictColor + bold, `Review: ${result.verdict}`)}`);
+              console.log(`    ${c(dim, result.summary)}`);
+              if (result.issues.length > 0) {
+                for (const issue of result.issues) {
+                  const ic = issue.severity === 'critical' ? red : issue.severity === 'major' ? yellow : dim;
+                  console.log(`    ${c(ic, `[${issue.severity}] ${issue.description}`)}${issue.location ? c(dim, `  (${issue.location})`) : ''}`);
+                }
+              }
+              if (result.conventionViolations.length > 0) {
+                for (const v of result.conventionViolations) {
+                  console.log(`    ${c(yellow, `⚠ ${v}`)}`);
+                }
+              }
+              console.log(`    ${c(dim, `cost: ~$${result.costUsd.toFixed(4)}  ·  ${Math.round(result.durationMs / 1000)}s`)}`);
+              break;
+            }
+
+            case 'review_failed':
+              console.log(`\n${c(red, '❌')}  ${c(red, 'Review failed:')}  ${c(dim, event.error)}`);
+              break;
+
+            case 'review_model_requested':
+              // In non-TUI mode, no interactive model selection — proceed with configured model
               break;
           }
         };
