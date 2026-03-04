@@ -408,7 +408,10 @@ cloudy reset --force
 
 Cloudy is only as good as the specs you give it. The most common cause of incomplete
 implementations isn't a model failure — it's an incomplete spec. Claude will implement
-exactly what you describe, no more.
+exactly what you describe, no more. **The spec is the complete contract. The agent fills
+in the gaps with guesses.**
+
+---
 
 ### Complete the Files list
 
@@ -472,6 +475,131 @@ exist or UI elements render, validation will pass even when the feature is broke
 - New data pipeline? → criterion must verify data flows end-to-end (source → API → consumer)
 - New UI backed by API data? → two separate criteria: one for the API contract, one for the UI behaviour
 - Parser/transformer change? → criterion must include a concrete input → expected output example
+
+---
+
+### Name every variant explicitly
+
+If the spec mentions N types/states/enum values, write N acceptance criteria — one per
+variant. The agent tests what is listed and skips the rest.
+
+❌ **Lazy** — agent implements only the example variant:
+```markdown
+- `get_tool_manifest` returns the correct tools for all integration types
+```
+
+✅ **Exhaustive** — every type has its own verifiable criterion:
+```markdown
+- `get_tool_manifest([{type:"computer-use"}])` → `mcp_servers == ["peekaboo"]`
+- `get_tool_manifest([{type:"browser"}])` → `mcp_servers == ["playwright"]`
+- `get_tool_manifest([{type:"task_spawn"}])` → `"Bash" in tools`
+- `get_tool_manifest([{type:"web-search"}])` → `"WebFetch" in tools` and `"WebSearch" in tools`
+- `get_tool_manifest([{type:"filesystem"}])` → `restrictions == ["no_bash", "no_glob_outside_rootPath"]`
+- `get_tool_manifest([{type:"github"}])` → `mcp_servers == []`, `"Bash" in tools`
+- `get_tool_manifest([{type:"code"}])` → `"Bash" in tools`
+```
+
+Apply the same rule to: enum values, message types, status transitions, soul types,
+error codes, model fields, condition variants, route handlers.
+
+---
+
+### Verify every model field at the API boundary
+
+If the spec defines a model with 10 fields, the criterion for `GET /endpoint` must
+verify all 10 are present in the response — not just the interesting ones.
+
+❌ **Incomplete:**
+```markdown
+- POST /comms returns {id} and GET returns the message
+```
+
+✅ **Exhaustive:**
+```markdown
+- POST /comms then GET /comms/{id} returns all fields:
+  `id`, `from_soul`, `to_soul`, `type`, `content`, `thread_id`, `timestamp`, `read`
+- Optional fields `space_id`, `area_id`, `task_id` default to null when not provided
+- Optional fields appear in the read-back when supplied in POST
+```
+
+---
+
+### Include the negative case
+
+For every "fires when X", add a "does NOT fire when below X". For every included type,
+add an excluded type.
+
+```markdown
+✅ Negative criteria:
+- Area Lead review fires when ≥ 3 tasks are blocked in a space
+- Area Lead review does NOT fire when only 2 tasks are blocked (below threshold)
+- Disabled integration is excluded from manifest — `get_tool_manifest([{type:"code", enabled:false}])` returns `tools == []`
+- `web-search` gates do NOT include any gate with "typecheck" in its strategy
+- Notion/Email/Slack toggle buttons are `disabled` — clicking does not change state
+```
+
+---
+
+### Use concrete values in algorithms and formulas
+
+Don't describe the formula — verify it with exact numbers.
+
+❌ **Vague:**
+```markdown
+- Latency endpoint returns correct percentile values
+```
+
+✅ **Concrete:**
+```markdown
+- With run durations [100, 200, 300, 400] ms, GET /latency returns:
+  p50=200, p75=300, p95=400, p99=400, mean=250, count=4
+```
+
+---
+
+### Add a cross-task integration check
+
+A final section that verifies the full data flow end-to-end becomes its own Cloudy
+task and is your best defence against tasks that each pass in isolation but fail
+when combined.
+
+```markdown
+## Cross-task integration check
+
+- Full flow: create space → GET /integrations returns [] → preset picker visible
+  → user picks "Software" → PUT /integrations [{code, github}]
+  → GET /integrations returns [{type:"code",enabled:true}, {type:"github",enabled:true}]
+- `python3 -m pytest api/tests/ -x -q` exits 0
+- `bunx tsc --noEmit` exits 0
+```
+
+---
+
+### Spot contradictions before running
+
+Read the spec top-to-bottom looking for requirements that conflict. The agent will
+silently resolve them — usually in the wrong direction. Classic example:
+
+> **Task A:** Migration synthesises `[code, github]` for all new spaces.
+> **Task B:** Preset picker shows when `integrations.length === 0`.
+
+These cannot both be true. Find contradictions and resolve them explicitly in the spec
+before handing to Cloudy.
+
+---
+
+### Quick checklist
+
+Before running `cloudy init`, check:
+
+- [ ] Every integration type / enum value / soul type named in Steps has its own AC line
+- [ ] Every model field named in Steps is verified in an API `GET` response criterion
+- [ ] Every threshold has a "fires" AND a "does NOT fire" criterion
+- [ ] No criterion uses the words "renders", "exists", "is created", or "is accessible" without a data check
+- [ ] A cross-task integration check covers the full data flow end-to-end
+- [ ] Validation commands at the top match the commands that will actually run
+- [ ] No two tasks make contradictory assumptions about the same state
+- [ ] Negative cases present: 404s, 422s, disabled items excluded, below-threshold no-ops
 
 ---
 
