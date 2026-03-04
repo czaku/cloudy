@@ -200,7 +200,21 @@ export async function runHolisticReview(
   let result: ReviewResult;
   const rawOutput = claudeResult.output ?? '';
 
-  try {
+  // If Claude returned an error (e.g. "Prompt is too long"), surface it as FAIL
+  if (claudeResult.error || !rawOutput.trim()) {
+    const errMsg = claudeResult.error || 'Review produced no output';
+    result = {
+      verdict: 'FAIL',
+      summary: `Review could not run: ${errMsg}`,
+      criteriaResults: [],
+      issues: [{ severity: 'critical', description: errMsg }],
+      conventionViolations: [],
+      suggestions: [],
+      costUsd: claudeResult.costUsd,
+      durationMs,
+      model: String(model),
+    };
+  } else try {
     // Try to extract JSON from the response (may have surrounding text)
     const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
     if (!jsonMatch) {
@@ -231,9 +245,9 @@ export async function runHolisticReview(
       model: String(model),
     };
   } catch {
-    // Malformed JSON — return a safe fallback
+    // Malformed JSON — return FAIL so the user knows review didn't work
     result = {
-      verdict: 'PASS_WITH_NOTES',
+      verdict: 'FAIL',
       summary: rawOutput.slice(0, 300) || 'Review completed but response could not be parsed.',
       criteriaResults: [],
       issues: [],
