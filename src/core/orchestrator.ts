@@ -532,6 +532,36 @@ export class Orchestrator {
         task.timeout || this.config.taskTimeoutMs,
       );
 
+      // Heartbeat: log every 2 min so the log file shows the engine is alive.
+      // Tracks last stdout activity — real silence (no bytes from claude) is the
+      // true hung signal, not just wall-clock time.
+      const _engineStart = Date.now();
+      let _lastOutputMs = Date.now();            // updated on every onOutput chunk
+      const _SILENCE_WARN_MS  = 3 * 60 * 1000;  // 3 min no output → warn
+      const _SILENCE_ABORT_MS = 10 * 60 * 1000; // 10 min no output → abort via AbortController
+      const _heartbeatId = setInterval(() => {
+        const elapsedMs  = Date.now() - _engineStart;
+        const silenceMs  = Date.now() - _lastOutputMs;
+        const elapsedSec = Math.round(elapsedMs / 1000);
+        const min = Math.floor(elapsedSec / 60);
+        const sec = elapsedSec % 60;
+        const elapsed = min > 0 ? `${min}m ${sec}s` : `${sec}s`;
+
+        let suffix = '';
+        if (silenceMs >= _SILENCE_ABORT_MS) {
+          const silenceSec = Math.round(silenceMs / 1000);
+          suffix = ` 🚨 no output for ${silenceSec}s — aborting (hung engine)`;
+          log.warn(`  ⏳ still running — "${task.title}" attempt ${attempt}/${maxAttempts} | ${elapsed} elapsed${suffix}`).catch(() => {});
+          abortController.abort(); // trigger the existing timeout path
+        } else if (silenceMs >= _SILENCE_WARN_MS) {
+          const silenceSec = Math.round(silenceMs / 1000);
+          suffix = ` ⚠️  no output for ${silenceSec}s — may be hung`;
+          log.info(`  ⏳ still running — "${task.title}" attempt ${attempt}/${maxAttempts} | ${elapsed} elapsed${suffix}`).catch(() => {});
+        } else {
+          log.info(`  ⏳ still running — "${task.title}" attempt ${attempt}/${maxAttempts} | ${elapsed} elapsed`).catch(() => {});
+        }
+      }, 120_000); // every 2 minutes
+
       let result;
       try {
         result = await runEngine({
@@ -541,6 +571,7 @@ export class Orchestrator {
           piMono: this.config.piMono,
           cwd: taskCwd,
           onOutput: (text) => {
+            _lastOutputMs = Date.now(); // reset silence timer on any stdout activity
             this.onEvent({ type: 'task_output', taskId: task.id, text });
             logTaskOutput(task.id, text, this.cwd).catch(() => {});
           },
@@ -557,6 +588,7 @@ export class Orchestrator {
           costUsd: 0,
         };
       } finally {
+        clearInterval(_heartbeatId);
         clearTimeout(timeoutId);
       }
 
