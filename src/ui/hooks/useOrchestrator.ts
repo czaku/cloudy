@@ -131,7 +131,9 @@ export function useOrchestrator(initialTasks: Task[]) {
             },
           };
 
-        case 'task_failed':
+        case 'task_failed': {
+          // On final failure (no more retries), auto-select the task so logs are visible immediately
+          const autoSelect = !event.willRetry && !prev.manuallySelected;
           return {
             ...prev,
             tasks: prev.tasks.map((t) =>
@@ -139,7 +141,9 @@ export function useOrchestrator(initialTasks: Task[]) {
                 ? { ...t, status: 'failed' as const, error: event.error, durationMs: t.durationMs ?? Date.now() - Date.now() }
                 : t,
             ),
+            selectedTaskId: autoSelect ? event.taskId : prev.selectedTaskId,
           };
+        }
 
         case 'cost_update':
           return { ...prev, costSummary: event.summary };

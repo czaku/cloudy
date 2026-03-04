@@ -30,6 +30,7 @@ interface AppState {
   approvalRequest: ApprovalRequest | null;
   wsConnected: boolean;
   runStatus: RunStatus;
+  lastFailedTaskId: string | null;
 }
 
 const EMPTY_COST: CostSummary = {
@@ -52,6 +53,7 @@ const INITIAL_STATE: AppState = {
   approvalRequest: null,
   wsConnected: false,
   runStatus: 'idle',
+  lastFailedTaskId: null,
 };
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -178,7 +180,9 @@ function reducer(state: AppState, action: Action): AppState {
         ? `✗ Failed (will retry): ${action.title}`
         : `✗ Failed: ${action.title}`;
       const line = makeEventLine(action.taskId, msg, 'error');
-      return { ...state, plan, outputLines: appendLines(state.outputLines, [line]) };
+      // On final failure, track the task ID so OutputLog can auto-scroll to its error
+      const lastFailedTaskId = !action.willRetry ? action.taskId : state.lastFailedTaskId;
+      return { ...state, plan, outputLines: appendLines(state.outputLines, [line]), lastFailedTaskId };
     }
 
     case 'task_retrying': {
@@ -368,7 +372,7 @@ export function App() {
         />
       </div>
 
-      <OutputLog lines={state.outputLines} onClear={clearOutput} />
+      <OutputLog lines={state.outputLines} onClear={clearOutput} failedTaskId={state.lastFailedTaskId} />
     </div>
   );
 }

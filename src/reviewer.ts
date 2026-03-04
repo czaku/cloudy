@@ -13,6 +13,8 @@ export interface ReviewResult {
   issues: Array<{ severity: 'critical' | 'major' | 'minor'; description: string; location?: string }>;
   conventionViolations: string[];
   suggestions: string[];
+  /** Task IDs that should be re-run (skipped, failed, or missing implementation) */
+  rerunTaskIds: string[];
   costUsd: number;
   durationMs: number;
   model: string;
@@ -122,7 +124,8 @@ Respond ONLY with valid JSON (no markdown wrapper):
   "criteriaResults": [{ "criterion": "...", "passed": true, "note": "..." }],
   "issues": [{ "severity": "critical"|"major"|"minor", "description": "...", "location": "file:line or component name" }],
   "conventionViolations": ["..."],
-  "suggestions": ["..."]
+  "suggestions": ["..."],
+  "rerunTaskIds": ["task-N", ...]  // IDs of tasks that were skipped, failed, or have missing implementation — empty array if all tasks completed successfully
 }`;
 }
 
@@ -210,6 +213,7 @@ export async function runHolisticReview(
       issues: [{ severity: 'critical', description: errMsg }],
       conventionViolations: [],
       suggestions: [],
+      rerunTaskIds: [],
       costUsd: claudeResult.costUsd,
       durationMs,
       model: String(model),
@@ -227,6 +231,7 @@ export async function runHolisticReview(
       issues?: Array<{ severity: 'critical' | 'major' | 'minor'; description: string; location?: string }>;
       conventionViolations?: string[];
       suggestions?: string[];
+      rerunTaskIds?: string[];
     };
 
     const verdict = parsed.verdict === 'PASS' || parsed.verdict === 'FAIL' || parsed.verdict === 'PASS_WITH_NOTES'
@@ -240,6 +245,7 @@ export async function runHolisticReview(
       issues: parsed.issues ?? [],
       conventionViolations: parsed.conventionViolations ?? [],
       suggestions: parsed.suggestions ?? [],
+      rerunTaskIds: parsed.rerunTaskIds ?? [],
       costUsd: claudeResult.costUsd,
       durationMs,
       model: String(model),
@@ -253,6 +259,7 @@ export async function runHolisticReview(
       issues: [],
       conventionViolations: [],
       suggestions: [],
+      rerunTaskIds: [],
       costUsd: claudeResult.costUsd,
       durationMs,
       model: String(model),

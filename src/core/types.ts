@@ -223,6 +223,8 @@ export interface ReviewResult {
   issues: Array<{ severity: 'critical' | 'major' | 'minor'; description: string; location?: string }>;
   conventionViolations: string[];
   suggestions: string[];
+  /** Task IDs that should be re-run (skipped, failed, or missing implementation) */
+  rerunTaskIds: string[];
   costUsd: number;
   durationMs: number;
   model: string;

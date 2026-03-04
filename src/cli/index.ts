@@ -9,6 +9,7 @@ import { configCommand } from './commands/config.js';
 import { resetCommand } from './commands/reset.js';
 import { validateCommand } from './commands/validate.js';
 import { loopCommand } from './commands/loop.js';
+import { logsCommand } from './commands/logs.js';
 
 export function createProgram(): Command {
   const program = new Command();
@@ -30,6 +31,7 @@ export function createProgram(): Command {
   program.addCommand(resetCommand);
   program.addCommand(validateCommand);
   program.addCommand(loopCommand);
+  program.addCommand(logsCommand);
 
   return program;
 }

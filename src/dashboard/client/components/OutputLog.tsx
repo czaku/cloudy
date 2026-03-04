@@ -4,6 +4,8 @@ import type { OutputLine } from '../types';
 interface OutputLogProps {
   lines: OutputLine[];
   onClear: () => void;
+  /** When set, auto-expand and scroll to the first error line for this task */
+  failedTaskId?: string | null;
 }
 
 const MAX_LINES = 500;
@@ -79,13 +81,14 @@ function LogLine({ line }: { line: OutputLine }) {
   );
 }
 
-export function OutputLog({ lines, onClear }: OutputLogProps) {
+export function OutputLog({ lines, onClear, failedTaskId }: OutputLogProps) {
   const logRef = useRef<HTMLDivElement>(null);
   const [collapsed, setCollapsed] = useState(false);
   const [height, setHeight] = useState(320);
   const isDragging = useRef(false);
   const dragStartY = useRef(0);
   const dragStartHeight = useRef(0);
+  const lastFailedTaskId = useRef<string | null>(null);
 
   // Auto-scroll to bottom when new lines arrive
   useEffect(() => {
@@ -94,6 +97,24 @@ export function OutputLog({ lines, onClear }: OutputLogProps) {
     const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
     if (nearBottom) el.scrollTop = el.scrollHeight;
   }, [lines, collapsed]);
+
+  // When a task fails: auto-expand and scroll to its first error line
+  useEffect(() => {
+    if (!failedTaskId || failedTaskId === lastFailedTaskId.current) return;
+    lastFailedTaskId.current = failedTaskId;
+    setCollapsed(false);
+    // Scroll to first error line for this task after render
+    requestAnimationFrame(() => {
+      if (!logRef.current) return;
+      const errorEl = logRef.current.querySelector<HTMLElement>(`.log-error`);
+      if (errorEl) {
+        errorEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+        // Fallback: scroll to bottom
+        logRef.current.scrollTop = logRef.current.scrollHeight;
+      }
+    });
+  }, [failedTaskId]);
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
     isDragging.current = true;
