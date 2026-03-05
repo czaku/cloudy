@@ -45,13 +45,27 @@ export async function createPlan(
   }
 
   const rawTasks = parsePlanOutput(result.output);
-  const tasks = rawTasks.map(toTask);
+  let tasks = rawTasks.map(toTask);
 
   const validation = validateDependencyGraph(tasks);
   if (!validation.valid) {
     throw new Error(
       `Invalid dependency graph:\n${validation.errors.join('\n')}`,
     );
+  }
+
+  // Second pass: verify and fix the dependency graph with a cheap focused call.
+  // The planner sometimes generates tasks with missing or empty dependencies —
+  // this pass catches edges that the planner missed without re-running the full plan.
+  tasks = await verifyAndFixDependencies(tasks, cwd);
+
+  // Re-validate after corrections (LLM might introduce bad refs or cycles)
+  const validation2 = validateDependencyGraph(tasks);
+  if (!validation2.valid) {
+    await log.warn(
+      `Dependency verification introduced graph errors — reverting to original: ${validation2.errors.join(', ')}`,
+    );
+    tasks = rawTasks.map(toTask);
   }
 
   const plan: Plan = {
@@ -64,6 +78,107 @@ export async function createPlan(
   await log.info(`Plan created with ${tasks.length} tasks`);
 
   return plan;
+}
+
+/**
+ * Run a cheap focused LLM pass to catch missing dependency edges in the plan.
+ *
+ * The planner sometimes generates tasks with empty or incomplete dependency
+ * arrays — this causes parallel execution to race on shared modules and break
+ * builds. This pass looks ONLY at the dependency graph (not the full spec) and
+ * adds any edges the planner missed.
+ *
+ * Rules enforced:
+ * - Never removes existing dependencies
+ * - Only adds a dependency if it is logically required (B uses A's output)
+ * - Skips if the haiku call fails (non-fatal, logs a warning)
+ */
+async function verifyAndFixDependencies(
+  tasks: Task[],
+  cwd: string,
+): Promise<Task[]> {
+  await log.info('Verifying dependency graph…');
+
+  const taskIds = new Set(tasks.map((t) => t.id));
+
+  // Compact representation — enough for the LLM to reason about deps
+  const compact = tasks.map((t) => ({
+    id: t.id,
+    title: t.title,
+    description: t.description.slice(0, 400),
+    outputArtifacts: t.outputArtifacts ?? [],
+    dependencies: [...t.dependencies],
+  }));
+
+  const prompt = `You are verifying the dependency graph of a software build plan.
+
+A task B MUST list task A as a dependency when:
+- B imports, uses, or builds upon types/modules/services defined in A's output files
+- B's description references files listed in A's outputArtifacts
+- B is a test/integration task and A implements the feature it tests
+- B uses a database schema, shared module, or config file that A creates
+
+Rules:
+- NEVER remove any existing dependency — only add missing ones
+- Only add logically necessary edges — do not add spurious dependencies
+- Task IDs that have no logical predecessor should keep an empty array
+
+Task list:
+${JSON.stringify(compact, null, 2)}
+
+Respond with ONLY a JSON object mapping every task ID to its complete (corrected) dependency array:
+{"task-1": [], "task-2": ["task-1"], "task-3": ["task-1", "task-2"]}`;
+
+  let result;
+  try {
+    result = await runClaude({ prompt, model: 'haiku', cwd });
+  } catch (err) {
+    await log.warn(`Dependency verification skipped: ${err instanceof Error ? err.message : String(err)}`);
+    return tasks;
+  }
+
+  if (!result.success) {
+    await log.warn('Dependency verification call failed — using original graph');
+    return tasks;
+  }
+
+  let corrected: Record<string, string[]> | null = null;
+  try {
+    const jsonMatch = result.output.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      corrected = JSON.parse(jsonMatch[0]) as Record<string, string[]>;
+    }
+  } catch {
+    await log.warn('Could not parse dependency verification response — using original graph');
+    return tasks;
+  }
+
+  if (!corrected) return tasks;
+
+  let addedCount = 0;
+  for (const task of tasks) {
+    const correctedDeps = corrected[task.id];
+    if (!Array.isArray(correctedDeps)) continue;
+
+    const existing = new Set(task.dependencies);
+    for (const dep of correctedDeps) {
+      // Guard: dep must exist, not be self-reference, and not already present
+      if (dep !== task.id && taskIds.has(dep) && !existing.has(dep)) {
+        task.dependencies.push(dep);
+        existing.add(dep);
+        addedCount++;
+        await log.info(`  + inferred dependency: ${task.id} → ${dep}`);
+      }
+    }
+  }
+
+  if (addedCount > 0) {
+    await log.info(`Dependency verification added ${addedCount} missing edge(s)`);
+  } else {
+    await log.info('Dependency verification: graph is complete');
+  }
+
+  return tasks;
 }
 
 /**

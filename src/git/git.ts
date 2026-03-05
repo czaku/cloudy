@@ -110,6 +110,26 @@ export async function resetToSha(
 }
 
 /**
+ * Roll back the working directory to a checkpoint SHA.
+ *
+ * Hard-resets HEAD to the checkpoint and removes all untracked
+ * (non-gitignored) files so Claude starts the retry from a clean slate.
+ *
+ * Safe to call in sequential mode or inside an isolated git worktree.
+ * DO NOT call when multiple parallel tasks share the same working directory —
+ * it will destroy uncommitted changes from concurrently running tasks.
+ */
+export async function rollbackToCheckpoint(
+  cwd: string,
+  sha: string,
+): Promise<void> {
+  await execa('git', [...GIT_OPTS, 'reset', '--hard', sha], { cwd });
+  // Remove untracked files/directories (respects .gitignore, so build
+  // artifacts and secrets are not touched).
+  await execa('git', [...GIT_OPTS, 'clean', '-fd'], { cwd });
+}
+
+/**
  * Check if a commit SHA exists.
  */
 export async function shaExists(cwd: string, sha: string): Promise<boolean> {

@@ -22,7 +22,7 @@ import {
 } from '../executor/context-resolver.js';
 import { validateTask, formatValidationErrors } from '../validator/validator.js';
 import { createCheckpoint } from '../git/checkpoint.js';
-import { commitAll, isGitRepo, getGitDiff, getChangedFiles } from '../git/git.js';
+import { commitAll, isGitRepo, getGitDiff, getChangedFiles, rollbackToCheckpoint } from '../git/git.js';
 import {
   createWorktree,
   mergeWorktree,
@@ -597,10 +597,27 @@ export class Orchestrator {
       const attemptStart = Date.now();
       await log.info(`  Attempt ${attempt}/${maxAttempts}`);
 
-      // On retry, expand context
+      // On retry, expand context and roll back to a clean slate
       if (attempt > 1) {
         currentPatterns = await expandContext(currentPatterns, taskCwd, budget);
         contextFiles = await resolveContextFiles(currentPatterns, taskCwd, budget);
+
+        // Roll back to the checkpoint so Claude doesn't inherit orphan files,
+        // partial writes, or half-applied changes from the previous attempt.
+        // Safe when: sequential mode (one task at a time) OR the task runs in
+        // its own isolated worktree (taskCwd !== this.cwd).
+        // NOT safe for parallel mode without worktrees (shared working tree).
+        if (checkpointSha) {
+          const isIsolated = !this.config.parallel || taskCwd !== this.cwd;
+          if (isIsolated) {
+            try {
+              await rollbackToCheckpoint(taskCwd, checkpointSha);
+              await log.info(`  Rolled back to checkpoint ${checkpointSha.slice(0, 8)} for clean retry`);
+            } catch (err) {
+              await log.warn(`  Rollback failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+        }
 
         this.onEvent({
           type: 'task_started',
