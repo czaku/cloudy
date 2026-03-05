@@ -186,11 +186,14 @@ export function useOrchestrator(initialTasks: Task[]) {
             reviewOutput: [],
           };
 
-        case 'review_output':
+        case 'review_output': {
+          const reviewLines = filterStreamOutput(event.text, '__review__');
+          if (reviewLines.length === 0) return prev;
           return {
             ...prev,
-            reviewOutput: [...prev.reviewOutput, event.text].slice(-200),
+            reviewOutput: [...prev.reviewOutput, ...reviewLines].slice(-200),
           };
+        }
 
         case 'review_completed':
           return {
