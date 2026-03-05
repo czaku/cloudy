@@ -174,14 +174,21 @@ export async function runHolisticReview(
     gitDiff = '(unable to retrieve git diff)';
   }
 
-  // Truncate diff if too large to avoid exceeding Claude's context window
-  const MAX_DIFF_CHARS = 60_000;
-  if (gitDiff.length > MAX_DIFF_CHARS) {
-    const totalKb = Math.round(gitDiff.length / 1024);
-    const shownKb = Math.round(MAX_DIFF_CHARS / 1024);
-    gitDiff = gitDiff.slice(0, MAX_DIFF_CHARS) +
-      `\n\n... [diff truncated — ${totalKb}KB total, showing first ${shownKb}KB]`;
-  }
+  // Filter noise files and sort source code first so the reviewer always sees
+  // the most important changes within the budget, not lock files or build artifacts.
+  const LOW_VALUE_FILE_RE = /^diff --git a\/[^\n]*?(?:package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|Gemfile\.lock|poetry\.lock|go\.sum|composer\.lock|\.log|\.tsbuildinfo|\.pbxproj|(?:^|\/)dist\/|(?:^|\/)build\/|\.next\/|\.nuxt\/)/m;
+  const allChunks = gitDiff.split(/(?=^diff --git )/m).filter(Boolean);
+  const sourceChunks = allChunks.filter((c) => !LOW_VALUE_FILE_RE.test(c));
+  const otherChunks  = allChunks.filter((c) =>  LOW_VALUE_FILE_RE.test(c));
+  const orderedDiff  = [...sourceChunks, ...otherChunks].join('');
+
+  const MAX_DIFF_CHARS = 80_000;
+  const totalKb = Math.round(orderedDiff.length / 1024);
+  const shownKb = Math.round(MAX_DIFF_CHARS / 1024);
+  gitDiff = orderedDiff.length > MAX_DIFF_CHARS
+    ? orderedDiff.slice(0, MAX_DIFF_CHARS) +
+        `\n\n... [diff truncated — ${totalKb}KB total, showing first ${shownKb}KB of source files]`
+    : orderedDiff;
 
   // 5. Build task summary
   const taskSummary = buildTaskSummary(plan);
