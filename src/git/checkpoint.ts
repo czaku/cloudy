@@ -18,10 +18,34 @@ function checkpointPath(cwd: string, taskId: string): string {
 }
 
 /**
+ * Per-cwd mutex: serialises concurrent createCheckpoint() calls so that
+ * parallel tasks don't race on `git add -A && git commit`.
+ * Each entry is a Promise that resolves when the previous checkpoint
+ * for that directory has completed.
+ */
+const checkpointMutex = new Map<string, Promise<unknown>>();
+
+/**
  * Create a checkpoint before a task starts.
  * Commits any pending changes first, then records the SHA.
+ *
+ * Thread-safe: concurrent calls for the same cwd are serialised so that
+ * two parallel tasks cannot race on the underlying git commit.
  */
 export async function createCheckpoint(
+  cwd: string,
+  taskId: string,
+): Promise<string> {
+  // Chain onto any in-flight checkpoint for this cwd so git operations
+  // are always sequential, even when tasks start concurrently.
+  const previous = checkpointMutex.get(cwd) ?? Promise.resolve();
+  const current = previous.then(() => _createCheckpoint(cwd, taskId));
+  // Store a version that swallows errors so the chain never breaks.
+  checkpointMutex.set(cwd, current.catch(() => {}));
+  return current;
+}
+
+async function _createCheckpoint(
   cwd: string,
   taskId: string,
 ): Promise<string> {
