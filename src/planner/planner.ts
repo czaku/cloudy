@@ -2,6 +2,7 @@ import type { ClaudeModel, Plan, Task } from '../core/types.js';
 import { runClaude } from '../executor/claude-runner.js';
 import { buildPlanningPrompt } from './prompts.js';
 import { validateDependencyGraph } from './dependency-graph.js';
+import { loadRecentRunInsights } from '../knowledge/run-logger.js';
 import { log } from '../utils/logger.js';
 
 interface RawTask {
@@ -30,7 +31,13 @@ export async function createPlan(
   await log.info(`Planning with model: ${model}`);
   await log.info(`Goal: ${goal}`);
 
-  const prompt = buildPlanningPrompt(goal, specContent, claudeMdContent);
+  // Load insights from previous runs to steer the planner away from known failure patterns
+  const runInsights = await loadRecentRunInsights(cwd).catch(() => undefined);
+  if (runInsights) {
+    await log.info('Injecting learnings from previous runs into planning prompt');
+  }
+
+  const prompt = buildPlanningPrompt(goal, specContent, claudeMdContent, runInsights);
 
   const result = await runClaude({
     prompt,
@@ -53,6 +60,9 @@ export async function createPlan(
       `Invalid dependency graph:\n${validation.errors.join('\n')}`,
     );
   }
+
+  // Plan quality warnings — catch common planner mistakes before execution
+  await warnPlanQuality(tasks, specContent);
 
   // Second pass: verify and fix the dependency graph with a cheap focused call.
   // The planner sometimes generates tasks with missing or empty dependencies —
@@ -242,6 +252,86 @@ Return ONLY valid JSON with this structure:
     createdAt: existingPlan.createdAt,
     updatedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Warn about common plan quality issues that would cause failures at execution time.
+ *
+ * All warnings are logged — this function never throws. Issues flagged:
+ * - Tasks with zero acceptance criteria (validator has nothing to check)
+ * - Tasks with vague criteria (fewer than 15 chars — almost certainly wrong)
+ * - Tasks with no outputArtifacts (artifact check will trivially pass, masking missing files)
+ * - Spec ACs that appear nowhere in the task list (coverage gap)
+ */
+async function warnPlanQuality(tasks: Task[], specContent?: string): Promise<void> {
+  let warnings = 0;
+
+  for (const task of tasks) {
+    if (task.acceptanceCriteria.length === 0) {
+      await log.warn(`  ⚠️  Plan quality: task "${task.id}" has no acceptance criteria — validation will trivially pass`);
+      warnings++;
+    } else {
+      const vague = task.acceptanceCriteria.filter((ac) => ac.trim().length < 15);
+      if (vague.length > 0) {
+        await log.warn(`  ⚠️  Plan quality: task "${task.id}" has ${vague.length} vague criterion/criteria: ${vague.map((v) => `"${v}"`).join(', ')}`);
+        warnings++;
+      }
+    }
+  }
+
+  // Spec coverage check — extract AC-like bullet lines from specContent and verify coverage
+  if (specContent) {
+    const specAcs = extractSpecAcs(specContent);
+    if (specAcs.length > 0) {
+      const allTaskAcs = tasks.flatMap((t) => t.acceptanceCriteria).map((ac) => ac.toLowerCase());
+      const uncovered = specAcs.filter((specAc) => {
+        const lower = specAc.toLowerCase();
+        // A spec AC is "covered" if any task AC contains meaningful overlap (first 40 chars)
+        const prefix = lower.slice(0, 40);
+        return !allTaskAcs.some((ac) => ac.includes(prefix) || prefix.includes(ac.slice(0, 40)));
+      });
+      if (uncovered.length > 0) {
+        await log.warn(`  ⚠️  Spec coverage: ${uncovered.length} spec requirement(s) may not be covered by any task AC:`);
+        for (const ac of uncovered.slice(0, 8)) {
+          await log.warn(`      - ${ac.slice(0, 120)}`);
+        }
+        warnings++;
+      }
+    }
+  }
+
+  if (warnings === 0) {
+    await log.info('Plan quality check: OK');
+  } else {
+    await log.warn(`Plan quality check: ${warnings} warning(s) — review before running`);
+  }
+}
+
+/**
+ * Extract acceptance-criteria-like bullet lines from spec markdown.
+ * Looks for lines in "Acceptance Criteria" sections.
+ */
+function extractSpecAcs(specContent: string): string[] {
+  const acs: string[] = [];
+  let inAcSection = false;
+
+  for (const line of specContent.split('\n')) {
+    if (/^#+\s+acceptance criteria/i.test(line)) {
+      inAcSection = true;
+      continue;
+    }
+    if (inAcSection && /^#+/.test(line)) {
+      inAcSection = false;
+    }
+    if (inAcSection) {
+      const bullet = line.match(/^[-*]\s+(.+)$/);
+      if (bullet && bullet[1].trim().length > 20) {
+        acs.push(bullet[1].trim());
+      }
+    }
+  }
+
+  return acs;
 }
 
 function parsePlanOutput(output: string): RawTask[] {

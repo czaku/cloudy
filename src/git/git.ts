@@ -130,6 +130,22 @@ export async function rollbackToCheckpoint(
 }
 
 /**
+ * Create and checkout a new branch for a cloudy run.
+ *
+ * All task commits go on this branch. The user can review and merge when ready.
+ * Branch name: cloudy/run-YYYYMMDD-HHmmss
+ */
+export async function createRunBranch(cwd: string): Promise<string> {
+  const stamp = new Date().toISOString()
+    .replace('T', '-')
+    .replace(/:/g, '')
+    .slice(0, 15);
+  const branch = `cloudy/run-${stamp}`;
+  await execa('git', [...GIT_OPTS, 'checkout', '-b', branch], { cwd });
+  return branch;
+}
+
+/**
  * Check if a commit SHA exists.
  */
 export async function shaExists(cwd: string, sha: string): Promise<boolean> {

@@ -344,10 +344,58 @@ export async function validateTask(
 
 /**
  * Format validation errors into a string suitable for retry prompts.
+ *
+ * Uses a differentiated format per failure type:
+ * - ai-review: extracts only the failing criteria + reasons (not the raw JSON blob)
+ * - artifacts: shows a clean "missing files" list
+ * - typecheck/lint/build/test/command: uses raw output (already structured)
  */
 export function formatValidationErrors(report: ValidationReport): string {
   const failed = report.results.filter((r) => !r.passed);
-  return failed
-    .map((r) => `[${r.strategy}] ${r.output}`)
-    .join('\n\n');
+  return failed.map((r) => {
+    if (r.strategy === 'ai-review') {
+      return formatAiReviewFailure(r.output);
+    }
+    if (r.strategy === 'artifacts') {
+      return formatArtifactFailure(r.output);
+    }
+    return `[${r.strategy}]\n${r.output}`;
+  }).join('\n\n---\n\n');
+}
+
+/**
+ * For ai-review failures, parse the JSON output and extract only the failing criteria.
+ * The full JSON blob is noisy — the executor only needs to know what failed and why.
+ */
+function formatAiReviewFailure(output: string): string {
+  try {
+    const jsonMatch = output.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const failing = (parsed.criteriaResults ?? []).filter(
+        (cr: { met: boolean }) => !cr.met,
+      );
+      if (failing.length > 0) {
+        const items = failing.map(
+          (cr: { criterion: string; reason: string }) =>
+            `  ✗ ${cr.criterion}\n    Reason: ${cr.reason ?? 'no reason given'}`,
+        ).join('\n');
+        const verdict = parsed.verdict ?? 'FAIL';
+        const summary = parsed.summary ?? '';
+        return `[ai-review] ${verdict}${summary ? ` — ${summary}` : ''}\n\nFailing criteria:\n${items}`;
+      }
+    }
+  } catch {
+    // Fall through to raw output if JSON parse fails
+  }
+  // Fallback: truncate raw output to avoid overwhelming the retry prompt
+  return `[ai-review] ${output.slice(0, 2000)}${output.length > 2000 ? '\n... (truncated)' : ''}`;
+}
+
+/**
+ * For artifact failures, format as a clean list of missing files.
+ */
+function formatArtifactFailure(output: string): string {
+  // Output is typically: "Missing required output artifacts:\n- path/to/file\n- ..."
+  return `[artifacts — missing files]\n${output}`;
 }

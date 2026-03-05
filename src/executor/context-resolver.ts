@@ -68,13 +68,15 @@ export async function resolveContextFiles(
         const filePath = path.resolve(literalPath);
         if (!seen.has(filePath) && stat.size <= 100_000) {
           seen.add(filePath);
-          const content = await fs.readFile(filePath, 'utf-8');
+          const relPath = path.relative(cwd, filePath);
+          const raw = await fs.readFile(filePath, 'utf-8');
+          const content = extractTypeScriptSymbols(raw, relPath);
           if (budgetTokens > 0 && (totalChars + content.length) / 4 > budgetTokens) {
-            await log.info(`Context budget (${budgetTokens} tokens) reached — skipping ${path.relative(cwd, filePath)}`);
+            await log.info(`Context budget (${budgetTokens} tokens) reached — skipping ${relPath}`);
             continue;
           }
           totalChars += content.length;
-          resolvedFiles.push({ path: path.relative(cwd, filePath), content });
+          resolvedFiles.push({ path: relPath, content });
         }
         continue;
       }
@@ -98,7 +100,8 @@ export async function resolveContextFiles(
         }
 
         try {
-          const content = await fs.readFile(filePath, 'utf-8');
+          const raw = await fs.readFile(filePath, 'utf-8');
+          const content = extractTypeScriptSymbols(raw, relFile);
           if (budgetTokens > 0 && (totalChars + content.length) / 4 > budgetTokens) {
             await log.info(`Context budget (${budgetTokens} tokens) reached — skipping ${relFile}`);
             continue;
@@ -113,6 +116,81 @@ export async function resolveContextFiles(
   }
 
   return resolvedFiles;
+}
+
+const TS_SYMBOL_LINE_THRESHOLD = 150;
+
+/**
+ * For large TypeScript/JavaScript files, extract just the public interface:
+ * imports, export declarations, function/class signatures, and type definitions.
+ * Implementation bodies are replaced with `{ ... }` to save context tokens.
+ *
+ * This gives Claude enough information to understand the module's contract
+ * without reading thousands of lines of implementation detail.
+ */
+export function extractTypeScriptSymbols(content: string, filePath: string): string {
+  const lines = content.split('\n');
+  if (lines.length < TS_SYMBOL_LINE_THRESHOLD) return content;
+
+  const ext = path.extname(filePath).toLowerCase();
+  if (!['.ts', '.tsx', '.js', '.jsx'].includes(ext)) return content;
+
+  const kept: string[] = [];
+  let depth = 0;
+  let inBody = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Always keep: imports, exports of types/interfaces/enums, blank lines between declarations
+    if (
+      trimmed.startsWith('import ') ||
+      trimmed.startsWith('export type ') ||
+      trimmed.startsWith('export interface ') ||
+      trimmed.startsWith('export enum ') ||
+      trimmed.startsWith('export const ') ||
+      trimmed.startsWith('export abstract class ') ||
+      trimmed.startsWith('export class ') ||
+      trimmed.startsWith('export function ') ||
+      trimmed.startsWith('export async function ') ||
+      trimmed.startsWith('export default ') ||
+      trimmed.startsWith('interface ') ||
+      trimmed.startsWith('type ') ||
+      trimmed.startsWith('enum ')
+    ) {
+      inBody = false;
+      kept.push(line);
+    }
+
+    // Track brace depth to know when we're inside a function body
+    const opens = (line.match(/\{/g) ?? []).length;
+    const closes = (line.match(/\}/g) ?? []).length;
+
+    if (!inBody && opens > closes) {
+      inBody = true;
+      depth = opens - closes;
+      kept.push('  // ...'); // indicate body omitted
+      continue;
+    }
+
+    if (inBody) {
+      depth += opens - closes;
+      if (depth <= 0) {
+        inBody = false;
+        depth = 0;
+        kept.push(line); // closing brace
+      }
+      continue;
+    }
+
+    // Keep short lines that aren't inside bodies (constants, single-line types, etc.)
+    if (!inBody && trimmed.length > 0 && trimmed.length < 120) {
+      kept.push(line);
+    }
+  }
+
+  const result = kept.join('\n');
+  return `// [symbol extract — ${lines.length} lines → ${kept.length} shown]\n${result}`;
 }
 
 /**

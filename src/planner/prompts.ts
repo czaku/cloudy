@@ -1,4 +1,4 @@
-export function buildPlanningPrompt(goal: string, specContent?: string, claudeMdContent?: string): string {
+export function buildPlanningPrompt(goal: string, specContent?: string, claudeMdContent?: string, runInsights?: string): string {
   const specSection = specContent
     ? `\n# Specification\n${specContent.slice(0, 120000)}\n\nUse this spec to derive specific tasks and acceptance criteria. Include ALL tasks mentioned in the spec — do not drop or merge tasks unless they are truly trivial.\n`
     : '';
@@ -7,10 +7,14 @@ export function buildPlanningPrompt(goal: string, specContent?: string, claudeMd
     ? `\n# Project Context (CLAUDE.md)\n${claudeMdContent.slice(0, 4000)}\n`
     : '';
 
+  const insightsSection = runInsights
+    ? `\n# Learnings from Previous Runs\n${runInsights}\n`
+    : '';
+
   return `You are a software project planner. Decompose the following goal into concrete, ordered implementation tasks.
 
 # Goal
-${goal}${specSection}${claudeMdSection}
+${goal}${specSection}${claudeMdSection}${insightsSection}
 
 # Instructions
 

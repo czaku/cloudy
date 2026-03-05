@@ -221,3 +221,95 @@ export class RunLogger {
     await fs.copyFile(this.logPath, this.latestPath);
   }
 }
+
+/**
+ * Read the 3 most recent run logs and return a compact insights summary
+ * suitable for injection into the planning prompt.
+ *
+ * Surfaces: recurring failure patterns, tasks that needed retries,
+ * expensive tasks, and known caveats from last runs.
+ */
+export async function loadRecentRunInsights(cwd: string): Promise<string | undefined> {
+  const runsDir = path.join(cwd, CLAWDASH_DIR, RUNS_DIR);
+  let files: string[];
+  try {
+    const entries = await fs.readdir(runsDir);
+    files = entries
+      .filter((f) => f.startsWith('run-') && f.endsWith('.jsonl'))
+      .sort()
+      .slice(-3)  // 3 most recent
+      .reverse();
+  } catch {
+    return undefined;
+  }
+
+  if (files.length === 0) return undefined;
+
+  const lines: string[] = [];
+  let totalFailedTasks = 0;
+  let totalRetries = 0;
+  const failureReasons: string[] = [];
+  const expensiveTasks: string[] = [];
+
+  for (const file of files) {
+    try {
+      const content = await fs.readFile(path.join(runsDir, file), 'utf-8');
+      const entries = content.trim().split('\n').filter(Boolean);
+
+      for (const line of entries) {
+        try {
+          const entry = JSON.parse(line) as LogEntry;
+
+          if (entry.event === 'task_failed') {
+            totalFailedTasks++;
+            const e = entry as TaskFailedEntry;
+            totalRetries += e.totalAttempts - 1;
+            if (e.lastAiReview) {
+              failureReasons.push(`[${e.taskId}] ${e.lastAiReview.slice(0, 200)}`);
+            }
+          }
+
+          if (entry.event === 'task_completed') {
+            const e = entry as TaskCompletedEntry;
+            if (e.attempt > 1) {
+              totalRetries += e.attempt - 1;
+            }
+            if (e.costUsd > 0.5) {
+              expensiveTasks.push(`[${e.taskId}] $${e.costUsd.toFixed(3)} (${e.attempt} attempt(s))`);
+            }
+          }
+        } catch {
+          // Malformed line — skip
+        }
+      }
+    } catch {
+      // Unreadable file — skip
+    }
+  }
+
+  if (totalFailedTasks === 0 && totalRetries === 0 && expensiveTasks.length === 0) {
+    return undefined;
+  }
+
+  lines.push(`From the last ${files.length} run(s):`);
+  if (totalFailedTasks > 0) {
+    lines.push(`- ${totalFailedTasks} task(s) ultimately failed`);
+  }
+  if (totalRetries > 0) {
+    lines.push(`- ${totalRetries} retry attempt(s) were needed`);
+  }
+  if (failureReasons.length > 0) {
+    lines.push('\nRecurring failure patterns (avoid similar mistakes):');
+    for (const reason of failureReasons.slice(0, 5)) {
+      lines.push(`  • ${reason}`);
+    }
+  }
+  if (expensiveTasks.length > 0) {
+    lines.push('\nHigh-cost tasks from previous runs (consider splitting if similar scope):');
+    for (const t of expensiveTasks.slice(0, 3)) {
+      lines.push(`  • ${t}`);
+    }
+  }
+
+  return lines.join('\n');
+}

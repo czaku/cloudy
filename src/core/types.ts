@@ -166,7 +166,9 @@ export interface CloudyConfig {
   notifications: NotificationsConfig;
   contextBudgetTokens: number; // max tokens of context to load per task (0 = unlimited)
   maxCostPerTaskUsd: number;   // abort task if cumulative cost exceeds this (0 = unlimited)
+  maxCostPerRunUsd: number;    // abort entire run if cumulative cost exceeds this (0 = unlimited)
   worktrees: boolean;          // use git worktrees for parallel task isolation
+  runBranch: boolean;          // create a dedicated cloudy/run-* branch before executing tasks
   approval: ApprovalConfig;
   engine: Engine;              // execution engine (default: claude-code)
   piMono: PiMonoConfig;        // pi-mono engine configuration

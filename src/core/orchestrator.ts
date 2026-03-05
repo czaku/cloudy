@@ -22,7 +22,7 @@ import {
 } from '../executor/context-resolver.js';
 import { validateTask, formatValidationErrors } from '../validator/validator.js';
 import { createCheckpoint } from '../git/checkpoint.js';
-import { commitAll, isGitRepo, getGitDiff, getChangedFiles, rollbackToCheckpoint } from '../git/git.js';
+import { commitAll, isGitRepo, getGitDiff, getChangedFiles, rollbackToCheckpoint, createRunBranch } from '../git/git.js';
 import {
   createWorktree,
   mergeWorktree,
@@ -193,6 +193,17 @@ export class Orchestrator {
     this.runLogger = new RunLogger(this.cwd);
     await this.runLogger.init();
     this.taskStartCostUsd = new Map();
+
+    // Create a dedicated branch for this run so all task commits stay off main
+    if (this.config.runBranch && await isGitRepo(this.cwd)) {
+      try {
+        const branch = await createRunBranch(this.cwd);
+        await log.info(`Created run branch: ${branch}`);
+        this.onEvent({ type: 'run_status', status: 'running' });
+      } catch (err) {
+        await log.warn(`Could not create run branch (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
 
     await log.info(`Starting execution of ${plan.tasks.length} tasks`);
 
@@ -445,6 +456,12 @@ export class Orchestrator {
     }
     if (this.config.maxCostPerTaskUsd > 0) {
       console.log(`Max cost per task: $${this.config.maxCostPerTaskUsd}`);
+    }
+    if (this.config.maxCostPerRunUsd > 0) {
+      console.log(`Max cost per run: $${this.config.maxCostPerRunUsd}`);
+    }
+    if (this.config.runBranch) {
+      console.log(`Run branch: yes (cloudy/run-*)`);
     }
     console.log('');
 
@@ -720,6 +737,17 @@ export class Orchestrator {
           success: false,
           error: `Task cost $${taskCostUsd.toFixed(4)} exceeds maxCostPerTaskUsd ($${this.config.maxCostPerTaskUsd})`,
         };
+      }
+
+      // Per-run cost budget check — abort the entire run if over budget
+      if (this.config.maxCostPerRunUsd > 0) {
+        const runCost = this.costTracker.getSummary().totalEstimatedUsd;
+        if (runCost > this.config.maxCostPerRunUsd) {
+          await log.error(`Run cost $${runCost.toFixed(4)} exceeds maxCostPerRunUsd ($${this.config.maxCostPerRunUsd}) — aborting`);
+          this.onEvent({ type: 'run_failed', error: `Run budget exceeded: $${runCost.toFixed(4)} > $${this.config.maxCostPerRunUsd}` });
+          this.abort();
+          return;
+        }
       }
 
       if (!result.success) {

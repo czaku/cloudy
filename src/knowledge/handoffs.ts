@@ -92,6 +92,14 @@ export async function writeHandoff(
   lines.push(extractCaveats(resultSummary) || '*(none noted)*');
   lines.push('');
 
+  // Surface stubs/TODOs so downstream tasks know what was left incomplete
+  const gaps = extractKnownGaps(resultSummary);
+  if (gaps) {
+    lines.push('## Known gaps / stubs (finish in downstream tasks)');
+    lines.push(gaps);
+    lines.push('');
+  }
+
   await fs.writeFile(handoffPath(cwd, taskId), lines.join('\n'), 'utf-8');
 }
 
@@ -176,6 +184,31 @@ export function extractLearning(output: string): string {
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Extract lines that indicate incomplete work: stubs, TODOs, placeholders.
+ * These are surfaced in the handoff so downstream tasks know what to finish.
+ */
+function extractKnownGaps(summary: string): string {
+  if (!summary) return '';
+  const lines = summary.split('\n');
+  const gapLines = lines.filter((l) => {
+    const lower = l.toLowerCase();
+    return (
+      lower.includes('todo') ||
+      lower.includes('stub') ||
+      lower.includes('not implemented') ||
+      lower.includes('placeholder') ||
+      lower.includes('left for') ||
+      lower.includes('skipped for now') ||
+      lower.includes('future work') ||
+      lower.includes('not yet') ||
+      lower.includes('hardcoded') ||
+      lower.includes('mock') && lower.includes('replace')
+    );
+  });
+  return gapLines.slice(0, 6).join('\n').trim();
+}
 
 /**
  * Extract key design decisions from Claude's summary.
