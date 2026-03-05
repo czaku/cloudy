@@ -279,8 +279,19 @@ export class Orchestrator {
       const reviewResult = await this.runHolisticReview();
 
       // Auto-recovery: if reviewer flagged tasks for re-run, reset and re-execute them
-      if (reviewResult && reviewResult.verdict === 'FAIL' && reviewResult.rerunTaskIds.length > 0) {
-        const ids = reviewResult.rerunTaskIds;
+      // If verdict is FAIL but rerunTaskIds is empty (truncated/malformed review), fall back
+      // to re-running all failed tasks
+      if (reviewResult && reviewResult.verdict === 'FAIL') {
+        let ids = reviewResult.rerunTaskIds;
+        if (ids.length === 0) {
+          ids = plan.tasks.filter((t) => t.status === 'failed').map((t) => t.id);
+          if (ids.length > 0) {
+            await log.info(`Reviewer FAIL with empty rerunTaskIds — falling back to failed tasks: ${ids.join(', ')}`);
+          }
+        }
+        if (ids.length === 0) {
+          await log.info('Reviewer FAIL but no tasks to re-run (all completed). Review issues may need manual attention.');
+        } else {
         await log.info(`Reviewer flagged ${ids.length} task(s) for re-run: ${ids.join(', ')}`);
         this.onEvent({ type: 'rerun_started', taskIds: ids });
 
@@ -314,6 +325,7 @@ export class Orchestrator {
           // Second review after re-run
           await this.runHolisticReview();
         }
+        } // else (ids.length > 0)
       }
     }
 

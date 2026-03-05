@@ -219,12 +219,35 @@ export async function runHolisticReview(
       model: String(model),
     };
   } else try {
-    // Try to extract JSON from the response (may have surrounding text)
-    const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
+    // Try to extract the review JSON from the response.
+    // Look for a JSON object containing "verdict" to avoid matching reasoning text.
+    let jsonStr: string | null = null;
+    const verdictIdx = rawOutput.indexOf('"verdict"');
+    if (verdictIdx !== -1) {
+      // Walk backwards from "verdict" to find the opening brace
+      let braceStart = rawOutput.lastIndexOf('{', verdictIdx);
+      if (braceStart !== -1) {
+        // Find matching closing brace by counting nesting
+        let depth = 0;
+        for (let i = braceStart; i < rawOutput.length; i++) {
+          if (rawOutput[i] === '{') depth++;
+          else if (rawOutput[i] === '}') depth--;
+          if (depth === 0) {
+            jsonStr = rawOutput.slice(braceStart, i + 1);
+            break;
+          }
+        }
+      }
+    }
+    // Fallback: try the old greedy regex if verdict-based search failed
+    if (!jsonStr) {
+      const jsonMatch = rawOutput.match(/\{[\s\S]*\}/);
+      jsonStr = jsonMatch?.[0] ?? null;
+    }
+    if (!jsonStr) {
       throw new Error('No JSON found in response');
     }
-    const parsed = JSON.parse(jsonMatch[0]) as {
+    const parsed = JSON.parse(jsonStr) as {
       verdict?: string;
       summary?: string;
       criteriaResults?: Array<{ criterion: string; passed: boolean; note: string }>;
