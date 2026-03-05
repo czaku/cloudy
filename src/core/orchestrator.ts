@@ -521,11 +521,17 @@ export class Orchestrator {
     queue.updateStatus(task.id, 'in_progress');
     this.taskStartCostUsd.set(task.id, this.costTracker.getSummary().totalEstimatedUsd);
 
-    // Create git checkpoint (in the task's working directory)
+    // Create git checkpoint (in the task's working directory).
+    // On retry, reuse the original checkpoint so the diff covers ALL work
+    // done across all previous attempts — not just the latest attempt.
     let checkpointSha: string | undefined;
     if (await isGitRepo(taskCwd)) {
-      checkpointSha = await createCheckpoint(taskCwd, task.id);
-      queue.setCheckpoint(task.id, checkpointSha);
+      if (task.checkpointSha) {
+        checkpointSha = task.checkpointSha;
+      } else {
+        checkpointSha = await createCheckpoint(taskCwd, task.id);
+        queue.setCheckpoint(task.id, checkpointSha);
+      }
     }
 
     const completedTitles = queue

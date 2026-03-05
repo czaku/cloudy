@@ -285,9 +285,22 @@ export async function validateTask(
   if (deterministicPassed && config.aiReview) {
     await log.info('  Running AI review...');
 
-    const diff = await getGitDiff(cwd, checkpointSha);
+    const rawDiff = await getGitDiff(cwd, checkpointSha);
+    // Split diff into per-file chunks, filter noise files, then prioritise source code
+    // before truncating so the AI reviewer always sees the most important changes.
+    const LOW_VALUE_FILE_RE = /^diff --git a\/[^\n]*?(?:package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|Gemfile\.lock|poetry\.lock|go\.sum|composer\.lock|\.log|\.tsbuildinfo|\.pbxproj|(?:^|\/)dist\/|(?:^|\/)build\/|\.next\/|\.nuxt\/)/m;
+    const allChunks = rawDiff.split(/(?=^diff --git )/m).filter(Boolean);
+    // Separate high-value source chunks from low-value build/lock chunks
+    const sourceChunks = allChunks.filter((c) => !LOW_VALUE_FILE_RE.test(c));
+    const otherChunks = allChunks.filter((c) => LOW_VALUE_FILE_RE.test(c));
+    // Source-first ordering ensures we hit the important code before any truncation
+    const orderedDiff = [...sourceChunks, ...otherChunks].join('');
+    const MAX_DIFF_CHARS = 80_000;
+    const truncatedDiff = orderedDiff.length > MAX_DIFF_CHARS
+      ? orderedDiff.slice(0, MAX_DIFF_CHARS) + '\n... (diff truncated at 80 KB for AI review)'
+      : orderedDiff;
     const changedFiles = await getChangedFiles(cwd, checkpointSha);
-    const changedFileSections = await readChangedFileSections(changedFiles, cwd, diff);
+    const changedFileSections = await readChangedFileSections(changedFiles, cwd, truncatedDiff);
     const artifactCheckPassed = results.find((r) => r.strategy === 'artifacts')?.passed;
 
     // Collect deterministic command results to give the AI reviewer ground-truth evidence.
@@ -306,7 +319,7 @@ export async function validateTask(
     const result = await runAiReview(
       task.title,
       task.acceptanceCriteria,
-      diff,
+      truncatedDiff,
       model,
       cwd,
       changedFileSections,
