@@ -701,30 +701,7 @@ export const runCommand = new Command('run')
             const completedCount = freshState.plan!.tasks.filter((t) => t.status === 'completed').length;
             void notifyRunComplete(completedCount, freshState.costSummary.totalEstimatedUsd, config.notifications);
 
-            // Post-review recovery: offer to re-run tasks the reviewer flagged
-            if (lastReviewResult && lastReviewResult.rerunTaskIds.length > 0 && !opts.tui) {
-              const ids = lastReviewResult.rerunTaskIds;
-              console.log(`\n${c(yellow, '⚠️')}  ${c(yellow + bold, `Reviewer flagged ${ids.length} task(s) to re-run:`)}  ${c(dim, ids.join(', '))}`);
-              const answer = await new Promise<string>((resolve) => {
-                const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-                rl.question(`${c(dim, '  Re-run now? (yes/no) ')}`, (a) => { rl.close(); resolve(a.trim().toLowerCase()); });
-              });
-              if (answer === 'yes' || answer === 'y') {
-                for (const id of ids) {
-                  const task = freshState.plan!.tasks.find((t) => t.id === id);
-                  if (task) {
-                    task.status = 'pending';
-                    task.error = undefined;
-                    task.retries = 0;
-                    task.retryHistory = [];
-                  }
-                }
-                await saveState(cwd, freshState);
-                console.log(c(cyan, `\n🔁  Re-running: ${ids.join(', ')}\n`));
-                lastReviewResult = null;
-                await executeRun(broadcast);
-              }
-            }
+            // Re-run recovery is now handled automatically inside the orchestrator
           }
         } catch (err) {
           isRunning = false;

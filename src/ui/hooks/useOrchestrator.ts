@@ -206,6 +206,20 @@ export function useOrchestrator(initialTasks: Task[]) {
             reviewError: event.error,
           };
 
+        case 'rerun_started': {
+          const rerunIds = new Set(event.taskIds);
+          return {
+            ...prev,
+            status: 'running',
+            reviewStatus: 'idle',
+            reviewResult: null,
+            reviewOutput: [],
+            tasks: prev.tasks.map((t) =>
+              rerunIds.has(t.id) ? { ...t, status: 'pending' as const } : t,
+            ),
+          };
+        }
+
         default:
           return prev;
       }

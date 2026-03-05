@@ -252,7 +252,8 @@ export type OrchestratorEvent =
   | { type: 'review_output'; text: string }
   | { type: 'review_completed'; result: ReviewResult }
   | { type: 'review_failed'; error: string }
-  | { type: 'review_model_requested' };
+  | { type: 'review_model_requested' }
+  | { type: 'rerun_started'; taskIds: string[] };
 
 export type OrchestratorEventHandler = (event: OrchestratorEvent) => void;
 

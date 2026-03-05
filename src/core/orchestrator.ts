@@ -274,9 +274,47 @@ export class Orchestrator {
       await this.runWrapUp(plan.wrapUpPrompt);
     }
 
-    // Post-run holistic review
+    // Post-run holistic review + auto-recovery loop
     if (!this.aborted && this.config.review?.enabled !== false) {
-      await this.runHolisticReview();
+      const reviewResult = await this.runHolisticReview();
+
+      // Auto-recovery: if reviewer flagged tasks for re-run, reset and re-execute them
+      if (reviewResult && reviewResult.verdict === 'FAIL' && reviewResult.rerunTaskIds.length > 0) {
+        const ids = reviewResult.rerunTaskIds;
+        await log.info(`Reviewer flagged ${ids.length} task(s) for re-run: ${ids.join(', ')}`);
+        this.onEvent({ type: 'rerun_started', taskIds: ids });
+
+        let anyReset = false;
+        for (const id of ids) {
+          const task = plan.tasks.find((t) => t.id === id);
+          if (task) {
+            task.status = 'pending';
+            task.error = undefined;
+            task.retries = 0;
+            task.retryHistory = [];
+            anyReset = true;
+          }
+        }
+
+        if (anyReset) {
+          plan.updatedAt = new Date().toISOString();
+          await saveState(this.cwd, this.state);
+
+          // Re-run the queue with reset tasks
+          const { TaskQueue } = await import('./task-queue.js');
+          const rerunQueue = new TaskQueue(plan.tasks);
+          await this.runSequential(rerunQueue, plan);
+
+          // Update plan tasks from re-run queue
+          plan.tasks = rerunQueue.getAllTasks();
+          plan.updatedAt = new Date().toISOString();
+          this.state.costSummary = this.costTracker.getSummary();
+          await saveState(this.cwd, this.state);
+
+          // Second review after re-run
+          await this.runHolisticReview();
+        }
+      }
     }
 
     if (this.aborted) {
@@ -298,7 +336,7 @@ export class Orchestrator {
     }
   }
 
-  private async runHolisticReview(): Promise<void> {
+  private async runHolisticReview(): Promise<import('../reviewer.js').ReviewResult | null> {
     let reviewModel: ClaudeModel | 'skip' = this.config.review?.model ?? 'sonnet';
 
     // If TUI is connected with model selector, ask for model choice
@@ -307,7 +345,7 @@ export class Orchestrator {
       reviewModel = await this.onReviewModelRequest();
     }
 
-    if (reviewModel === 'skip') return;
+    if (reviewModel === 'skip') return null;
 
     this.onEvent({ type: 'review_started', model: reviewModel });
 
@@ -320,9 +358,11 @@ export class Orchestrator {
         (text) => this.onEvent({ type: 'review_output', text }),
       );
       this.onEvent({ type: 'review_completed', result });
+      return result;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       this.onEvent({ type: 'review_failed', error: msg });
+      return null;
     }
   }
 
