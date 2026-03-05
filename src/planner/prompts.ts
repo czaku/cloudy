@@ -67,7 +67,9 @@ Respond with ONLY valid JSON (no markdown, no explanation), matching this struct
 
 Important:
 - Task IDs must be "task-1", "task-2", etc.
-- Dependencies reference task IDs that must be completed first
+- Dependencies reference task IDs that must be completed first. Set these CAREFULLY — running tasks in the wrong order in parallel will cause import errors, missing modules, and broken builds.
+- Most tasks will have at least one dependency. Only the very first task(s) that set up the foundation (e.g. database schema, module scaffold, shared types) should have empty dependencies arrays.
+- If task B uses types, imports, or modules created by task A, then B must list A in its dependencies. When in doubt, add the dependency — it is always safer to serialize than to race.
 - Aim for tasks that represent a few hours of focused work each — not so small they're trivial, not so large they risk failure (avoid bundling 3+ independent features into one task)
 - If a spec lists explicit tasks, preserve them — do not merge or drop tasks from the spec
 - First task should have no dependencies
@@ -149,6 +151,7 @@ IMPORTANT rules:
 - For criteria referencing behaviour (e.g. "function X returns Y"), verify the implementation exists somewhere in the diff or the shown file sections.
 - If deterministic check results above show a command passed (e.g. a smoke test returning HTTP 200 for an endpoint), treat that as conclusive evidence that the criterion is met — do not fail it just because the endpoint code isn't visible in the shown diff sections.
 - The diff may not show every file that changed (large tasks touch many files). If a criterion is about something that is plausibly implemented given the other evidence, give the benefit of the doubt.
+- Do NOT fail criteria that require running tests (e.g. "unit tests pass", "integration tests pass") solely because no test execution output appears in the deterministic check results. The validation environment may lack a test database, running server, or other runtime. If the test code exists, is syntactically correct, and the test cases look reasonable, mark those criteria as met.
 
 Check for:
 - Does each criterion have concrete evidence of implementation (diff, file sections, or passing commands)?

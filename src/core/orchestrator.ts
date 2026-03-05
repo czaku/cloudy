@@ -542,6 +542,7 @@ export class Orchestrator {
     let attempt = 0;
     let lastValidationErrors = '';
     let lastErrorFileContext = '';
+    let lastPriorFilesCreated: string[] = [];
     let taskCostUsd = 0;
     task.retryHistory = [];
 
@@ -616,7 +617,7 @@ export class Orchestrator {
       // Build prompt with conventions + learnings + handoffs
       const prompt =
         lastValidationErrors && attempt > 1
-          ? buildRetryPrompt(task, plan, completedTitles, lastValidationErrors, contextFiles, learningsContent, handoffSummaries, conventionsContent, lastErrorFileContext)
+          ? buildRetryPrompt(task, plan, completedTitles, lastValidationErrors, contextFiles, learningsContent, handoffSummaries, conventionsContent, lastErrorFileContext, lastPriorFilesCreated)
           : buildExecutionPrompt({ task, plan, completedTaskTitles: completedTitles, contextFiles, learningsContent, handoffSummaries, conventionsContent });
 
       // Run Claude with timeout
@@ -720,6 +721,9 @@ export class Orchestrator {
 
         if (canRetry) {
           lastValidationErrors = result.error ?? 'Execution failed';
+          lastPriorFilesCreated = checkpointSha
+            ? await getChangedFiles(taskCwd, checkpointSha).catch(() => [])
+            : [];
           this.onEvent({
             type: 'task_failed',
             taskId: task.id,
@@ -975,6 +979,7 @@ export class Orchestrator {
       // Validation failed — extract code snippets for surgical retry
       lastValidationErrors = formatValidationErrors(report);
       lastErrorFileContext = await extractErrorFileContext(lastValidationErrors, taskCwd);
+      lastPriorFilesCreated = await getChangedFiles(taskCwd, checkpointSha).catch(() => []);
       await log.warn(`  Validation failed:\n${lastValidationErrors}`);
 
       const canRetry = queue.incrementRetry(task.id);

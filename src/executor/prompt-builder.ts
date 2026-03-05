@@ -131,6 +131,7 @@ export function buildRetryPrompt(
   handoffSummaries?: string,
   conventionsContent?: string,
   errorFileContext?: string,
+  priorFilesCreated?: string[],
 ): string {
   const base = buildExecutionPrompt({
     task,
@@ -146,6 +147,11 @@ export function buildRetryPrompt(
     ? `\n${errorFileContext.trim()}\n`
     : '';
 
+  const priorFilesSection =
+    priorFilesCreated && priorFilesCreated.length > 0
+      ? `\n# Files Created in Previous Attempt\nYour previous attempt created these files. Check whether they are in the correct location — if any are misplaced or duplicated, delete or move them as part of this retry:\n${priorFilesCreated.map((f) => `- ${f}`).join('\n')}\n`
+      : '';
+
   return `${base}
 
 # RETRY — Previous Attempt Failed
@@ -153,6 +159,6 @@ export function buildRetryPrompt(
 The previous attempt had these errors that MUST be fixed:
 
 ${validationErrors}
-${contextSection}
+${contextSection}${priorFilesSection}
 Address each error precisely. Do not rewrite working parts — only fix what failed.`;
 }
