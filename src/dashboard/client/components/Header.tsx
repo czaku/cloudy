@@ -1,6 +1,7 @@
 import React from 'react';
 import type { RunStatus } from '../types';
 import { formatElapsedShort } from '../utils/formatters';
+import { ThemeToggle } from './ThemeToggle';
 
 interface HeaderProps {
   goal: string | undefined;
@@ -66,6 +67,7 @@ export function Header({ goal, runStatus, elapsedMs, wsConnected, onStartRun, on
           className={`connection-dot${wsConnected ? ' connected' : ''}`}
           title={wsConnected ? 'WebSocket connected' : 'WebSocket disconnected'}
         />
+        <ThemeToggle />
       </div>
     </header>
   );

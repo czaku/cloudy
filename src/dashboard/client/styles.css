@@ -27,6 +27,21 @@
   --shadow-lg: 0 8px 48px rgba(0,0,0,0.4);
 }
 
+:root.light {
+  --bg-primary: #f8f9fc;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f3f9;
+  --bg-terminal: #f4f5f8;
+  --border: #d5d9e2;
+  --border-subtle: #e5e8ef;
+  --text-primary: #1a1d2e;
+  --text-secondary: #4b5568;
+  --text-muted: #8493a8;
+  --shadow: 0 4px 24px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 48px rgba(0,0,0,0.12);
+}
+
 body {
   font-family: var(--font-sans);
   background: var(--bg-primary);
@@ -115,6 +130,22 @@ body {
 .connection-dot.connected {
   background: var(--accent-green);
   box-shadow: 0 0 8px rgba(16, 185, 129, 0.5);
+}
+
+.theme-toggle {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--text-secondary);
+  transition: background 0.15s, border-color 0.15s;
+}
+.theme-toggle:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--text-muted);
 }
 
 /* ── Main Content ────────────────────────────────────── */
