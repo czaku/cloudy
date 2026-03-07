@@ -31,7 +31,7 @@ export const DEFAULT_CONFIG: CloudyConfig = {
   approval: { mode: 'never', timeoutSec: 300, autoAction: 'continue' },
   engine: 'claude-code',
   piMono: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001', piPath: 'pi' },
-  review: { enabled: true, model: 'sonnet' },
+  review: { enabled: true, model: 'opus' },
 };
 
 export const CLAWDASH_DIR = '.cloudy';

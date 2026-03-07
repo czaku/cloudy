@@ -30,9 +30,9 @@ export function mergeModelConfig(
   base: ModelConfig,
   overrides: {
     model?: ClaudeModel;
-    modelPlanning?: ClaudeModel;
-    modelExecution?: ClaudeModel;
-    modelValidation?: ClaudeModel;
+    planningModel?: ClaudeModel;
+    executionModel?: ClaudeModel;
+    taskReviewModel?: ClaudeModel;
   },
 ): ModelConfig {
   const result = { ...base };
@@ -45,9 +45,9 @@ export function mergeModelConfig(
   }
 
   // Per-phase flags override --model
-  if (overrides.modelPlanning) result.planning = overrides.modelPlanning;
-  if (overrides.modelExecution) result.execution = overrides.modelExecution;
-  if (overrides.modelValidation) result.validation = overrides.modelValidation;
+  if (overrides.planningModel) result.planning = overrides.planningModel;
+  if (overrides.executionModel) result.execution = overrides.executionModel;
+  if (overrides.taskReviewModel) result.validation = overrides.taskReviewModel;
 
   return result;
 }

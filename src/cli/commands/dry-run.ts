@@ -93,8 +93,8 @@ async function printCostEstimate(
 export const dryRunCommand = new Command('dry-run')
   .description('Preview what would execute without running')
   .option('--model <model>', 'Model for all phases')
-  .option('--model-execution <model>', 'Model for execution phase')
-  .option('--model-validation <model>', 'Model for validation phase')
+  .option('--execution-model <model>', 'Model for execution phase')
+  .option('--task-review-model <model>', 'Model for per-task validation')
   .option('--parallel', 'Enable parallel execution')
   .option('--only-task <id>', 'Preview only this task and its transitive dependencies')
   .option('--start-from <id>', 'Preview tasks starting from this one in topological order')
@@ -102,8 +102,8 @@ export const dryRunCommand = new Command('dry-run')
   .action(
     async (opts: {
       model?: string;
-      modelExecution?: string;
-      modelValidation?: string;
+      executionModel?: string;
+      taskReviewModel?: string;
       parallel?: boolean;
       onlyTask?: string;
       startFrom?: string;
@@ -126,11 +126,11 @@ export const dryRunCommand = new Command('dry-run')
       const config = await loadConfig(cwd);
       config.models = mergeModelConfig(config.models, {
         model: opts.model ? parseModelFlag(opts.model) : undefined,
-        modelExecution: opts.modelExecution
-          ? parseModelFlag(opts.modelExecution)
+        executionModel: opts.executionModel
+          ? parseModelFlag(opts.executionModel)
           : undefined,
-        modelValidation: opts.modelValidation
-          ? parseModelFlag(opts.modelValidation)
+        taskReviewModel: opts.taskReviewModel
+          ? parseModelFlag(opts.taskReviewModel)
           : undefined,
       });
 

@@ -70,7 +70,7 @@ describe('mergeModelConfig', () => {
   it('per-phase flags override --model', () => {
     const result = mergeModelConfig(base, {
       model: 'opus',
-      modelExecution: 'sonnet',
+      executionModel: 'sonnet',
     });
     expect(result.planning).toBe('opus');
     expect(result.execution).toBe('sonnet');
@@ -79,10 +79,31 @@ describe('mergeModelConfig', () => {
 
   it('per-phase flags override base', () => {
     const result = mergeModelConfig(base, {
-      modelValidation: 'opus',
+      taskReviewModel: 'opus',
     });
     expect(result.planning).toBe('sonnet');
     expect(result.execution).toBe('sonnet');
     expect(result.validation).toBe('opus');
+  });
+
+  it('planningModel overrides planning phase only', () => {
+    const result = mergeModelConfig(base, { planningModel: 'opus' });
+    expect(result.planning).toBe('opus');
+    expect(result.execution).toBe('sonnet');
+    expect(result.validation).toBe('haiku');
+  });
+
+  it('executionModel overrides execution phase only', () => {
+    const result = mergeModelConfig(base, { executionModel: 'haiku' });
+    expect(result.planning).toBe('sonnet');
+    expect(result.execution).toBe('haiku');
+    expect(result.validation).toBe('haiku');
+  });
+
+  it('taskReviewModel overrides validation phase only', () => {
+    const result = mergeModelConfig(base, { taskReviewModel: 'sonnet' });
+    expect(result.planning).toBe('sonnet');
+    expect(result.execution).toBe('sonnet');
+    expect(result.validation).toBe('sonnet');
   });
 });

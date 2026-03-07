@@ -57,7 +57,7 @@ export const initCommand = new Command('init')
   .description('Decompose a goal into tasks using Claude')
   .argument('[goal]', 'The project goal to decompose into tasks')
   .option('--model <model>', 'Model for all phases')
-  .option('--model-planning <model>', 'Model for planning phase')
+  .option('--planning-model <model>', 'Model for planning phase')
   .option('--spec <file>', 'Spec/PRD file (repeatable: --spec A --spec B)', (v: string, prev: string[]) => [...prev, v], [] as string[])
   .option('--no-review', 'Auto-approve the generated plan without interactive review')
   .option('--verbose', 'Show live Claude output during planning')
@@ -67,7 +67,7 @@ export const initCommand = new Command('init')
   .option('--pi-base-url <url>', 'Pi-mono base URL for OpenAI-compatible endpoints')
   .action(async (goalArg: string | undefined, opts: {
     model?: string;
-    modelPlanning?: string;
+    planningModel?: string;
     spec: string[];
     review: boolean;
     verbose?: boolean;
@@ -195,8 +195,8 @@ export const initCommand = new Command('init')
     // ── Planning model ────────────────────────────────────────────────────────
     let planningModel = opts.model
       ? parseModelFlag(opts.model)
-      : opts.modelPlanning
-        ? parseModelFlag(opts.modelPlanning)
+      : opts.planningModel
+        ? parseModelFlag(opts.planningModel)
         : undefined;
 
     if (!planningModel) {
@@ -212,7 +212,7 @@ export const initCommand = new Command('init')
     // Apply planning model config only — execution/validation/review are asked at run time
     config.models = mergeModelConfig(config.models, {
       model: opts.model ? parseModelFlag(opts.model) : undefined,
-      modelPlanning: planningModel,
+      planningModel: planningModel,
     });
 
     // ── Engine config ─────────────────────────────────────────────────────────

@@ -28,8 +28,8 @@ function formatDuration(ms: number): string {
 export const runCommand = new Command('run')
   .description('Execute the current plan')
   .option('--model <model>', 'Model for all phases')
-  .option('--model-execution <model>', 'Model for execution phase')
-  .option('--model-validation <model>', 'Model for validation phase')
+  .option('--execution-model <model>', 'Model for execution phase')
+  .option('--task-review-model <model>', 'Model for per-task validation')
   .option('--model-auto', 'Auto-route model per task complexity')
   .option('--parallel', 'Enable parallel execution')
   .option('--max-parallel <n>', 'Max parallel tasks', parseInt)
@@ -51,13 +51,13 @@ export const runCommand = new Command('run')
   .option('--pi-provider <provider>', 'Pi-mono provider: anthropic, openai, google, ollama, etc.')
   .option('--pi-model <model>', 'Pi-mono model ID: gpt-4o-mini, gemini-2.0-flash, qwen2.5-coder:7b, etc.')
   .option('--pi-base-url <url>', 'Pi-mono base URL for OpenAI-compatible endpoints')
-  .option('--review-model <model>', 'Model for post-run holistic review (haiku/sonnet/opus)')
+  .option('--run-review-model <model>', 'Model for post-run holistic review (haiku/sonnet/opus)')
   .option('--no-post-review', 'Skip post-run holistic review')
   .action(
     async (opts: {
       model?: string;
-      modelExecution?: string;
-      modelValidation?: string;
+      executionModel?: string;
+      taskReviewModel?: string;
       modelAuto?: boolean;
       parallel?: boolean;
       maxParallel?: number;
@@ -78,7 +78,7 @@ export const runCommand = new Command('run')
       piProvider?: string;
       piModel?: string;
       piBaseUrl?: string;
-      reviewModel?: string;
+      runReviewModel?: string;
       postReview?: boolean; // false when --no-post-review
     }) => {
       const cwd = process.cwd();
@@ -110,7 +110,7 @@ export const runCommand = new Command('run')
         { value: 'opus',   label: 'opus',   hint: 'most capable' },
       ];
 
-      if (!opts.model && !opts.modelExecution && !opts.goal) {
+      if (!opts.model && !opts.executionModel && !opts.goal) {
         const projectName = path.basename(cwd);
         p.intro(`${c(cyan + bold, '☁️  cloudy run')}  ${c(bold, projectName)}`);
 
@@ -120,11 +120,11 @@ export const runCommand = new Command('run')
           initialValue: config.models.execution ?? 'sonnet',
         });
         if (p.isCancel(execModel)) { p.cancel('Cancelled.'); process.exit(0); }
-        opts.modelExecution = execModel as string;
+        opts.executionModel = execModel as string;
 
-        if (!opts.modelValidation) {
+        if (!opts.taskReviewModel) {
           const valModel = await p.select({
-            message: 'Validation model (per-task):',
+            message: 'Task review model (per-task validation):',
             options: [
               { value: 'haiku',  label: 'haiku',  hint: 'recommended — saves cost' },
               { value: 'sonnet', label: 'sonnet',  hint: 'higher quality' },
@@ -133,10 +133,10 @@ export const runCommand = new Command('run')
             initialValue: config.models.validation ?? 'haiku',
           });
           if (p.isCancel(valModel)) { p.cancel('Cancelled.'); process.exit(0); }
-          opts.modelValidation = valModel as string;
+          opts.taskReviewModel = valModel as string;
         }
 
-        if (!opts.reviewModel && opts.postReview !== false) {
+        if (!opts.runReviewModel && opts.postReview !== false) {
           const reviewModel = await p.select({
             message: 'Final review model (holistic post-run review):',
             options: [
@@ -145,13 +145,13 @@ export const runCommand = new Command('run')
               { value: 'opus',   label: 'opus',   hint: 'deepest review, highest cost' },
               { value: 'skip',   label: 'skip',   hint: 'disable post-run review' },
             ],
-            initialValue: config.review?.model ?? 'sonnet',
+            initialValue: config.review?.model ?? 'opus',
           });
           if (p.isCancel(reviewModel)) { p.cancel('Cancelled.'); process.exit(0); }
           if (reviewModel === 'skip') {
             opts.postReview = false;
           } else {
-            opts.reviewModel = reviewModel as string;
+            opts.runReviewModel = reviewModel as string;
           }
         }
 
@@ -191,11 +191,11 @@ export const runCommand = new Command('run')
       // Apply model overrides
       config.models = mergeModelConfig(config.models, {
         model: opts.model ? parseModelFlag(opts.model) : undefined,
-        modelExecution: opts.modelExecution
-          ? parseModelFlag(opts.modelExecution)
+        executionModel: opts.executionModel
+          ? parseModelFlag(opts.executionModel)
           : undefined,
-        modelValidation: opts.modelValidation
-          ? parseModelFlag(opts.modelValidation)
+        taskReviewModel: opts.taskReviewModel
+          ? parseModelFlag(opts.taskReviewModel)
           : undefined,
       });
 
@@ -235,12 +235,12 @@ export const runCommand = new Command('run')
       if (opts.postReview === false) {
         config.review = { ...config.review, enabled: false };
       }
-      if (opts.reviewModel) {
-        const parsed = opts.reviewModel.toLowerCase();
+      if (opts.runReviewModel) {
+        const parsed = opts.runReviewModel.toLowerCase();
         if (parsed === 'haiku' || parsed === 'sonnet' || parsed === 'opus') {
           config.review = { ...config.review, model: parsed };
         } else {
-          console.error(c(red, `✖  unknown review model "${opts.reviewModel}" — use haiku, sonnet, or opus`));
+          console.error(c(red, `✖  unknown review model "${opts.runReviewModel}" — use haiku, sonnet, or opus`));
           process.exit(1);
         }
       }
