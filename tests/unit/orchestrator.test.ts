@@ -85,7 +85,7 @@ function makePlan(tasks: Task[]): Plan {
 function makeConfig(): CloudyConfig {
   return {
     models: { planning: 'sonnet', execution: 'sonnet', validation: 'haiku' },
-    validation: { typecheck: false, lint: false, build: false, test: false, aiReview: false },
+    validation: { typecheck: false, lint: false, build: false, test: false, aiReview: false, commands: [] },
     maxRetries: 1,
     parallel: false,
     maxParallel: 2,
@@ -94,6 +94,16 @@ function makeConfig(): CloudyConfig {
     autoModelRouting: false,
     dashboard: false,
     dashboardPort: 3456,
+    notifications: { desktop: false, sound: false },
+    contextBudgetTokens: 0,
+    maxCostPerTaskUsd: 0,
+    maxCostPerRunUsd: 0,
+    worktrees: false,
+    runBranch: false,
+    approval: { mode: 'never', timeoutSec: 300, autoAction: 'continue' },
+    engine: 'claude-code',
+    piMono: { provider: 'anthropic', model: 'claude-haiku-4-5-20251001', piPath: 'pi' },
+    review: { enabled: false, model: 'sonnet' },
   };
 }
 

@@ -53,6 +53,7 @@ export const runCommand = new Command('run')
   .option('--pi-base-url <url>', 'Pi-mono base URL for OpenAI-compatible endpoints')
   .option('--run-review-model <model>', 'Model for post-run holistic review (haiku/sonnet/opus)')
   .option('--no-post-review', 'Skip post-run holistic review')
+  .option('--ci', 'Non-interactive mode: skip all prompts, disable dashboard, run to completion (use with --model)')
   .action(
     async (opts: {
       model?: string;
@@ -80,7 +81,16 @@ export const runCommand = new Command('run')
       piBaseUrl?: string;
       runReviewModel?: string;
       postReview?: boolean; // false when --no-post-review
+      ci?: boolean;
     }) => {
+      // CI mode: non-interactive, no dashboard, run straight through
+      const isCi = opts.ci || !process.stdout.isTTY;
+      if (isCi) {
+        opts.dashboard = false;
+        if (!opts.model && !opts.executionModel) opts.executionModel = 'sonnet';
+        if (!opts.taskReviewModel) opts.taskReviewModel = 'haiku';
+        if (opts.postReview !== false) opts.postReview = false;
+      }
       const cwd = process.cwd();
       await initLogger(cwd);
 
@@ -110,7 +120,7 @@ export const runCommand = new Command('run')
         { value: 'opus',   label: 'opus',   hint: 'most capable' },
       ];
 
-      if (!opts.model && !opts.executionModel && !opts.goal) {
+      if (!isCi && !opts.model && !opts.executionModel && !opts.goal) {
         const projectName = path.basename(cwd);
         p.intro(`${c(cyan + bold, '☁️  cloudy run')}  ${c(bold, projectName)}`);
 
@@ -756,7 +766,7 @@ export const runCommand = new Command('run')
 
       // ── Run ───────────────────────────────────────────────────────────
       await executeRun(dashboardBroadcast);
-      if (config.dashboard) {
+      if (config.dashboard && !isCi) {
         dashboardBroadcast?.({ type: 'run_status', status: isRunning ? 'running' : 'completed' });
         console.log(`\n${c(cyan, '🌐')}  ${c(dim, 'dashboard still active  ·  q or ctrl+c to exit')}\n`);
         await keepAliveUntilSignal(() => { abortCurrentRun?.(); });

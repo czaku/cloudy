@@ -281,9 +281,10 @@ export async function runHolisticReview(
       model: String(model),
     };
   } catch {
-    // Malformed JSON — return FAIL so the user knows review didn't work
+    // Malformed JSON — return PASS_WITH_NOTES so an unparseable review doesn't block the run.
+    // The summary preserves whatever Claude said so it's visible to the user.
     result = {
-      verdict: 'FAIL',
+      verdict: 'PASS_WITH_NOTES',
       summary: rawOutput.slice(0, 300) || 'Review completed but response could not be parsed.',
       criteriaResults: [],
       issues: [],

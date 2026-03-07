@@ -1,12 +1,22 @@
 import { describe, it, expect, vi } from 'vitest';
 
 // Mock dependencies before importing the module under test
+// Default runClaude mock — returns an empty success so verification passes gracefully
+const DEFAULT_RUN_CLAUDE_RESULT = {
+  success: true,
+  output: '{}',
+  error: undefined,
+  usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+  durationMs: 100,
+  costUsd: 0,
+};
+
 vi.mock('../../src/executor/claude-runner.js', () => ({
-  runClaude: vi.fn(),
+  runClaude: vi.fn().mockResolvedValue(DEFAULT_RUN_CLAUDE_RESULT),
 }));
 
 vi.mock('../../src/utils/logger.js', () => ({
-  log: { info: vi.fn(), error: vi.fn() },
+  log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
   initLogger: vi.fn(),
 }));
 

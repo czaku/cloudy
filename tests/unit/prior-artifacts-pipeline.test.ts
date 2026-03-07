@@ -94,6 +94,7 @@ describe('prior artifacts threaded through validation pipeline', () => {
       priorArtifacts,             // ← must be forwarded
       undefined,                  // artifactCheckPassed (no outputArtifacts on task)
       undefined,                  // taskOutputArtifacts (no outputArtifacts on task)
+      expect.any(Array),          // commandResults
     );
   });
 
@@ -112,9 +113,10 @@ describe('prior artifacts threaded through validation pipeline', () => {
       expect.any(String),
       expect.any(String),
       expect.any(Array),
-      undefined,       // priorArtifacts is undefined when not passed
-      undefined,       // artifactCheckPassed (no outputArtifacts on task)
-      undefined,       // taskOutputArtifacts (no outputArtifacts on task)
+      undefined,            // priorArtifacts is undefined when not passed
+      undefined,            // artifactCheckPassed (no outputArtifacts on task)
+      undefined,            // taskOutputArtifacts (no outputArtifacts on task)
+      expect.any(Array),   // commandResults
     );
   });
 

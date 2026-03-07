@@ -36,17 +36,18 @@ export async function runClaude(
 
   // Unset Claude Code session markers so cloudy can run as a subprocess inside an active
   // Claude Code session without triggering the nested-session guard in the claude CLI.
+  // extendEnv: false prevents execa from re-merging process.env (which would re-add them).
   const childEnv = { ...process.env };
   delete childEnv['CLAUDECODE'];
   delete childEnv['CLAUDE_CODE_ENTRYPOINT'];
 
-  // Pass prompt via stdin to avoid command-line argument length limits with large prompts
   const proc = execa(claudePath, args, {
     cwd,
     reject: false,
     cancelSignal: abortSignal,
     input: prompt,
     env: childEnv,
+    extendEnv: false,
   });
 
   let rawOutput = '';

@@ -100,10 +100,13 @@ describe('git.ts — uses array args (no shell injection)', () => {
   });
 
   it('getGitDiff with fromSha uses array args', async () => {
-    mockedExeca.mockResolvedValueOnce(makeExecaResult('diff output'));
+    // getGitDiff(sha) makes two calls: committed diff (sha..HEAD) + uncommitted diff (HEAD)
+    mockedExeca.mockResolvedValueOnce(makeExecaResult('committed diff'));
+    mockedExeca.mockResolvedValueOnce(makeExecaResult('')); // no uncommitted changes
     const diff = await getGitDiff('/tmp/repo', 'abc123');
-    expect(diff).toBe('diff output');
-    expect(mockedExeca).toHaveBeenCalledWith('git', [...G, 'diff', 'abc123'], { cwd: '/tmp/repo' });
+    expect(diff).toBe('committed diff');
+    expect(mockedExeca).toHaveBeenCalledWith('git', [...G, 'diff', 'abc123', 'HEAD'], { cwd: '/tmp/repo' });
+    expect(mockedExeca).toHaveBeenCalledWith('git', [...G, 'diff', 'HEAD'], { cwd: '/tmp/repo' });
   });
 
   it('getGitDiff without fromSha diffs HEAD', async () => {
