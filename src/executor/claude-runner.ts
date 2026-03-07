@@ -34,10 +34,11 @@ export async function runClaude(
     modelId,
   ];
 
-  // Unset CLAUDECODE so cloudy can run as a Claude Code subprocess without triggering
-  // the nested session guard in the claude CLI (which blocks when CLAUDECODE is set).
+  // Unset Claude Code session markers so cloudy can run as a subprocess inside an active
+  // Claude Code session without triggering the nested-session guard in the claude CLI.
   const childEnv = { ...process.env };
   delete childEnv['CLAUDECODE'];
+  delete childEnv['CLAUDE_CODE_ENTRYPOINT'];
 
   // Pass prompt via stdin to avoid command-line argument length limits with large prompts
   const proc = execa(claudePath, args, {
