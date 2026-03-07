@@ -18,7 +18,7 @@ import { getGitDiff, getChangedFiles } from '../git/git.js';
 import { log } from '../utils/logger.js';
 import type { PriorArtifact } from '../planner/prompts.js';
 
-const MAX_FILES_FOR_REVIEW = 12;
+const MAX_FILES_FOR_REVIEW = 20;
 const CONTEXT_LINES = 40;          // lines of context around each changed hunk
 const MAX_SECTION_CHARS = 40_000;  // per-file budget (covers even large files like orchestrator.py)
 
@@ -86,7 +86,7 @@ async function readChangedFileSections(
   const sourceFiles = changedFiles
     .filter((f) => {
       const ext = path.extname(f).toLowerCase();
-      return ['.ts', '.tsx', '.py', '.js', '.jsx', '.go', '.rs', '.swift', '.kt'].includes(ext);
+      return ['.ts', '.tsx', '.py', '.js', '.jsx', '.go', '.rs', '.swift', '.kt', '.prisma', '.sql', '.graphql', '.proto'].includes(ext);
     })
     .slice(0, MAX_FILES_FOR_REVIEW);
 
@@ -295,9 +295,9 @@ export async function validateTask(
     const otherChunks = allChunks.filter((c) => LOW_VALUE_FILE_RE.test(c));
     // Source-first ordering ensures we hit the important code before any truncation
     const orderedDiff = [...sourceChunks, ...otherChunks].join('');
-    const MAX_DIFF_CHARS = 80_000;
+    const MAX_DIFF_CHARS = 160_000;
     const truncatedDiff = orderedDiff.length > MAX_DIFF_CHARS
-      ? orderedDiff.slice(0, MAX_DIFF_CHARS) + '\n... (diff truncated at 80 KB for AI review)'
+      ? orderedDiff.slice(0, MAX_DIFF_CHARS) + '\n... (diff truncated at 160 KB for AI review)'
       : orderedDiff;
     const changedFiles = await getChangedFiles(cwd, checkpointSha);
     const changedFileSections = await readChangedFileSections(changedFiles, cwd, truncatedDiff);
