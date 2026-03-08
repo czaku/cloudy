@@ -52,7 +52,7 @@ export const runCommand = new Command('run')
   .option('--pi-model <model>', 'Pi-mono model ID: gpt-4o-mini, gemini-2.0-flash, qwen2.5-coder:7b, etc.')
   .option('--pi-base-url <url>', 'Pi-mono base URL for OpenAI-compatible endpoints')
   .option('--run-review-model <model>', 'Model for post-run holistic review (haiku/sonnet/opus)')
-  .option('--no-run-review', 'Skip post-run holistic review')
+
   .option('--non-interactive', 'Skip all prompts and disable dashboard — set models via flags')
   .action(
     async (opts: {
@@ -80,7 +80,7 @@ export const runCommand = new Command('run')
       piModel?: string;
       piBaseUrl?: string;
       runReviewModel?: string;
-      runReview?: boolean; // false when --no-post-review
+
       nonInteractive?: boolean;
     }) => {
       const isNonInteractive = opts.nonInteractive || !process.stdout.isTTY;
@@ -142,23 +142,18 @@ export const runCommand = new Command('run')
           opts.taskReviewModel = valModel as string;
         }
 
-        if (!opts.runReviewModel && opts.runReview !== false) {
+        if (!opts.runReviewModel) {
           const reviewModel = await p.select({
             message: 'Final review model (holistic post-run review):',
             options: [
               { value: 'sonnet', label: 'sonnet', hint: 'recommended — reads full spec + diff' },
               { value: 'haiku',  label: 'haiku',  hint: 'fast & cheap, less thorough' },
               { value: 'opus',   label: 'opus',   hint: 'deepest review, highest cost' },
-              { value: 'skip',   label: 'skip',   hint: 'disable post-run review' },
             ],
             initialValue: config.review?.model ?? 'opus',
           });
           if (p.isCancel(reviewModel)) { p.cancel('Cancelled.'); process.exit(0); }
-          if (reviewModel === 'skip') {
-            opts.runReview = false;
-          } else {
-            opts.runReviewModel = reviewModel as string;
-          }
+          opts.runReviewModel = reviewModel as string;
         }
 
         const dashChoice = await p.confirm({
@@ -238,9 +233,6 @@ export const runCommand = new Command('run')
       if (opts.piBaseUrl) config.piMono = { ...config.piMono, baseUrl: opts.piBaseUrl };
 
       // Apply review configuration
-      if (opts.runReview === false) {
-        config.review = { ...config.review, enabled: false };
-      }
       if (opts.runReviewModel) {
         const parsed = opts.runReviewModel.toLowerCase();
         if (parsed === 'haiku' || parsed === 'sonnet' || parsed === 'opus') {
