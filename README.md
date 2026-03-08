@@ -116,12 +116,12 @@ cloudy init --spec ./phase38-spec.md --spec ./phase38b-spec.md
 cloudy init --spec ./PRD.md --no-review
 
 # Control the planning model
-cloudy init --spec ./PRD.md --model-planning sonnet
+cloudy init --spec ./PRD.md --planning-model sonnet
 ```
 
 The planner uses Claude to decompose your goal into concrete, ordered tasks — each with a title, description, acceptance criteria, context file patterns, expected output artifacts, and a time estimate. If you don't pass `--no-review`, you can approve the plan or describe changes in plain English and iterate before running.
 
-**Init flow:** `init` only asks for the planning model upfront. After plan approval, if you choose to run immediately, it asks for execution model, validation model (per-task), final review model, and whether to launch the dashboard — then hands off to `cloudy run`.
+**Init flow:** `init` only asks for the planning model upfront. After plan approval, if you choose to run immediately, it asks for execution model, task-review model (per-task), run-review model, and whether to launch the dashboard — then hands off to `cloudy run`.
 
 ---
 
@@ -131,7 +131,7 @@ The planner uses Claude to decompose your goal into concrete, ordered tasks — 
 cloudy run
 
 # Choose models per phase
-cloudy run --model-execution sonnet --model-validation sonnet
+cloudy run --execution-model sonnet --task-review-model haiku --run-review-model opus
 
 # Show live Claude output as each task runs
 cloudy run --verbose
@@ -166,10 +166,10 @@ cloudy run --no-dashboard
 | `--no-dashboard` | Disable the web dashboard |
 | `--verbose` | Stream live Claude output per task |
 | `--model <m>` | Model for all phases (`opus`, `sonnet`, `haiku`) |
-| `--model-execution <m>` | Model for execution phase |
-| `--model-validation <m>` | Model for per-task validation |
-| `--review-model <m>` | Model for holistic post-run review (`haiku`/`sonnet`/`opus`) |
-| `--no-post-review` | Skip the holistic post-run review |
+| `--execution-model <m>` | Model for execution phase |
+| `--task-review-model <m>` | Model for per-task validation |
+| `--run-review-model <m>` | Model for holistic post-run review (`haiku`/`sonnet`/`opus`) |
+| `--non-interactive` | Skip all prompts and disable dashboard — set models via flags (also `--ni`) |
 | `--model-auto` | Auto-route model by task complexity |
 | `--engine <e>` | Execution engine: `claude-code` (default) or `pi-mono` |
 | `--pi-provider <p>` | Pi-mono provider (e.g. `openai`, `anthropic`, `google`) |
@@ -300,7 +300,7 @@ Cloudy supports two execution engines:
 Uses the `claude` CLI with `--dangerously-skip-permissions` for full autonomous operation.
 
 ```bash
-cloudy run --engine claude-code --model-execution sonnet
+cloudy run --engine claude-code --execution-model sonnet
 ```
 
 ### Pi-mono
@@ -329,8 +329,8 @@ cloudy config --set piMono.model=gpt-4o-mini
 # Same model for everything
 cloudy run --model opus
 
-# Mix per phase — cheap validation, quality execution
-cloudy run --model-execution opus --model-validation haiku
+# Mix per phase — cheap task review, quality execution, deep holistic review
+cloudy run --execution-model sonnet --task-review-model haiku --run-review-model opus
 
 # Auto-route by task complexity
 cloudy run --model-auto
@@ -338,13 +338,15 @@ cloudy run --model-auto
 # Persist defaults
 cloudy config --set models.execution=sonnet
 cloudy config --set models.validation=haiku
+cloudy config --set review.model=opus
 ```
 
-| Phase | Default | Notes |
-|-------|---------|-------|
-| Planning | sonnet | Goal → task graph |
-| Execution | sonnet | Balanced quality/cost |
-| Validation | haiku | Reviewing diffs |
+| Phase | Flag | Default | Notes |
+|-------|------|---------|-------|
+| Planning | `--planning-model` | sonnet | Goal → task graph |
+| Execution | `--execution-model` | sonnet | Builds the code |
+| Task review | `--task-review-model` | haiku | Per-task diff review, runs every task |
+| Run review | `--run-review-model` | opus | Holistic post-run review, runs once at the end |
 
 With `--model-auto`, task complexity (acceptance criteria count, description length, dep count, context size) determines the model.
 
@@ -658,6 +660,10 @@ Full config reference (`.cloudy/config.json`):
   "validation": {
     "aiReview": true,
     "commands": []
+  },
+  "review": {
+    "enabled": true,
+    "model": "opus"
   },
   "dashboard": true,
   "dashboardPort": 3117,
