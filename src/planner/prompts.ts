@@ -66,8 +66,14 @@ Respond with ONLY valid JSON (no markdown, no explanation), matching this struct
       "outputArtifacts": [],
       "timeoutMinutes": 15
     }
+  ],
+  "questions": [
+    "Should auth use JWT or session cookies? The spec says 'stateless' but doesn't specify.",
+    "Which cloud region should S3 buckets target — the spec omits this."
   ]
 }
+
+The "questions" array must contain 0–3 high-impact clarifying questions. Only include questions about decisions that would materially change the task design — architecture choices, external service selection, data model decisions. If the spec is clear and complete, return an empty array. Do NOT ask about implementation details that can be inferred from context or convention.
 
 Important:
 - Task IDs must be "task-1", "task-2", etc.

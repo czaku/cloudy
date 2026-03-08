@@ -10,6 +10,7 @@ export interface ExecutionPromptOptions {
   handoffSummaries?: string;       // formatted dependency handoff sections
   conventionsContent?: string;     // CLAUDE.md / AGENTS.md from project root
   rollingContextSummary?: string;  // AI-generated summary of what previous tasks in this run built
+  decisionLog?: import('../core/types.js').DecisionLogEntry[];  // resolved planning decisions
 }
 
 /**
@@ -30,6 +31,7 @@ export function buildExecutionPrompt(
   let handoffSummaries: string | undefined;
   let conventionsContent: string | undefined;
   let rollingContextSummary: string | undefined;
+  let decisionLog: import('../core/types.js').DecisionLogEntry[] | undefined;
 
   if ('task' in taskOrOpts && 'plan' in taskOrOpts) {
     const opts = taskOrOpts as ExecutionPromptOptions;
@@ -41,6 +43,7 @@ export function buildExecutionPrompt(
     handoffSummaries = opts.handoffSummaries;
     conventionsContent = opts.conventionsContent;
     rollingContextSummary = opts.rollingContextSummary;
+    decisionLog = opts.decisionLog;
   } else {
     task = taskOrOpts as Task;
     plan = planArg!;
@@ -73,6 +76,18 @@ export function buildExecutionPrompt(
     parts.push('## Progress So Far (Rolling Summary)');
     parts.push('> This summarizes what previous tasks in this run already built. Do not re-implement these.');
     parts.push(rollingContextSummary.trim());
+    parts.push('');
+  }
+
+  // Inject planning decisions — these are the resolved ambiguities from the Q&A phase.
+  // Implement according to these decisions; do not second-guess them.
+  if (decisionLog && decisionLog.length > 0) {
+    parts.push('## Planning Decisions');
+    parts.push('The following ambiguities were resolved before implementation began. Implement exactly according to these decisions:');
+    for (const d of decisionLog) {
+      const source = d.answeredBy === 'human' ? '(human)' : '(AI assumed)';
+      parts.push(`- **${d.question.split('?')[0].trim()}?** → ${d.answer} ${source}`);
+    }
     parts.push('');
   }
 
