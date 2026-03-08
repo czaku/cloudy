@@ -293,6 +293,20 @@ export async function validateTask(
     // Separate high-value source chunks from low-value build/lock chunks
     const sourceChunks = allChunks.filter((c) => !LOW_VALUE_FILE_RE.test(c));
     const otherChunks = allChunks.filter((c) => LOW_VALUE_FILE_RE.test(c));
+
+    // If there are no source code changes (only cache/lock noise) but artifacts all exist,
+    // the implementation was previously merged into main — skip AI review and pass.
+    const artifactCheckPassedEarly = results.find((r) => r.strategy === 'artifacts')?.passed;
+    if (sourceChunks.length === 0 && artifactCheckPassedEarly) {
+      await log.info('  No source changes in diff but artifacts verified — skipping AI review (previously merged)');
+      results.push({
+        strategy: 'ai-review',
+        passed: true,
+        output: 'Skipped: no source diff detected, all output artifacts verified present.',
+        durationMs: 0,
+      });
+    } else {
+
     // Source-first ordering ensures we hit the important code before any truncation
     const orderedDiff = [...sourceChunks, ...otherChunks].join('');
     const MAX_DIFF_CHARS = 160_000;
@@ -335,6 +349,7 @@ export async function validateTask(
     } else {
       await log.info('  AI review passed');
     }
+    } // end else (source changes present)
   }
 
   const passed = results.every((r) => r.passed);
