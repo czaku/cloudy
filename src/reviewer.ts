@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { execSync } from 'node:child_process';
 import type { Plan, Task, ClaudeModel } from './core/types.js';
 import { runClaude } from './executor/claude-runner.js';
 import { getGitDiff } from './git/git.js';
@@ -93,6 +94,80 @@ function buildAllAcceptanceCriteria(plan: Plan): string {
   return lines.join('\n');
 }
 
+export interface VerificationCheckResult {
+  command: string;
+  passed: boolean;
+  output: string;
+  durationMs: number;
+}
+
+export interface VerificationResult {
+  checks: VerificationCheckResult[];
+  allPassed: boolean;
+  summary: string;
+}
+
+/**
+ * Parse spec content for a Verification/Shell Checks/Checks section and run
+ * each extracted shell command, returning pass/fail results.
+ */
+export async function runVerificationChecks(specContent: string, cwd: string): Promise<VerificationResult> {
+  // Find a verification section in the spec
+  const sectionRe = /^##\s+(Verification|Shell Checks|Checks)\s*$/im;
+  const sectionMatch = sectionRe.exec(specContent);
+  if (!sectionMatch) {
+    return { checks: [], allPassed: true, summary: 'No verification section found' };
+  }
+
+  // Extract content from the section header to the next ## heading (or end)
+  const sectionStart = sectionMatch.index + sectionMatch[0].length;
+  const nextHeading = specContent.indexOf('\n## ', sectionStart);
+  const sectionContent = nextHeading === -1
+    ? specContent.slice(sectionStart)
+    : specContent.slice(sectionStart, nextHeading);
+
+  // Extract commands: lines like `- \`command\`` or `- \`command with args\``
+  const commandRe = /^\s*-\s+`([^`]+)`/gm;
+  const commands: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = commandRe.exec(sectionContent)) !== null) {
+    commands.push(m[1].trim());
+  }
+
+  if (commands.length === 0) {
+    return { checks: [], allPassed: true, summary: 'No shell commands found in verification section' };
+  }
+
+  const checks: VerificationCheckResult[] = [];
+  for (const command of commands) {
+    const start = Date.now();
+    let passed = false;
+    let output = '';
+    try {
+      const result = execSync(command, {
+        cwd,
+        timeout: 30_000,
+        encoding: 'utf-8',
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
+      output = (result ?? '').toString().trim();
+      passed = true;
+    } catch (err: any) {
+      passed = false;
+      const stderr = err?.stderr?.toString?.() ?? '';
+      const stdout = err?.stdout?.toString?.() ?? '';
+      output = [stdout, stderr].filter(Boolean).join('\n').trim() || String(err?.message ?? err);
+    }
+    checks.push({ command, passed, output, durationMs: Date.now() - start });
+  }
+
+  const passCount = checks.filter((c) => c.passed).length;
+  const allPassed = passCount === checks.length;
+  const summary = `${passCount}/${checks.length} verification checks passed`;
+
+  return { checks, allPassed, summary };
+}
+
 /**
  * Build the review prompt.
  */
@@ -102,6 +177,7 @@ function buildReviewPrompt(
   plan: Plan,
   taskSummary: string,
   gitDiff: string,
+  verificationSection?: string,
 ): string {
   const specSection = specContent
     ? specContent
@@ -125,18 +201,26 @@ ${taskSummary}
 \`\`\`diff
 ${gitDiff}
 \`\`\`
-
+${verificationSection ?? ''}
 ${allCriteria}
 
-## Review Instructions
+## Review Protocol — Two-Pass Evidence-First Verification
 
-Review this implementation HOLISTICALLY — not task by task, but as a whole batch. Check:
+IMPORTANT: To avoid false positives, you MUST follow this exact two-pass process:
 
-1. **Spec completeness**: Every acceptance criterion in the spec satisfied?
-2. **Convention adherence**: Does code follow CLAUDE.md conventions (naming, patterns, ports, file structure)?
-3. **Integration**: Do the pieces fit together? Are WS event names consistent? Are API routes proxied correctly in Next.js?
-4. **Bugs**: Any field name mismatches, missing imports, wrong endpoints, dead code?
-5. **Missing pieces**: Anything mentioned in spec not implemented?
+**Pass 1 — Enumerate requirements**: Go through the spec and acceptance criteria. List every concrete artifact the spec requires (files, functions, API endpoints, env vars, imports, config values).
+
+**Pass 2 — Verify each against the diff**: For EACH item from Pass 1, search the git diff above for evidence it was created or modified.
+- If it appears in the diff → FOUND (still check correctness)
+- If it doesn't appear in the diff → check if it was pre-existing (the spec said "update" not "create")
+- Only mark as NOT_FOUND if you are certain it doesn't exist AND should have been created
+
+CRITICAL RULES:
+- Do NOT flag something as missing if you can see it in the diff above
+- Every issue in your issues[] array MUST include a "location" field citing the specific file or diff hunk you examined
+- Issues without a specific location will be discarded
+- If you are uncertain whether something exists, do NOT include it as an issue
+- A specCoverageScore of 85+ means most criteria are met; only use FAIL for genuinely broken implementations
 
 Respond ONLY with valid JSON (no markdown wrapper):
 {
@@ -144,7 +228,7 @@ Respond ONLY with valid JSON (no markdown wrapper):
   "summary": "2-3 sentence overall assessment",
   "specCoverageScore": 0-100,  // percentage of acceptance criteria fully passing
   "criteriaResults": [{ "criterion": "...", "passed": true, "note": "..." }],
-  "issues": [{ "severity": "critical"|"major"|"minor", "description": "...", "location": "file:line or component name" }],
+  "issues": [{ "severity": "critical"|"major"|"minor", "description": "...", "location": "REQUIRED: specific file path or diff hunk reference" }],
   "conventionViolations": ["..."],
   "suggestions": ["..."],
   "rerunTaskIds": ["task-N", ...]  // IDs of tasks that were skipped, failed, or have missing implementation — empty array if all tasks completed successfully
@@ -214,13 +298,26 @@ export async function runHolisticReview(
         `\n\n... [diff truncated — ${totalKb}KB total, showing first ${shownKb}KB of source files]`
     : orderedDiff;
 
-  // 5. Build task summary
+  // 5. Run verification shell checks (if spec has a Verification section)
+  let verificationSection = '';
+  if (specContent) {
+    const verResult = await runVerificationChecks(specContent, cwd);
+    if (verResult.checks.length > 0) {
+      verificationSection = `\n## Pre-Verification Results (deterministic shell checks run before this review)\n` +
+        verResult.checks.map((c) => `- [${c.passed ? 'PASS' : 'FAIL'}] \`${c.command}\`${c.passed ? '' : `\n  Output: ${c.output.slice(0, 200)}`}`).join('\n') +
+        `\n\nNote: PASS items above are CONFIRMED working — do NOT flag them as issues. Only FAIL items need fixing.\n`;
+      // Save verification results to run dir
+      await writeJson(path.join(runDir, 'verification.json'), verResult).catch(() => {});
+    }
+  }
+
+  // 6. Build task summary
   const taskSummary = buildTaskSummary(plan);
 
-  // 6. Build review prompt
-  const prompt = buildReviewPrompt(claudeMdContent, specContent, plan, taskSummary, gitDiff);
+  // 7. Build review prompt
+  const prompt = buildReviewPrompt(claudeMdContent, specContent, plan, taskSummary, gitDiff, verificationSection);
 
-  // 7. Call runClaude
+  // 8. Call runClaude
   const claudeResult = await runClaude({
     prompt,
     model,
@@ -230,7 +327,7 @@ export async function runHolisticReview(
 
   const durationMs = Date.now() - startMs;
 
-  // 8. Parse JSON response into ReviewResult
+  // 9. Parse JSON response into ReviewResult
   let result: ReviewResult;
   const rawOutput = claudeResult.output ?? '';
 
@@ -323,7 +420,7 @@ export async function runHolisticReview(
     };
   }
 
-  // 9. Save result to run dir's review.json
+  // 10. Save result to run dir's review.json
   await ensureDir(runDir);
   await writeJson(path.join(runDir, 'review.json'), result);
 

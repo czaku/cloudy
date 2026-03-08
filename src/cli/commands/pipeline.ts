@@ -5,6 +5,68 @@ import { c, bold, dim, red, green, cyan, yellow } from '../../utils/colors.js';
 import { initLogger } from '../../utils/logger.js';
 import { CLAWDASH_DIR, RUNS_DIR } from '../../config/defaults.js';
 
+const PIPELINE_CONTEXT_FILE = '.cloudy/pipeline-context.md';
+
+async function extractPhaseContracts(cwd: string, runDir: string, planGoal: string): Promise<string> {
+  try {
+    const { runClaude } = await import('../../executor/claude-runner.js');
+    const { getGitDiff } = await import('../../git/git.js');
+
+    // Get diff from this phase using oldest checkpoint SHA
+    let diff = '';
+    try {
+      const checkpointsDir = path.join(runDir, 'checkpoints');
+      let phaseSha: string | undefined;
+      try {
+        const files = await fs.readdir(checkpointsDir);
+        let oldest = Infinity;
+        for (const f of files.filter((f) => f.endsWith('.json'))) {
+          const d = JSON.parse(await fs.readFile(path.join(checkpointsDir, f), 'utf-8'));
+          const t = new Date(d.createdAt).getTime();
+          if (t < oldest) { oldest = t; phaseSha = d.sha; }
+        }
+      } catch { /* non-fatal */ }
+      diff = await getGitDiff(cwd, phaseSha);
+      if (diff.length > 60000) diff = diff.slice(0, 60000) + '\n... [truncated]';
+    } catch { /* non-fatal */ }
+
+    if (!diff.trim()) return '';
+
+    const prompt = `You are extracting a "phase contract" — a compact summary of what this implementation phase created or modified, for use by the NEXT phase's AI planner.
+
+## Implementation Changes (git diff)
+\`\`\`diff
+${diff}
+\`\`\`
+
+## Phase Goal
+${planGoal}
+
+Extract the key contracts exposed by this phase. Be specific and concise. Focus on:
+- New files created and their primary exports/classes/functions
+- API endpoints added (method + path + key request/response fields)
+- Database models/schemas added or modified (table name + key fields)
+- Shared types, interfaces, enums added
+- Environment variables or config keys required
+- Any patterns or conventions established that future tasks must follow
+
+Format as markdown bullet points under these headings:
+## Files Created
+## API Endpoints
+## Models/Schemas
+## Types & Interfaces
+## Config & Env Vars
+## Patterns Established
+
+Keep each bullet to one line. Omit sections that are empty.`;
+
+    const result = await runClaude({ prompt, model: 'haiku', cwd });
+    return result.output?.trim() ?? '';
+  } catch {
+    return '';
+  }
+}
+
 export const pipelineCommand = new Command('pipeline')
   .description('Run multiple specs sequentially as a pipeline')
   .option('--spec <file>', 'Spec file (repeatable, in order)', (v: string, prev: string[]) => [...prev, v], [] as string[])
@@ -14,6 +76,7 @@ export const pipelineCommand = new Command('pipeline')
   .option('--planning-model <model>', 'Planning model (default: sonnet)')
   .option('--no-auto-fix', 'Disable automatic fix-task generation from review notes')
   .option('--verbose', 'Pass --verbose to each run')
+  .option('--heartbeat-interval <seconds>', 'Write status.json every N seconds during each phase', parseInt)
   .action(async (opts: {
     spec: string[];
     executionModel?: string;
@@ -22,6 +85,7 @@ export const pipelineCommand = new Command('pipeline')
     planningModel?: string;
     autoFix?: boolean;
     verbose?: boolean;
+    heartbeatInterval?: number;
   }) => {
     const cwd = process.cwd();
     await initLogger(cwd);
@@ -85,6 +149,17 @@ export const pipelineCommand = new Command('pipeline')
         process.exit(1);
       }
 
+      // Phase size check
+      try {
+        const stateData = JSON.parse(await fs.readFile(path.join(runDir, 'state.json'), 'utf-8'));
+        const taskCount = stateData.plan?.tasks?.length ?? 0;
+        if (taskCount > 10) {
+          console.log(c(yellow, `  ⚠️  Large phase: ${taskCount} tasks planned. Consider splitting into 2 phases of ~${Math.ceil(taskCount/2)} tasks for better reliability.`));
+        } else if (taskCount > 6) {
+          console.log(c(dim, `  ℹ️  ${taskCount} tasks in this phase (recommended max: 6 for best quality)`));
+        }
+      } catch { /* non-fatal */ }
+
       // Inject pipelineContext into state.json
       try {
         const statePath = path.join(runDir, 'state.json');
@@ -110,6 +185,7 @@ export const pipelineCommand = new Command('pipeline')
         '--run-review-model', opts.runReviewModel!,
       ];
       if (opts.verbose) runArgs.push('--verbose');
+      if (opts.heartbeatInterval) runArgs.push('--heartbeat-interval', String(opts.heartbeatInterval));
 
       // Run the phase
       console.log(c(dim, `    running phase ${phaseNum}…`));
@@ -203,6 +279,35 @@ export const pipelineCommand = new Command('pipeline')
           } catch (err: any) {
             console.log(c(dim, `    fix task generation failed (non-fatal): ${err?.message ?? err}`));
           }
+        }
+      }
+
+      // ── Contract extraction: extract what this phase built for next phase ──
+      if (i < opts.spec.length - 1) {
+        console.log(c(dim, `    extracting phase contracts for next phase…`));
+        try {
+          const statePath = path.join(runDir, 'state.json');
+          const stateForContracts = JSON.parse(await fs.readFile(statePath, 'utf-8'));
+          const planGoal = stateForContracts.plan?.goal ?? phaseSlug;
+          const contracts = await extractPhaseContracts(cwd, runDir, planGoal);
+          if (contracts) {
+            // Append to pipeline-contracts.md (cumulative archive)
+            const archivePath = path.join(cwd, CLAWDASH_DIR, 'pipeline-contracts.md');
+            const archiveEntry = `\n## Phase ${phaseNum}: ${phaseSlug}\n${contracts}\n`;
+            await fs.appendFile(archivePath, archiveEntry, 'utf-8').catch(() => {});
+
+            // Write/update pipeline-context.md for planner injection
+            const contextPath = path.join(cwd, PIPELINE_CONTEXT_FILE);
+            let existing = '';
+            try { existing = await fs.readFile(contextPath, 'utf-8'); } catch { /* new file */ }
+            if (!existing) {
+              existing = '# Pipeline Context — Contracts from Previous Phases\n\nThis file is auto-generated by cloudy pipeline. Use it to understand what previous phases built.\n';
+            }
+            await fs.writeFile(contextPath, existing + archiveEntry, 'utf-8');
+            console.log(c(dim, `    phase contracts saved → ${PIPELINE_CONTEXT_FILE}`));
+          }
+        } catch (err: any) {
+          console.log(c(dim, `    contract extraction failed (non-fatal): ${err?.message ?? err}`));
         }
       }
     }

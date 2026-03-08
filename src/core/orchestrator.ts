@@ -155,6 +155,8 @@ export class Orchestrator {
   private onReviewModelRequest?: () => Promise<ClaudeModel | 'skip'>;
   private runLogger!: RunLogger;
   private taskStartCostUsd = new Map<string, number>();
+  private rollingContextSummary = '';
+  private completedTasksForSummary = 0;
 
   constructor(options: OrchestratorOptions) {
     this.cwd = options.cwd;
@@ -433,8 +435,42 @@ export class Orchestrator {
         }
         break;
       }
-      await this.executeTask(ready[0], queue, plan, this.cwd);
+      const taskToRun = ready[0];
+      await this.executeTask(taskToRun, queue, plan, this.cwd);
+      // Track completed tasks for rolling summary refresh
+      const justCompleted = queue.getTask(taskToRun.id);
+      if (justCompleted?.status === 'completed') {
+        this.completedTasksForSummary++;
+        if (this.completedTasksForSummary % 5 === 0) {
+          await this.refreshRollingSummary(queue, plan);
+        }
+      }
     }
+  }
+
+  private async refreshRollingSummary(queue: TaskQueue, plan: Plan): Promise<void> {
+    try {
+      const { runClaude } = await import('../executor/claude-runner.js');
+      const completedTasks = queue.getTasksByStatus('completed');
+      const summaryList = completedTasks
+        .map((t) => `- ${t.id}: ${t.title}${(t as any).resultSummary ? ` — ${(t as any).resultSummary}` : ''}${t.outputArtifacts?.length ? ` (files: ${t.outputArtifacts.join(', ')})` : ''}`)
+        .join('\n');
+
+      const prompt = `Summarize what has been implemented so far in this coding session for an AI assistant who is about to work on the next task.
+
+Project goal: ${plan.goal}
+
+Completed tasks:
+${summaryList}
+
+Write a concise paragraph (max 150 words) covering: what files/modules were created, what patterns were established, what still needs to be done. This summary will be shown to the AI before each subsequent task. Be specific about file names and function signatures where important.`;
+
+      const result = await runClaude({ prompt, model: 'haiku', cwd: this.cwd });
+      if (result.success && result.output?.trim()) {
+        this.rollingContextSummary = result.output.trim();
+        await log.info('Rolling context summary refreshed');
+      }
+    } catch { /* non-fatal */ }
   }
 
   private runDryRun(queue: TaskQueue): void {
@@ -659,7 +695,7 @@ export class Orchestrator {
       const prompt =
         lastValidationErrors && attempt > 1
           ? buildRetryPrompt(task, plan, completedTitles, lastValidationErrors, contextFiles, learningsContent, handoffSummaries, conventionsContent, lastErrorFileContext, lastPriorFilesCreated)
-          : buildExecutionPrompt({ task, plan, completedTaskTitles: completedTitles, contextFiles, learningsContent, handoffSummaries, conventionsContent });
+          : buildExecutionPrompt({ task, plan, completedTaskTitles: completedTitles, contextFiles, learningsContent, handoffSummaries, conventionsContent, rollingContextSummary: this.rollingContextSummary || undefined });
 
       // Run Claude with timeout
       const abortController = new AbortController();
