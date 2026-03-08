@@ -128,15 +128,23 @@ ${gitDiff}
 
 ${allCriteria}
 
-## Review Instructions
+## Review Protocol — Two-Pass Evidence-First Verification
 
-Review this implementation HOLISTICALLY — not task by task, but as a whole batch. Check:
+IMPORTANT: To avoid false positives, you MUST follow this exact two-pass process:
 
-1. **Spec completeness**: Every acceptance criterion in the spec satisfied?
-2. **Convention adherence**: Does code follow CLAUDE.md conventions (naming, patterns, ports, file structure)?
-3. **Integration**: Do the pieces fit together? Are WS event names consistent? Are API routes proxied correctly in Next.js?
-4. **Bugs**: Any field name mismatches, missing imports, wrong endpoints, dead code?
-5. **Missing pieces**: Anything mentioned in spec not implemented?
+**Pass 1 — Enumerate requirements**: Go through the spec and acceptance criteria. List every concrete artifact the spec requires (files, functions, API endpoints, env vars, imports, config values).
+
+**Pass 2 — Verify each against the diff**: For EACH item from Pass 1, search the git diff above for evidence it was created or modified.
+- If it appears in the diff → FOUND (still check correctness)
+- If it doesn't appear in the diff → check if it was pre-existing (the spec said "update" not "create")
+- Only mark as NOT_FOUND if you are certain it doesn't exist AND should have been created
+
+CRITICAL RULES:
+- Do NOT flag something as missing if you can see it in the diff above
+- Every issue in your issues[] array MUST include a "location" field citing the specific file or diff hunk you examined
+- Issues without a specific location will be discarded
+- If you are uncertain whether something exists, do NOT include it as an issue
+- A specCoverageScore of 85+ means most criteria are met; only use FAIL for genuinely broken implementations
 
 Respond ONLY with valid JSON (no markdown wrapper):
 {
@@ -144,7 +152,7 @@ Respond ONLY with valid JSON (no markdown wrapper):
   "summary": "2-3 sentence overall assessment",
   "specCoverageScore": 0-100,  // percentage of acceptance criteria fully passing
   "criteriaResults": [{ "criterion": "...", "passed": true, "note": "..." }],
-  "issues": [{ "severity": "critical"|"major"|"minor", "description": "...", "location": "file:line or component name" }],
+  "issues": [{ "severity": "critical"|"major"|"minor", "description": "...", "location": "REQUIRED: specific file path or diff hunk reference" }],
   "conventionViolations": ["..."],
   "suggestions": ["..."],
   "rerunTaskIds": ["task-N", ...]  // IDs of tasks that were skipped, failed, or have missing implementation — empty array if all tasks completed successfully
