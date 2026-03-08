@@ -12,6 +12,7 @@ import { loopCommand } from './commands/loop.js';
 import { logsCommand } from './commands/logs.js';
 import { pipelineCommand } from './commands/pipeline.js';
 import { runsCommand } from './commands/runs.js';
+import { setupCommand } from './commands/setup.js';
 
 export function createProgram(): Command {
   const program = new Command();
@@ -36,6 +37,7 @@ export function createProgram(): Command {
   program.addCommand(logsCommand);
   program.addCommand(pipelineCommand);
   program.addCommand(runsCommand);
+  program.addCommand(setupCommand);
 
   return program;
 }
