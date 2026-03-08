@@ -11,6 +11,7 @@ import { validateCommand } from './commands/validate.js';
 import { loopCommand } from './commands/loop.js';
 import { logsCommand } from './commands/logs.js';
 import { pipelineCommand } from './commands/pipeline.js';
+import { runsCommand } from './commands/runs.js';
 
 export function createProgram(): Command {
   const program = new Command();
@@ -34,6 +35,7 @@ export function createProgram(): Command {
   program.addCommand(loopCommand);
   program.addCommand(logsCommand);
   program.addCommand(pipelineCommand);
+  program.addCommand(runsCommand);
 
   return program;
 }

@@ -1,10 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import type { Plan, ClaudeModel } from './core/types.js';
+import type { Plan, Task, ClaudeModel } from './core/types.js';
 import { runClaude } from './executor/claude-runner.js';
 import { getGitDiff } from './git/git.js';
 import { ensureDir, readJson, writeJson } from './utils/fs.js';
 import { CLAWDASH_DIR, CHECKPOINTS_DIR } from './config/defaults.js';
+import { getCurrentRunDir } from './utils/run-dir.js';
 
 export interface ReviewResult {
   verdict: 'PASS' | 'PASS_WITH_NOTES' | 'FAIL';
@@ -28,11 +29,12 @@ interface CheckpointData {
 }
 
 /**
- * Find the oldest checkpoint SHA in .cloudy/checkpoints/.
+ * Find the oldest checkpoint SHA in the current run's checkpoints dir.
  * This is the "before any task ran" state.
  */
 async function findPhaseStartSha(cwd: string): Promise<string | undefined> {
-  const checkpointsDir = path.join(cwd, CLAWDASH_DIR, CHECKPOINTS_DIR);
+  const runDir = await getCurrentRunDir(cwd);
+  const checkpointsDir = path.join(runDir, CHECKPOINTS_DIR);
   let files: string[];
   try {
     files = await fs.readdir(checkpointsDir);
@@ -161,10 +163,11 @@ export async function runHolisticReview(
 ): Promise<ReviewResult> {
   const startMs = Date.now();
 
-  // 1. Read spec from .cloudy/spec.md if available
+  // 1. Read spec from run dir's spec.md if available
+  const runDir = await getCurrentRunDir(cwd);
   let specContent: string | undefined;
   try {
-    specContent = await fs.readFile(path.join(cwd, CLAWDASH_DIR, 'spec.md'), 'utf-8');
+    specContent = await fs.readFile(path.join(runDir, 'spec.md'), 'utf-8');
   } catch {
     specContent = undefined;
   }
@@ -320,10 +323,108 @@ export async function runHolisticReview(
     };
   }
 
-  // 9. Save result to .cloudy/review-latest.json
-  const cloudyDir = path.join(cwd, CLAWDASH_DIR);
-  await ensureDir(cloudyDir);
-  await writeJson(path.join(cloudyDir, 'review-latest.json'), result);
+  // 9. Save result to run dir's review.json
+  await ensureDir(runDir);
+  await writeJson(path.join(runDir, 'review.json'), result);
 
   return result;
+}
+
+/**
+ * Given a ReviewResult, use a cheap LLM call to convert each major/critical issue
+ * into a structured Task that can be injected into the queue and executed.
+ * Returns an empty array if there are no actionable issues or the LLM call fails.
+ */
+export async function generateFixTasks(
+  review: ReviewResult,
+  plan: Plan,
+  cwd: string,
+  model: ClaudeModel = 'haiku',
+): Promise<Task[]> {
+  const actionable = review.issues.filter(
+    (i) => i.severity === 'major' || i.severity === 'critical',
+  );
+  if (actionable.length === 0) return [];
+
+  // Assign stable IDs: review-fix-N where N continues after the highest existing task number
+  const existingMax = plan.tasks.reduce((max, t) => {
+    const m = t.id.match(/\d+$/);
+    return m ? Math.max(max, parseInt(m[0], 10)) : max;
+  }, 0);
+
+  const issueList = actionable
+    .map((issue, i) =>
+      `${i + 1}. [${issue.severity.toUpperCase()}] ${issue.description}${issue.location ? ` — at ${issue.location}` : ''}`,
+    )
+    .join('\n');
+
+  const prompt = `You are creating targeted repair tasks for an automated coding system.
+
+A post-run holistic review found these issues that must be fixed before moving to the next phase:
+${issueList}
+
+Project goal: ${plan.goal}
+
+Rules:
+- Create ONE task per issue. Tasks must be targeted and concrete — fix exactly the reported issue.
+- Each task's acceptanceCriteria must be verifiable (a shell command, import check, or specific behaviour).
+- outputArtifacts lists only files that the task will create or modify.
+- dependencies: [] (fix tasks run independently after all spec tasks completed).
+- Keep descriptions under 300 chars.
+
+Respond ONLY with valid JSON (no markdown):
+{
+  "tasks": [
+    {
+      "id": "review-fix-${existingMax + 1}",
+      "title": "short imperative title ≤60 chars",
+      "description": "Exactly what to change and why.",
+      "acceptanceCriteria": ["one verifiable criterion per fix"],
+      "outputArtifacts": ["relative/file/path.py"],
+      "dependencies": []
+    }
+  ]
+}`;
+
+  let claudeResult;
+  try {
+    claudeResult = await runClaude({ prompt, model, cwd });
+  } catch {
+    return [];
+  }
+
+  if (!claudeResult.success) return [];
+
+  let rawTasks: Array<{
+    id?: string;
+    title: string;
+    description: string;
+    acceptanceCriteria?: string[];
+    outputArtifacts?: string[];
+    dependencies?: string[];
+  }> = [];
+
+  try {
+    const jsonMatch = claudeResult.output.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return [];
+    const parsed = JSON.parse(jsonMatch[0]) as { tasks?: typeof rawTasks };
+    rawTasks = parsed.tasks ?? [];
+  } catch {
+    return [];
+  }
+
+  return rawTasks.map((raw, i): Task => ({
+    id: raw.id ?? `review-fix-${existingMax + i + 1}`,
+    title: raw.title,
+    description: raw.description,
+    acceptanceCriteria: raw.acceptanceCriteria ?? [],
+    dependencies: raw.dependencies ?? [],
+    contextPatterns: [],
+    outputArtifacts: raw.outputArtifacts ?? [],
+    status: 'pending',
+    retries: 0,
+    maxRetries: 1,
+    ifFailed: 'skip',
+    timeout: 10 * 60_000,
+  }));
 }

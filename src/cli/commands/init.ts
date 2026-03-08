@@ -8,7 +8,7 @@ import {
   mergeModelConfig,
   parseModelFlag,
 } from '../../config/model-config.js';
-import { loadOrCreateState, saveState, updatePlan } from '../../core/state.js';
+import { loadOrCreateState, saveState, updatePlan, generateRunName, createRunDir } from '../../core/state.js';
 import { initLogger, log } from '../../utils/logger.js';
 import { fileExists, ensureDir } from '../../utils/fs.js';
 import { c, bold, dim, red, green, yellow, cyan } from '../../utils/colors.js';
@@ -65,6 +65,7 @@ export const initCommand = new Command('init')
   .option('--pi-provider <provider>', 'Pi-mono provider: anthropic, openai, google, ollama, etc.')
   .option('--pi-model <model>', 'Pi-mono model ID: gpt-4o-mini, gemini-2.0-flash, qwen2.5-coder:7b, etc.')
   .option('--pi-base-url <url>', 'Pi-mono base URL for OpenAI-compatible endpoints')
+  .option('--run-name <name>', 'Explicit run directory name (used by pipeline command)')
   .action(async (goalArg: string | undefined, opts: {
     model?: string;
     planningModel?: string;
@@ -75,6 +76,7 @@ export const initCommand = new Command('init')
     piProvider?: string;
     piModel?: string;
     piBaseUrl?: string;
+    runName?: string;
   }) => {
     const cwd = process.cwd();
     const projectName = path.basename(cwd);
@@ -154,14 +156,7 @@ export const initCommand = new Command('init')
         process.exit(1);
       }
 
-      // Save combined spec to .cloudy/spec.md for the holistic reviewer
-      try {
-        const cloudyDir = path.join(cwd, CLAWDASH_DIR);
-        await ensureDir(cloudyDir);
-        await fs.writeFile(path.join(cloudyDir, 'spec.md'), specContent, 'utf-8');
-      } catch {
-        // Non-fatal — reviewer falls back to task descriptions
-      }
+      // spec.md is saved to run dir below (after run dir is created)
     }
 
     // ── Goal ──────────────────────────────────────────────────────────────────
@@ -226,6 +221,23 @@ export const initCommand = new Command('init')
     if (opts.piProvider) config.piMono = { ...config.piMono, provider: opts.piProvider };
     if (opts.piModel) config.piMono = { ...config.piMono, model: opts.piModel };
     if (opts.piBaseUrl) config.piMono = { ...config.piMono, baseUrl: opts.piBaseUrl };
+
+    // ── Run directory ─────────────────────────────────────────────────────────
+    // Create a named run dir after we know the goal (or use --run-name if provided by pipeline)
+    const runName = opts.runName ?? generateRunName(goal!);
+    const runDir = await createRunDir(cwd, runName);
+
+    // Re-init logger now that run dir exists — logs go into run dir
+    await initLogger(cwd);
+
+    // Save spec to run dir for holistic reviewer
+    if (specContent) {
+      try {
+        await fs.writeFile(path.join(runDir, 'spec.md'), specContent, 'utf-8');
+      } catch {
+        // Non-fatal — reviewer falls back to task descriptions
+      }
+    }
 
     // ── Setup ─────────────────────────────────────────────────────────────────
     await ensureGitignore(cwd);
@@ -349,6 +361,7 @@ export const initCommand = new Command('init')
 
     const state = await loadOrCreateState(cwd, config);
     updatePlan(state, plan);
+    state.runName = runName;
     await saveState(cwd, state);
     await saveConfig(cwd, config);
 

@@ -35,6 +35,8 @@ export const DEFAULT_CONFIG: CloudyConfig = {
 };
 
 export const CLAWDASH_DIR = '.cloudy';
+export const RUNS_DIR = 'runs';
+export const CURRENT_FILE = 'current';
 export const STATE_FILE = 'state.json';
 export const CONFIG_FILE = 'config.json';
 export const LOGS_DIR = 'logs';

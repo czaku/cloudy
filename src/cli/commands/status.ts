@@ -53,11 +53,21 @@ async function render(
 
   const lines: string[] = [];
 
+  // Pipeline context header (shown when run is part of a pipeline)
+  const pctx = plan.pipelineContext;
+  const pipelineHeader = pctx
+    ? `  ${c(dim, `Phase ${pctx.phaseIndex}/${pctx.totalPhases}:`)}  ${c(bold, pctx.phaseLabel)}  ${c(dim, `[${pctx.pipelineId}]`)}`
+    : '';
+
   if (watchMode) {
     const timeStr = new Date().toLocaleTimeString();
     lines.push(`\n${c(cyan + bold, '☁️  ' + plan.goal.slice(0, 40))}  ${c(dim, '·')}  ${c(dim, 'watching  (ctrl+c to exit)')}  ${c(dim, timeStr)}`);
+    if (pipelineHeader) lines.push(pipelineHeader);
+    if (state.runName) lines.push(`  ${c(dim, `run: ${state.runName}`)}`);
   } else {
     lines.push(`\nGoal: ${plan.goal}`);
+    if (state.runName) lines.push(`Run:  ${state.runName}`);
+    if (pipelineHeader) lines.push(pipelineHeader);
     lines.push(`Progress: ${completed}/${tasks.length} (${pct}%) | ${tasks.filter((t) => t.status === 'pending').length} pending | ${failed} failed`);
     lines.push(`Total cost: ${formatCostInline(state.costSummary.totalEstimatedUsd)}`);
   }

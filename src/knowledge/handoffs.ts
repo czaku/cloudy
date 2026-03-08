@@ -1,7 +1,7 @@
 /**
  * Inter-task knowledge sharing:
  *
- * 1. Handoff files  — `.cloudy/handoffs/{taskId}.md`
+ * 1. Handoff files  — `.cloudy/runs/{name}/handoffs/{taskId}.md`
  *    Written after each task completes. Contains what was built, key decisions,
  *    files changed, caveats, and acceptance criteria results. Automatically
  *    included in the prompt of any downstream task that depends on it.
@@ -10,6 +10,7 @@
  *    A running log of project-specific facts discovered during execution
  *    (e.g. "project uses Bun", "auth via middleware X"). Included in every
  *    task's prompt so later tasks inherit knowledge from earlier ones.
+ *    Stays at .cloudy/ root — accumulated across all runs.
  */
 
 import fs from 'node:fs/promises';
@@ -17,19 +18,18 @@ import path from 'node:path';
 import { CLAWDASH_DIR } from '../config/defaults.js';
 import { ensureDir } from '../utils/fs.js';
 import type { AcceptanceCriterionResult } from '../core/types.js';
+import { getCurrentRunDir } from '../utils/run-dir.js';
 
 const HANDOFFS_DIR = 'handoffs';
 const LEARNINGS_FILE = 'LEARNINGS.md';
 
-function handoffsDir(cwd: string): string {
-  return path.join(cwd, CLAWDASH_DIR, HANDOFFS_DIR);
-}
-
-function handoffPath(cwd: string, taskId: string): string {
-  return path.join(handoffsDir(cwd), `${taskId}.md`);
+async function getHandoffsDir(cwd: string): Promise<string> {
+  const runDir = await getCurrentRunDir(cwd);
+  return path.join(runDir, HANDOFFS_DIR);
 }
 
 function learningsPath(cwd: string): string {
+  // LEARNINGS.md is global — accumulated across all runs
   return path.join(cwd, CLAWDASH_DIR, LEARNINGS_FILE);
 }
 
@@ -53,7 +53,8 @@ export async function writeHandoff(
   cwd: string,
   filesChanged?: string[],
 ): Promise<void> {
-  await ensureDir(handoffsDir(cwd));
+  const handoffsDir = await getHandoffsDir(cwd);
+  await ensureDir(handoffsDir);
 
   const lines: string[] = [
     `# Handoff: ${taskId} — ${title}`,
@@ -100,7 +101,7 @@ export async function writeHandoff(
     lines.push('');
   }
 
-  await fs.writeFile(handoffPath(cwd, taskId), lines.join('\n'), 'utf-8');
+  await fs.writeFile(path.join(handoffsDir, `${taskId}.md`), lines.join('\n'), 'utf-8');
 }
 
 /**
@@ -111,11 +112,12 @@ export async function readHandoffs(
   taskIds: string[],
   cwd: string,
 ): Promise<string> {
+  const handoffsDir = await getHandoffsDir(cwd);
   const sections: string[] = [];
 
   for (const id of taskIds) {
     try {
-      const content = await fs.readFile(handoffPath(cwd, id), 'utf-8');
+      const content = await fs.readFile(path.join(handoffsDir, `${id}.md`), 'utf-8');
       sections.push(content.trim());
     } catch {
       // Handoff not yet written (task completed without handoff) — skip

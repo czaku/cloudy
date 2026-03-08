@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { CLAWDASH_DIR, LOGS_DIR, TASK_LOGS_DIR } from '../config/defaults.js';
 import { appendFile, ensureDir } from './fs.js';
+import { getCurrentRunDir } from './run-dir.js';
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
@@ -22,8 +23,10 @@ export function setLogLevel(level: LogLevel): void {
 }
 
 export async function initLogger(cwd: string): Promise<void> {
-  logDir = path.join(cwd, CLAWDASH_DIR, LOGS_DIR);
-  await ensureDir(path.join(cwd, CLAWDASH_DIR, TASK_LOGS_DIR));
+  // Use run dir if available, otherwise fall back to .cloudy/ root (legacy / pre-init)
+  const runDir = await getCurrentRunDir(cwd);
+  logDir = path.join(runDir, LOGS_DIR);
+  await ensureDir(path.join(runDir, TASK_LOGS_DIR));
 }
 
 function formatMessage(level: LogLevel, message: string): string {
@@ -61,12 +64,8 @@ export async function logTaskOutput(
   content: string,
   cwd: string,
 ): Promise<void> {
-  const taskLogPath = path.join(
-    cwd,
-    CLAWDASH_DIR,
-    TASK_LOGS_DIR,
-    `${taskId}.log`,
-  );
+  const runDir = await getCurrentRunDir(cwd);
+  const taskLogPath = path.join(runDir, TASK_LOGS_DIR, `${taskId}.log`);
   await rotateIfNeeded(taskLogPath);
   await appendFile(taskLogPath, content);
 }
@@ -77,3 +76,8 @@ export const log = {
   warn: (msg: string) => writeLog('warn', msg),
   error: (msg: string) => writeLog('error', msg),
 };
+
+// Keep backward-compatible: if nothing used initLogger yet, use .cloudy/logs/ fallback
+export function getLogDir(cwd: string): string {
+  return logDir ?? path.join(cwd, CLAWDASH_DIR, LOGS_DIR);
+}

@@ -67,6 +67,13 @@ export interface Task {
 }
 
 // ── Plan types ───────────────────────────────────────────────────────
+export interface PipelineContext {
+  pipelineId: string;
+  phaseIndex: number;    // 1-based
+  totalPhases: number;
+  phaseLabel: string;
+}
+
 export interface Plan {
   goal: string;
   tasks: Task[];
@@ -74,6 +81,8 @@ export interface Plan {
   updatedAt: string;
   /** Raw prompt to execute after all tasks finish (from ## Wrap-up section in spec). */
   wrapUpPrompt?: string;
+  /** Set by pipeline command — carries phase structure for TUI/dashboard display. */
+  pipelineContext?: PipelineContext;
 }
 
 // ── Validation types ─────────────────────────────────────────────────
@@ -183,6 +192,8 @@ export interface ProjectState {
   costSummary: CostSummary;
   startedAt?: string;
   completedAt?: string;
+  /** Name of the run directory (e.g. 2026-03-08-1430-implement-ai-chain). */
+  runName?: string;
 }
 
 // ── Claude CLI types ─────────────────────────────────────────────────

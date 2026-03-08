@@ -1,16 +1,76 @@
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ProjectState, Plan, CostSummary, CloudyConfig } from './types.js';
 import {
   CLAWDASH_DIR,
+  RUNS_DIR,
+  CURRENT_FILE,
   STATE_FILE,
   STATE_VERSION,
   DEFAULT_CONFIG,
 } from '../config/defaults.js';
 import { ensureDir, readJson, writeJson } from '../utils/fs.js';
+import { getCurrentRunDir } from '../utils/run-dir.js';
 
-function statePath(cwd: string): string {
-  return path.join(cwd, CLAWDASH_DIR, STATE_FILE);
+// ── Run name generation ───────────────────────────────────────────────
+
+function toSlug(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 40);
 }
+
+export function generateRunName(goal: string): string {
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10); // YYYY-MM-DD
+  const time = now.toTimeString().slice(0, 5).replace(':', ''); // HHMM
+  return `${date}-${time}-${toSlug(goal)}`;
+}
+
+// ── Run directory helpers ─────────────────────────────────────────────
+
+export function getRunDir(cwd: string, runName: string): string {
+  return path.join(cwd, CLAWDASH_DIR, RUNS_DIR, runName);
+}
+
+export async function getCurrentRunName(cwd: string): Promise<string | null> {
+  try {
+    const content = await fs.readFile(
+      path.join(cwd, CLAWDASH_DIR, CURRENT_FILE),
+      'utf-8',
+    );
+    return content.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export async function setCurrentRun(cwd: string, runName: string): Promise<void> {
+  await ensureDir(path.join(cwd, CLAWDASH_DIR));
+  await fs.writeFile(
+    path.join(cwd, CLAWDASH_DIR, CURRENT_FILE),
+    runName,
+    'utf-8',
+  );
+}
+
+export async function createRunDir(cwd: string, runName: string): Promise<string> {
+  const runDir = getRunDir(cwd, runName);
+  await ensureDir(runDir);
+  await setCurrentRun(cwd, runName);
+  return runDir;
+}
+
+// ── State path (uses current run dir) ────────────────────────────────
+
+async function statePath(cwd: string): Promise<string> {
+  const runDir = await getCurrentRunDir(cwd);
+  return path.join(runDir, STATE_FILE);
+}
+
+// ── Cost summary ──────────────────────────────────────────────────────
 
 function emptyCostSummary(): CostSummary {
   return {
@@ -34,16 +94,17 @@ export function createInitialState(config?: CloudyConfig): ProjectState {
 }
 
 export async function loadState(cwd: string): Promise<ProjectState | null> {
-  return readJson<ProjectState>(statePath(cwd));
+  return readJson<ProjectState>(await statePath(cwd));
 }
 
 export async function saveState(
   cwd: string,
   state: ProjectState,
 ): Promise<void> {
-  await ensureDir(path.join(cwd, CLAWDASH_DIR));
+  const p = await statePath(cwd);
+  await ensureDir(path.dirname(p));
   state.version = STATE_VERSION;
-  await writeJson(statePath(cwd), state);
+  await writeJson(p, state);
 }
 
 export async function loadOrCreateState(
