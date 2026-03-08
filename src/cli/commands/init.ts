@@ -563,7 +563,7 @@ Respond with ONLY valid JSON:
     p.note(formatPlanNote(plan), `📋 ${plan.tasks.length} tasks`);
 
     // ── Approval ──────────────────────────────────────────────────────────────
-    if (opts.review) {
+    if (opts.review && !(opts as any).yes && process.stdout.isTTY) {
       let approved = false;
       while (!approved) {
         const action = await p.select({
