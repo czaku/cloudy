@@ -15,6 +15,7 @@ export interface ReviewResult {
   suggestions: string[];
   /** Task IDs that should be re-run (skipped, failed, or missing implementation) */
   rerunTaskIds: string[];
+  specCoverageScore?: number;
   costUsd: number;
   durationMs: number;
   model: string;
@@ -76,6 +77,21 @@ function buildTaskSummary(plan: Plan): string {
 }
 
 /**
+ * Build all acceptance criteria from the plan, numbered, for holistic review grading.
+ */
+function buildAllAcceptanceCriteria(plan: Plan): string {
+  const lines: string[] = ['## All Acceptance Criteria'];
+  let n = 0;
+  for (const task of plan.tasks) {
+    for (const criterion of task.acceptanceCriteria) {
+      n++;
+      lines.push(`${n}. [${task.id}] ${criterion}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+/**
  * Build the review prompt.
  */
 function buildReviewPrompt(
@@ -90,6 +106,7 @@ function buildReviewPrompt(
     : `(spec not saved — reviewing from task descriptions only)\n\nGoal: ${plan.goal}\n\n${plan.tasks.map((t) => `### ${t.id}: ${t.title}\n${t.description}`).join('\n\n')}`;
 
   const conventionsSection = claudeMdContent ?? '(CLAUDE.md not found)';
+  const allCriteria = buildAllAcceptanceCriteria(plan);
 
   return `You are performing a holistic post-run review of a completed implementation batch.
 
@@ -107,6 +124,8 @@ ${taskSummary}
 ${gitDiff}
 \`\`\`
 
+${allCriteria}
+
 ## Review Instructions
 
 Review this implementation HOLISTICALLY — not task by task, but as a whole batch. Check:
@@ -121,6 +140,7 @@ Respond ONLY with valid JSON (no markdown wrapper):
 {
   "verdict": "PASS" | "PASS_WITH_NOTES" | "FAIL",
   "summary": "2-3 sentence overall assessment",
+  "specCoverageScore": 0-100,  // percentage of acceptance criteria fully passing
   "criteriaResults": [{ "criterion": "...", "passed": true, "note": "..." }],
   "issues": [{ "severity": "critical"|"major"|"minor", "description": "...", "location": "file:line or component name" }],
   "conventionViolations": ["..."],
@@ -137,6 +157,7 @@ export async function runHolisticReview(
   plan: Plan,
   model: ClaudeModel,
   onOutput?: (text: string) => void,
+  fromSha?: string,
 ): Promise<ReviewResult> {
   const startMs = Date.now();
 
@@ -163,8 +184,8 @@ export async function runHolisticReview(
     }
   }
 
-  // 3. Find phase-start SHA from oldest checkpoint
-  const phaseSha = await findPhaseStartSha(cwd);
+  // 3. Find phase-start SHA from oldest checkpoint (or use provided fromSha)
+  const phaseSha = fromSha ?? await findPhaseStartSha(cwd);
 
   // 4. Get full git diff since phase start
   let gitDiff = '';
@@ -257,6 +278,7 @@ export async function runHolisticReview(
     const parsed = JSON.parse(jsonStr) as {
       verdict?: string;
       summary?: string;
+      specCoverageScore?: number;
       criteriaResults?: Array<{ criterion: string; passed: boolean; note: string }>;
       issues?: Array<{ severity: 'critical' | 'major' | 'minor'; description: string; location?: string }>;
       conventionViolations?: string[];
@@ -271,6 +293,7 @@ export async function runHolisticReview(
     result = {
       verdict,
       summary: parsed.summary ?? rawOutput.slice(0, 300),
+      specCoverageScore: typeof parsed.specCoverageScore === 'number' ? parsed.specCoverageScore : undefined,
       criteriaResults: parsed.criteriaResults ?? [],
       issues: parsed.issues ?? [],
       conventionViolations: parsed.conventionViolations ?? [],

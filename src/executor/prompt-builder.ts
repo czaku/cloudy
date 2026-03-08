@@ -81,6 +81,15 @@ export function buildExecutionPrompt(
     parts.push('');
   }
 
+  if (task.outputArtifacts && task.outputArtifacts.length > 0) {
+    parts.push('# Required Output Files');
+    parts.push('You MUST create ALL of the following files. Do not skip or omit any:');
+    for (const artifact of task.outputArtifacts) {
+      parts.push(`- ${artifact}`);
+    }
+    parts.push('');
+  }
+
   if (completedTaskTitles.length > 0) {
     parts.push('# Already Completed Tasks');
     for (const title of completedTaskTitles) {

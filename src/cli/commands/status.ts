@@ -101,13 +101,16 @@ async function render(
 
     let line: string;
     if (task.status === 'completed') {
-      line = `  ${c(green, icon)}   ${c(dim, task.id)}  ${titlePad}  ${c(dim, elapsedPad)}  ${c(dim, statusPad)}`;
+      const taskCost = task.costData?.estimatedUsd
+        ? c(dim, `$${task.costData.estimatedUsd.toFixed(3)}`.padStart(7))
+        : c(dim, '       ');
+      line = `  ${c(green, icon)}   ${c(dim, task.id)}  ${titlePad}  ${c(dim, elapsedPad)}  ${taskCost}  ${c(dim, statusPad)}`;
     } else if (task.status === 'in_progress') {
-      line = `  ${c(yellow, icon)}   ${c(bold, task.id)}  ${c(bold, titlePad)}  ${c(yellow, elapsedPad)}  ${c(yellow, statusPad)}`;
+      line = `  ${c(yellow, icon)}   ${c(bold, task.id)}  ${c(bold, titlePad)}  ${c(yellow, elapsedPad)}  ${c(dim, '       ')}  ${c(yellow, statusPad)}`;
     } else if (task.status === 'failed') {
-      line = `  ${c(red, icon)}   ${c(red, task.id)}  ${titlePad}  ${c(dim, elapsedPad)}  ${c(red, statusPad)}`;
+      line = `  ${c(red, icon)}   ${c(red, task.id)}  ${titlePad}  ${c(dim, elapsedPad)}  ${c(dim, '       ')}  ${c(red, statusPad)}`;
     } else {
-      line = `  ${icon}   ${c(dim, task.id)}  ${c(dim, titlePad)}  ${c(dim, elapsedPad)}  ${c(dim, statusPad)}`;
+      line = `  ${icon}   ${c(dim, task.id)}  ${c(dim, titlePad)}  ${c(dim, elapsedPad)}  ${c(dim, '       ')}  ${c(dim, statusPad)}`;
     }
 
     lines.push(line);

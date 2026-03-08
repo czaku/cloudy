@@ -87,6 +87,16 @@ export const runCommand = new Command('run')
       if (isNonInteractive) {
         opts.dashboard = false;
       }
+      if (isNonInteractive) {
+        const missing: string[] = [];
+        if (!opts.executionModel && !opts.model) missing.push('--execution-model');
+        if (!opts.taskReviewModel && !opts.model) missing.push('--task-review-model');
+        if (!opts.runReviewModel) missing.push('--run-review-model');
+        if (missing.length > 0) {
+          console.error(c(red, `✖  --non-interactive requires explicit model flags: ${missing.join(', ')}`));
+          process.exit(1);
+        }
+      }
       const cwd = process.cwd();
       await initLogger(cwd);
 

@@ -538,6 +538,10 @@ export class Orchestrator {
     queue.updateStatus(task.id, 'in_progress');
     this.taskStartCostUsd.set(task.id, this.costTracker.getSummary().totalEstimatedUsd);
 
+    // Persist in_progress immediately so external tools (status command, scripts) see accurate state
+    plan.tasks = queue.getAllTasks();
+    await saveState(this.cwd, this.state);
+
     // Create git checkpoint (in the task's working directory).
     // On retry, reuse the original checkpoint so the diff covers ALL work
     // done across all previous attempts — not just the latest attempt.

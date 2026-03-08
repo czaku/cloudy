@@ -227,6 +227,7 @@ export interface ReviewResult {
   suggestions: string[];
   /** Task IDs that should be re-run (skipped, failed, or missing implementation) */
   rerunTaskIds: string[];
+  specCoverageScore?: number;
   costUsd: number;
   durationMs: number;
   model: string;
