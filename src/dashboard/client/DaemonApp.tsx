@@ -689,6 +689,24 @@ const DAEMON_CSS = `
   margin-right: 6px;
   margin-bottom: 8px;
 }
+/* Custom model picker */
+.model-picker { position: relative; display: inline-block; }
+.model-picker-btn { display: flex; align-items: center; gap: 6px; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; cursor: pointer; font-size: 12px; color: var(--text-primary); font-family: inherit; transition: border-color 0.12s; white-space: nowrap; }
+.model-picker-btn:hover { border-color: #a78bfa; }
+.model-picker-btn .mp-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.model-picker-btn .mp-name { font-weight: 600; }
+.model-picker-btn .mp-chevron { font-size: 9px; color: var(--text-muted); margin-left: 2px; }
+.model-picker-dropdown { position: absolute; bottom: calc(100% + 6px); left: 0; min-width: 220px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 6px; z-index: 200; box-shadow: 0 8px 32px rgba(0,0,0,0.4); display: flex; flex-direction: column; gap: 3px; }
+.model-picker-item { padding: 8px 10px; border-radius: 7px; cursor: pointer; transition: background 0.1s; display: flex; flex-direction: column; gap: 2px; }
+.model-picker-item:hover { background: var(--bg-secondary); }
+.model-picker-item.selected { background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.25); }
+.mp-item-header { display: flex; align-items: center; gap: 7px; }
+.mp-item-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.mp-item-name { font-size: 12px; font-weight: 700; color: var(--text-primary); flex: 1; }
+.mp-item-badge { font-size: 9px; font-weight: 700; padding: 1px 5px; border-radius: 6px; letter-spacing: 0.04em; }
+.mp-item-desc { font-size: 10px; color: var(--text-muted); padding-left: 14px; line-height: 1.4; }
+.mp-item-meta { display: flex; align-items: center; gap: 8px; padding-left: 14px; margin-top: 1px; }
+.mp-item-meta-pill { font-size: 9px; padding: 1px 5px; border-radius: 4px; background: var(--bg-secondary); color: var(--text-muted); border: 1px solid var(--border); }
 .daemon-model-select {
   background: var(--bg-secondary);
   border: 1px solid var(--border);
@@ -2024,13 +2042,7 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
                 style={specSizeError ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>
                 ✦ Plan {selectedSpecs.size} spec{selectedSpecs.size !== 1 ? 's' : ''} →
               </button>
-              <select value={planModel} onChange={(e) => setPlanModel(e.target.value)}
-                title="Planning model"
-                style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--text-secondary)', fontSize: 11, padding: '4px 6px', cursor: 'pointer', outline: 'none', flexShrink: 0 }}>
-                <option value="sonnet">sonnet</option>
-                <option value="haiku">haiku</option>
-                <option value="opus">opus</option>
-              </select>
+              <ModelPicker value={planModel} onChange={setPlanModel} label="Model" />
               <button className="plan-stop-btn"
                 style={{ background: 'rgba(167,139,250,0.1)', color: '#a78bfa', borderColor: 'rgba(167,139,250,0.3)' }}
                 onClick={() => { setSelectedSpecs(new Set()); setPlanName(''); }} title="Clear selection">✕</button>
@@ -2084,6 +2096,88 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
   );
 }
 
+// ── ModelPicker ─────────────────────────────────────────────────────────
+
+const MODEL_INFO: Record<string, { dot: string; badge: string; badgeColor: string; desc: string; speed: string; cost: string; effort: string }> = {
+  haiku: {
+    dot: '#60a5fa',
+    badge: 'FAST',
+    badgeColor: 'rgba(96,165,250,0.15)',
+    desc: 'Claude Haiku — lightweight tasks, quick edits',
+    speed: '⚡ fastest',
+    cost: '$',
+    effort: 'low effort',
+  },
+  sonnet: {
+    dot: '#a78bfa',
+    badge: 'BALANCED',
+    badgeColor: 'rgba(167,139,250,0.15)',
+    desc: 'Claude Sonnet — best for most coding tasks',
+    speed: '◎ balanced',
+    cost: '$$',
+    effort: 'medium effort',
+  },
+  opus: {
+    dot: '#f97316',
+    badge: 'POWERFUL',
+    badgeColor: 'rgba(249,115,22,0.15)',
+    desc: 'Claude Opus — complex reasoning, architecture',
+    speed: '◉ deliberate',
+    cost: '$$$',
+    effort: 'high effort',
+  },
+};
+
+function ModelPicker({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const info = MODEL_INFO[value] ?? MODEL_INFO['sonnet'];
+
+  useEffect(() => {
+    function onClickOutside(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    if (open) document.addEventListener('mousedown', onClickOutside);
+    return () => document.removeEventListener('mousedown', onClickOutside);
+  }, [open]);
+
+  return (
+    <div className="model-picker" ref={ref}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+        <span style={{ color: 'var(--text-muted)', fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</span>
+        <button className="model-picker-btn" onClick={() => setOpen((o) => !o)}>
+          <span className="mp-dot" style={{ background: info.dot }} />
+          <span className="mp-name">{value}</span>
+          <span className="mp-chevron">{open ? '▲' : '▼'}</span>
+        </button>
+      </div>
+      {open && (
+        <div className="model-picker-dropdown">
+          {Object.entries(MODEL_INFO).map(([model, mi]) => (
+            <div
+              key={model}
+              className={`model-picker-item${value === model ? ' selected' : ''}`}
+              onClick={() => { onChange(model); setOpen(false); }}
+            >
+              <div className="mp-item-header">
+                <span className="mp-item-dot" style={{ background: mi.dot }} />
+                <span className="mp-item-name">{model}</span>
+                <span className="mp-item-badge" style={{ background: mi.badgeColor, color: mi.dot }}>{mi.badge}</span>
+              </div>
+              <div className="mp-item-desc">{mi.desc}</div>
+              <div className="mp-item-meta">
+                <span className="mp-item-meta-pill">{mi.speed}</span>
+                <span className="mp-item-meta-pill">{mi.cost}</span>
+                <span className="mp-item-meta-pill">{mi.effort}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── RunTab ─────────────────────────────────────────────────────────────
 
 interface RunTabProps {
@@ -2129,7 +2223,6 @@ function RunTab({ project }: RunTabProps) {
   const prevIsRunning = useRef(false);
 
   const isRunning = project.activeProcess === 'run' || project.status === 'running';
-  const MODEL_OPTIONS = ['haiku', 'sonnet', 'opus'];
 
   useEffect(() => {
     fetch(`/api/projects/${project.id}/plans`)
@@ -2319,14 +2412,8 @@ function RunTab({ project }: RunTabProps) {
           )}
           {!isRunning && failedTasks.length > 0 && (
             <>
-              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Exec:</span>
-              <select className="daemon-model-select" value={executionModel} onChange={(e) => setExecutionModel(e.target.value)}>
-                {MODEL_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
-              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Review:</span>
-              <select className="daemon-model-select" value={reviewModel} onChange={(e) => setReviewModel(e.target.value)}>
-                {MODEL_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
-              </select>
+              <ModelPicker value={executionModel} onChange={setExecutionModel} label="Exec" />
+              <ModelPicker value={reviewModel} onChange={setReviewModel} label="Review" />
               <button className="daemon-btn primary" onClick={handleRetryFailed}>
                 ↺ Retry failed ({failedTasks.length})
               </button>
@@ -2416,7 +2503,7 @@ function RunTab({ project }: RunTabProps) {
               className={`chain-empty-drop${dropOnEmpty ? ' drag-over' : ''}`}
               onDragOver={(e) => { e.preventDefault(); setDropOnEmpty(true); }}
               onDragLeave={() => setDropOnEmpty(false)}
-              onDrop={(e) => { setDropOnEmpty(false); handleCanvasDrop(e); }}
+              onDrop={(e) => { e.stopPropagation(); setDropOnEmpty(false); handleCanvasDrop(e); }}
             >
               <div style={{ fontSize: 24, marginBottom: 8, opacity: 0.5 }}>⠿⠿</div>
               <div style={{ fontWeight: 600, marginBottom: 4 }}>Drag plans here to build your chain</div>
@@ -2471,24 +2558,10 @@ function RunTab({ project }: RunTabProps) {
           )}
         </div>
 
-        {/* Footer with model selects + run button */}
+        {/* Footer with model pickers + run button */}
         <div className="chain-footer">
-          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Exec:</span>
-          <select
-            className="daemon-model-select"
-            value={executionModel}
-            onChange={(e) => setExecutionModel(e.target.value)}
-          >
-            {MODEL_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
-          <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Review:</span>
-          <select
-            className="daemon-model-select"
-            value={reviewModel}
-            onChange={(e) => setReviewModel(e.target.value)}
-          >
-            {MODEL_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
-          </select>
+          <ModelPicker value={executionModel} onChange={setExecutionModel} label="Exec" />
+          <ModelPicker value={reviewModel} onChange={setReviewModel} label="Review" />
           <button
             className="daemon-btn primary"
             disabled={chainSteps.length === 0}
@@ -3602,17 +3675,7 @@ function ChatTab({ project, onSwitchTab, initialSessionId, onSessionSelect }: Ch
               )}
               {activeMeta?.source === 'cloudy' && !lockedMsg && (
                 <>
-                  <select
-                    className="daemon-model-select"
-                    value={model}
-                    onChange={(e) => changeModel(e.target.value)}
-                    style={{ fontSize: 11 }}
-                    title="Model"
-                  >
-                    <option value="haiku">⚡ haiku</option>
-                    <option value="sonnet">✦ sonnet</option>
-                    <option value="opus">🌟 opus</option>
-                  </select>
+                  <ModelPicker value={model} onChange={changeModel} label="Model" />
                   <select
                     className="daemon-model-select"
                     value={effort}
