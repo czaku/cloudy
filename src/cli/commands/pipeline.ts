@@ -14,6 +14,7 @@ export const pipelineCommand = new Command('pipeline')
   .option('--planning-model <model>', 'Planning model (default: sonnet)')
   .option('--no-auto-fix', 'Disable automatic fix-task generation from review notes')
   .option('--verbose', 'Pass --verbose to each run')
+  .option('--heartbeat-interval <seconds>', 'Write status.json every N seconds during each phase', parseInt)
   .action(async (opts: {
     spec: string[];
     executionModel?: string;
@@ -22,6 +23,7 @@ export const pipelineCommand = new Command('pipeline')
     planningModel?: string;
     autoFix?: boolean;
     verbose?: boolean;
+    heartbeatInterval?: number;
   }) => {
     const cwd = process.cwd();
     await initLogger(cwd);
@@ -110,6 +112,7 @@ export const pipelineCommand = new Command('pipeline')
         '--run-review-model', opts.runReviewModel!,
       ];
       if (opts.verbose) runArgs.push('--verbose');
+      if (opts.heartbeatInterval) runArgs.push('--heartbeat-interval', String(opts.heartbeatInterval));
 
       // Run the phase
       console.log(c(dim, `    running phase ${phaseNum}…`));

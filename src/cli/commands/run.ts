@@ -53,6 +53,7 @@ export const runCommand = new Command('run')
   .option('--pi-base-url <url>', 'Pi-mono base URL for OpenAI-compatible endpoints')
   .option('--run-review-model <model>', 'Model for post-run holistic review (haiku/sonnet/opus)')
 
+  .option('--heartbeat-interval <seconds>', 'Write status.json to run dir every N seconds during execution', parseInt)
   .option('--non-interactive', 'Skip all prompts and disable dashboard — set models via flags')
   .action(
     async (opts: {
@@ -80,7 +81,7 @@ export const runCommand = new Command('run')
       piModel?: string;
       piBaseUrl?: string;
       runReviewModel?: string;
-
+      heartbeatInterval?: number;
       nonInteractive?: boolean;
     }) => {
       const isNonInteractive = opts.nonInteractive || !process.stdout.isTTY;
@@ -699,8 +700,43 @@ export const runCommand = new Command('run')
         currentOrchestrator = orchestrator;
         abortCurrentRun = () => orchestrator.abort();
 
+        // ── Heartbeat: write status.json every N seconds ──────────────────────
+        let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+        if (opts.heartbeatInterval && opts.heartbeatInterval > 0) {
+          const { getCurrentRunDir } = await import('../../utils/run-dir.js');
+          const writeHeartbeat = async () => {
+            try {
+              const tasks = freshState.plan?.tasks ?? [];
+              const completed = tasks.filter((t) => t.status === 'completed').length;
+              const failed = tasks.filter((t) => t.status === 'failed').length;
+              const inProgress = tasks.find((t) => t.status === 'in_progress');
+              const status = {
+                timestamp: new Date().toISOString(),
+                runId: freshState.runName,
+                totalTasks: tasks.length,
+                completedTasks: completed,
+                failedTasks: failed,
+                skippedTasks: tasks.filter((t) => t.status === 'skipped').length,
+                inProgressTaskId: inProgress?.id ?? null,
+                inProgressTaskTitle: inProgress?.title ?? null,
+                inProgressSince: inProgress?.startedAt ?? null,
+                costUsd: freshState.costSummary?.totalEstimatedUsd ?? 0,
+                elapsedMs: freshState.startedAt ? Date.now() - new Date(freshState.startedAt).getTime() : 0,
+                pipelineContext: freshState.plan?.pipelineContext ?? null,
+              };
+              const runDir = await getCurrentRunDir(cwd);
+              await import('node:fs/promises').then((fs) =>
+                fs.writeFile(`${runDir}/status.json`, JSON.stringify(status, null, 2), 'utf-8'),
+              );
+            } catch { /* non-fatal */ }
+          };
+          heartbeatTimer = setInterval(() => { void writeHeartbeat(); }, opts.heartbeatInterval * 1000);
+          void writeHeartbeat(); // immediate first write
+        }
+
         try {
           await orchestrator.run();
+          if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
           isRunning = false;
           currentOrchestrator = null;
           abortCurrentRun = null;
@@ -712,6 +748,7 @@ export const runCommand = new Command('run')
             // Re-run recovery is now handled automatically inside the orchestrator
           }
         } catch (err) {
+          if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
           isRunning = false;
           currentOrchestrator = null;
           abortCurrentRun = null;
