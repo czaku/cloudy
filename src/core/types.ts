@@ -74,6 +74,17 @@ export interface PipelineContext {
   phaseLabel: string;
 }
 
+export interface DecisionLogEntry {
+  questionId: string;
+  question: string;
+  /** 'human' if the user typed an answer within the timeout; 'agent' if haiku assumed */
+  answeredBy: 'human' | 'agent';
+  answer: string;
+  /** One-sentence reasoning — only present when answeredBy === 'agent' */
+  reasoning?: string;
+  timestamp: string;
+}
+
 export interface Plan {
   goal: string;
   tasks: Task[];
@@ -83,6 +94,8 @@ export interface Plan {
   wrapUpPrompt?: string;
   /** Set by pipeline command — carries phase structure for TUI/dashboard display. */
   pipelineContext?: PipelineContext;
+  /** Decisions made during planning Q&A (injected into executor context). */
+  decisionLog?: DecisionLogEntry[];
 }
 
 // ── Validation types ─────────────────────────────────────────────────

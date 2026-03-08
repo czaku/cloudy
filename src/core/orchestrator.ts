@@ -695,7 +695,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       const prompt =
         lastValidationErrors && attempt > 1
           ? buildRetryPrompt(task, plan, completedTitles, lastValidationErrors, contextFiles, learningsContent, handoffSummaries, conventionsContent, lastErrorFileContext, lastPriorFilesCreated)
-          : buildExecutionPrompt({ task, plan, completedTaskTitles: completedTitles, contextFiles, learningsContent, handoffSummaries, conventionsContent, rollingContextSummary: this.rollingContextSummary || undefined });
+          : buildExecutionPrompt({ task, plan, completedTaskTitles: completedTitles, contextFiles, learningsContent, handoffSummaries, conventionsContent, rollingContextSummary: this.rollingContextSummary || undefined, decisionLog: plan.decisionLog });
 
       // Run Claude with timeout
       const abortController = new AbortController();

@@ -519,6 +519,26 @@ export const runCommand = new Command('run')
               break;
 
             case 'run_completed': {
+              // Print decision log if any planning Q&A decisions were made
+              const decisions = liveState?.plan?.decisionLog;
+              if (decisions && decisions.length > 0) {
+                const humanCount = decisions.filter((d) => d.answeredBy === 'human').length;
+                const agentCount = decisions.length - humanCount;
+                if (isAgentOutput) {
+                  agentLog('DECISION_LOG', `total=${decisions.length}`, `human=${humanCount}`, `agent=${agentCount}`);
+                  for (const d of decisions) {
+                    agentLog('DECISION', `id=${d.questionId}`, `by=${d.answeredBy}`, `"${d.answer}"`);
+                  }
+                } else {
+                  console.log(`\n${c(cyan + bold, '📋 Planning Decisions')}  ${c(dim, `${decisions.length} resolved (${humanCount} human · ${agentCount} AI assumed)`)}`);
+                  for (const d of decisions) {
+                    const tag = d.answeredBy === 'human' ? c(green, '●') : c(yellow, '◐');
+                    console.log(`  ${tag}  ${c(dim, d.question.slice(0, 80))}${d.question.length > 80 ? '…' : ''}`);
+                    console.log(`     ${c(bold, d.answer)}${d.reasoning ? `  ${c(dim, `— ${d.reasoning}`)}` : ''}`);
+                  }
+                }
+              }
+
               if (isAgentOutput) {
                 const cost = event.summary.totalEstimatedUsd > 0 ? `cost=$${event.summary.totalEstimatedUsd.toFixed(4)}` : '';
                 agentLog('RUN:DONE', cost);

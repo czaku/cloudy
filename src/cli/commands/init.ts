@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import * as readline from 'node:readline';
 import { Command } from 'commander';
 import * as p from '@clack/prompts';
 import { createPlan } from '../../planner/planner.js';
@@ -13,10 +14,63 @@ import { initLogger, log } from '../../utils/logger.js';
 import { fileExists, ensureDir } from '../../utils/fs.js';
 import { c, bold, dim, red, green, yellow, cyan } from '../../utils/colors.js';
 import { acquireLock } from '../../utils/lock.js';
-import type { ClaudeModel } from '../../core/types.js';
+import type { ClaudeModel, DecisionLogEntry } from '../../core/types.js';
 import { CLAWDASH_DIR } from '../../config/defaults.js';
 import { createStreamFormatter } from '../../utils/stream-formatter.js';
 import type { Plan } from '../../core/types.js';
+
+/**
+ * Prompt for input with a countdown timer. Returns the trimmed answer or null on timeout/empty.
+ * onTick is called every second with remaining seconds so the caller can render a countdown.
+ */
+async function promptWithTimeout(
+  prompt: string,
+  timeoutMs: number,
+  onTick?: (remainingSec: number) => void,
+): Promise<string | null> {
+  return new Promise((resolve) => {
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: true });
+    let resolved = false;
+
+    const totalSec = Math.round(timeoutMs / 1000);
+    let remaining = totalSec;
+    onTick?.(remaining);
+
+    const tick = setInterval(() => {
+      remaining--;
+      onTick?.(remaining);
+      if (remaining <= 0) clearInterval(tick);
+    }, 1000);
+
+    const timer = setTimeout(() => {
+      if (!resolved) {
+        resolved = true;
+        clearInterval(tick);
+        rl.close();
+        resolve(null);
+      }
+    }, timeoutMs);
+
+    rl.question(prompt, (answer) => {
+      if (!resolved) {
+        resolved = true;
+        clearInterval(tick);
+        clearTimeout(timer);
+        rl.close();
+        resolve(answer.trim() || null);
+      }
+    });
+
+    rl.on('close', () => {
+      if (!resolved) {
+        resolved = true;
+        clearInterval(tick);
+        clearTimeout(timer);
+        resolve(null);
+      }
+    });
+  });
+}
 
 const MODEL_OPTIONS = [
   { value: 'sonnet', label: 'sonnet', hint: 'recommended — smart & fast' },
@@ -66,6 +120,8 @@ export const initCommand = new Command('init')
   .option('--pi-model <model>', 'Pi-mono model ID: gpt-4o-mini, gemini-2.0-flash, qwen2.5-coder:7b, etc.')
   .option('--pi-base-url <url>', 'Pi-mono base URL for OpenAI-compatible endpoints')
   .option('--run-name <name>', 'Explicit run directory name (used by pipeline command)')
+  .option('--questions-auto-answering-model <model>', 'Model used to auto-answer planning questions on timeout (default: planning model)')
+  .option('--questions-timeout <seconds>', 'Seconds to wait for human answer before auto-assuming (default: 60)', parseInt)
   .action(async (goalArg: string | undefined, opts: {
     model?: string;
     planningModel?: string;
@@ -77,6 +133,8 @@ export const initCommand = new Command('init')
     piModel?: string;
     piBaseUrl?: string;
     runName?: string;
+    questionsAutoAnsweringModel?: string;
+    questionsTimeout?: number;
   }) => {
     const cwd = process.cwd();
     const projectName = path.basename(cwd);
@@ -313,6 +371,106 @@ export const initCommand = new Command('init')
 
     const elapsed = Math.round((Date.now() - planningStart) / 1000);
     spinner.stop(`Plan ready  ·  ${plan.tasks.length} tasks  ·  ${elapsed}s`);
+
+    // ── Planning Q&A ──────────────────────────────────────────────────────────
+    const planQuestions: string[] = (plan as any)._questions ?? [];
+    delete (plan as any)._questions;
+
+    const autoAnswerModel: ClaudeModel = opts.questionsAutoAnsweringModel
+      ? (parseModelFlag(opts.questionsAutoAnsweringModel) as ClaudeModel)
+      : (planningModel as ClaudeModel);
+    const questionTimeoutMs = (opts.questionsTimeout ?? 60) * 1000;
+    const isInteractive = opts.review && process.stdout.isTTY && process.stdin.isTTY;
+
+    if (planQuestions.length > 0) {
+      const decisionLog: DecisionLogEntry[] = [];
+
+      p.log.info(`💭  ${planQuestions.length} planning question(s) — answer to refine the plan:`);
+
+      for (let qi = 0; qi < planQuestions.length; qi++) {
+        const question = planQuestions[qi];
+        const questionId = `q${qi + 1}`;
+        let answer: string | null = null;
+
+        if (isInteractive) {
+          // Show question prominently
+          console.log(`\n  ${c(cyan + bold, `Question ${qi + 1}/${planQuestions.length}:`)}  ${question}`);
+          console.log(`  ${c(dim, `(${opts.questionsTimeout ?? 60}s to answer — press Enter to skip and let the AI assume)`)}`);
+
+          answer = await promptWithTimeout(
+            `  ${c(bold, '→')} `,
+            questionTimeoutMs,
+            (remaining) => {
+              process.stdout.write(`\r  ${c(dim, `⏱  ${remaining}s remaining…`)}  `);
+            },
+          );
+
+          if (answer !== null) {
+            process.stdout.write('\r' + ' '.repeat(40) + '\r');
+            console.log(`  ${c(green, '✓')} ${c(dim, 'Your answer recorded.')}`);
+          } else {
+            process.stdout.write('\r' + ' '.repeat(40) + '\r');
+            console.log(`  ${c(yellow, '⏱  timeout — asking the AI to assume…')}`);
+          }
+        }
+
+        if (answer === null) {
+          // AI auto-assumption using the configured model
+          const assumptionPrompt = `You are a technical planner resolving an ambiguous design question so that implementation can proceed.
+${specContent ? `\n## Spec Context (first 3000 chars)\n${specContent.slice(0, 3000)}\n` : ''}${claudeMdContent ? `\n## Project Context (CLAUDE.md)\n${claudeMdContent.slice(0, 2000)}\n` : ''}
+## Question
+${question}
+
+## Your Task
+Make a reasonable technical assumption to resolve this question. Base your assumption on:
+- Evidence in the spec or project context
+- Common industry patterns and conservative defaults
+- Existing patterns visible in the codebase context
+
+Respond with ONLY valid JSON:
+{"assumption": "One concise sentence stating the decision", "reasoning": "One sentence explaining why"}`;
+
+          let assumptionResult = { assumption: `Proceeding with default approach for: ${question}`, reasoning: 'Spec context insufficient for a specific assumption; defaulting to common patterns.' };
+          try {
+            const { runClaude } = await import('../../executor/claude-runner.js');
+            const result = await runClaude({ prompt: assumptionPrompt, model: autoAnswerModel, cwd });
+            if (result.success) {
+              const jsonMatch = result.output.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.assumption) assumptionResult = parsed;
+              }
+            }
+          } catch { /* non-fatal — use default */ }
+
+          console.log(`  ${c(cyan, `🤖 AI assumes:`)} ${assumptionResult.assumption}`);
+          if (assumptionResult.reasoning) {
+            console.log(`  ${c(dim, assumptionResult.reasoning)}`);
+          }
+
+          decisionLog.push({
+            questionId,
+            question,
+            answeredBy: 'agent',
+            answer: assumptionResult.assumption,
+            reasoning: assumptionResult.reasoning,
+            timestamp: new Date().toISOString(),
+          });
+        } else {
+          decisionLog.push({
+            questionId,
+            question,
+            answeredBy: 'human',
+            answer,
+            timestamp: new Date().toISOString(),
+          });
+        }
+      }
+
+      // Attach decision log to plan for executor injection
+      plan.decisionLog = decisionLog;
+      console.log('');
+    }
 
     // ── Display plan ──────────────────────────────────────────────────────────
     p.note(formatPlanNote(plan), `📋 ${plan.tasks.length} tasks`);

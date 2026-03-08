@@ -16,6 +16,11 @@ interface RawTask {
   timeoutMinutes?: number;
 }
 
+interface RawPlan {
+  tasks: RawTask[];
+  questions?: string[];
+}
+
 /**
  * Use Claude to decompose a goal into tasks.
  */
@@ -51,7 +56,7 @@ export async function createPlan(
     throw new Error(`Planning failed: ${result.error}`);
   }
 
-  const rawTasks = parsePlanOutput(result.output);
+  const { tasks: rawTasks, questions: planQuestions } = parsePlanOutput(result.output);
   let tasks = rawTasks.map(toTask);
 
   const validation = validateDependencyGraph(tasks);
@@ -85,7 +90,12 @@ export async function createPlan(
     updatedAt: new Date().toISOString(),
   };
 
-  await log.info(`Plan created with ${tasks.length} tasks`);
+  if (planQuestions && planQuestions.length > 0) {
+    // Stash questions on the plan temporarily — init.ts will consume them and save decision_log
+    (plan as any)._questions = planQuestions;
+  }
+
+  await log.info(`Plan created with ${tasks.length} tasks${planQuestions?.length ? `, ${planQuestions.length} question(s)` : ''}`);
 
   return plan;
 }
@@ -229,8 +239,8 @@ Return ONLY valid JSON with this structure:
     throw new Error(`Plan editing failed: ${result.error}`);
   }
 
-  const rawTasks = parsePlanOutput(result.output);
-  const tasks = rawTasks.map(toTask);
+  const { tasks: rawTasks2 } = parsePlanOutput(result.output);
+  const tasks = rawTasks2.map(toTask);
 
   const validation = validateDependencyGraph(tasks);
   if (!validation.valid) {
@@ -334,7 +344,7 @@ function extractSpecAcs(specContent: string): string[] {
   return acs;
 }
 
-function parsePlanOutput(output: string): RawTask[] {
+function parsePlanOutput(output: string): RawPlan {
   // Try to extract JSON from the output (Claude might wrap it in markdown)
   let jsonStr = output.trim();
 
@@ -352,11 +362,14 @@ function parsePlanOutput(output: string): RawTask[] {
   }
 
   try {
-    const parsed = JSON.parse(jsonStr) as { tasks: RawTask[] };
+    const parsed = JSON.parse(jsonStr) as RawPlan;
     if (!parsed.tasks || !Array.isArray(parsed.tasks)) {
       throw new Error('Response missing "tasks" array');
     }
-    return parsed.tasks;
+    return {
+      tasks: parsed.tasks,
+      questions: Array.isArray(parsed.questions) ? parsed.questions.filter(q => typeof q === 'string' && q.trim()) : [],
+    };
   } catch (err) {
     throw new Error(
       `Failed to parse planning output as JSON: ${err instanceof Error ? err.message : String(err)}`,
