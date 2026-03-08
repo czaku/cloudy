@@ -72,8 +72,7 @@ export async function loadConfig(cwd: string): Promise<CloudyConfig> {
     worktrees: saved.worktrees ?? DEFAULT_CONFIG.worktrees,
     runBranch: saved.runBranch ?? DEFAULT_CONFIG.runBranch,
     approval: { ...DEFAULT_CONFIG.approval, ...saved.approval },
-    engine: saved.engine ?? DEFAULT_CONFIG.engine,
-    piMono: { ...DEFAULT_CONFIG.piMono, ...saved.piMono },
+    engine: 'claude-code',
     review: { ...DEFAULT_CONFIG.review, ...saved.review },
   };
 

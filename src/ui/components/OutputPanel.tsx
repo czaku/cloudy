@@ -35,8 +35,8 @@ export function OutputPanel({
     );
   }
 
-  const engineBadge = engine === 'pi-mono' ? 'pi-mono' : engine ? 'claude-code' : null;
-  const engineColor = engine === 'pi-mono' ? 'yellow' : 'cyan';
+  const engineBadge = engine ? 'claude-code' : null;
+  const engineColor = 'cyan';
 
   const statusColor =
     task.status === 'completed' ? 'green' :

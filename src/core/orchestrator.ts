@@ -397,9 +397,7 @@ export class Orchestrator {
     try {
       const result = await runEngine({
         prompt,
-        engine: this.config.engine ?? 'claude-code',
         claudeModel: this.config.models.execution,
-        piMono: this.config.piMono,
         cwd: this.cwd,
         onOutput: (text) => this.onEvent({ type: 'task_output', taskId: 'wrap-up', text }),
         abortSignal: this.abortController.signal,
@@ -544,9 +542,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
     const maxAttempts = task.maxRetries + 1;
     const executionModel = this.getModelForTask(task);
     const engine = this.config.engine ?? 'claude-code';
-    const engineModel = engine === 'pi-mono'
-      ? (this.config.piMono?.model ?? executionModel)
-      : executionModel;
+    const engineModel = executionModel;
     let currentPatterns = [...task.contextPatterns];
     const budget = this.config.contextBudgetTokens;
 
@@ -738,9 +734,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       try {
         result = await runEngine({
           prompt,
-          engine,
           claudeModel: executionModel,
-          piMono: this.config.piMono,
           cwd: taskCwd,
           onOutput: (text) => {
             _lastOutputMs = Date.now(); // reset silence timer on any stdout activity
