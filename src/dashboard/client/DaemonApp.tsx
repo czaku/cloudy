@@ -525,6 +525,107 @@ const DAEMON_CSS = `
   font-size: 12px;
   color: var(--text-muted);
 }
+.daemon-onboarding {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 32px;
+  padding: 40px 24px;
+  max-width: 520px;
+  margin: 0 auto;
+  text-align: center;
+}
+.daemon-onboarding-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.daemon-onboarding-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+}
+.daemon-onboarding-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+.daemon-onboarding-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+}
+.daemon-onboarding-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.daemon-onboarding-step-num {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(232,112,58,0.15);
+  color: #e8703a;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.daemon-onboarding-step-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+}
+.daemon-onboarding-step-desc {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+.daemon-onboarding-step-desc code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  background: rgba(255,255,255,0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 10px;
+}
+.daemon-onboarding-cta {
+  background: #e8703a;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 11px 24px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: opacity 0.15s;
+}
+.daemon-onboarding-cta:hover { opacity: 0.85; }
+.daemon-onboarding-cli {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+.daemon-onboarding-cli code {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  background: rgba(255,255,255,0.06);
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 10px;
+  color: var(--text-primary);
+}
 .daemon-section-label {
   font-size: 11px;
   color: var(--text-muted);
@@ -704,7 +805,8 @@ const DAEMON_CSS = `
 .model-picker-btn .mp-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
 .model-picker-btn .mp-name { font-weight: 600; }
 .model-picker-btn .mp-chevron { font-size: 9px; color: var(--text-muted); margin-left: 2px; }
-.model-picker-dropdown { position: absolute; bottom: calc(100% + 6px); left: 0; min-width: 220px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 6px; z-index: 200; box-shadow: 0 8px 32px rgba(0,0,0,0.4); display: flex; flex-direction: column; gap: 3px; }
+.model-picker-dropdown { min-width: 220px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 6px; box-shadow: 0 8px 32px rgba(0,0,0,0.4); display: flex; flex-direction: column; gap: 3px; }
+.model-picker-dropdown-fixed { position: fixed; z-index: 9999; }
 .model-picker-item { padding: 8px 10px; border-radius: 7px; cursor: pointer; transition: background 0.1s; display: flex; flex-direction: column; gap: 2px; }
 .model-picker-item:hover { background: var(--bg-secondary); }
 .model-picker-item.selected { background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.25); }
@@ -790,11 +892,16 @@ const DAEMON_CSS = `
 .chat-input:focus { outline: none; border-color: #e8703a; }
 .chat-cursor { display: inline-block; width: 8px; height: 14px; background: #a78bfa; animation: blink 1s step-end infinite; vertical-align: text-bottom; margin-left: 2px; }
 @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+.chat-thinking-dots { display: flex; align-items: center; gap: 4px; padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; border-bottom-left-radius: 3px; }
+.chat-thinking-dots span { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); display: inline-block; animation: thinking-bounce 1.2s ease-in-out infinite; }
+.chat-thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+.chat-thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+@keyframes thinking-bounce { 0%,60%,100%{transform:translateY(0);opacity:0.4} 30%{transform:translateY(-5px);opacity:1} }
 .chat-hint { font-size: 10px; color: var(--text-muted); padding: 4px 12px; }
 .chat-hint kbd { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 3px; padding: 0 4px; font-family: inherit; font-size: 10px; }
 /* ── Slash command autocomplete ── */
 .slash-menu {
-  position: absolute; bottom: calc(100% - 2px); left: 0; right: 0;
+  position: absolute; bottom: calc(100% + 2px); left: 0; right: 0; z-index: 9999;
   background: var(--bg-card); border: 1px solid var(--border);
   border-radius: 6px 6px 0 0; z-index: 100; overflow: hidden;
   box-shadow: 0 -4px 16px rgba(0,0,0,0.2);
@@ -1545,6 +1652,11 @@ function ProjectSidebar({ projects, selectedId, onSelect }: ProjectSidebarProps)
       />
     )}
     <div className="daemon-sidebar">
+      {projects.length === 0 && (
+        <div style={{ padding: '20px 12px', color: 'var(--text-muted)', fontSize: 11, textAlign: 'center', lineHeight: 1.6 }}>
+          No projects yet.<br />Register one to get started.
+        </div>
+      )}
       {projects.map((proj) => {
         return (
           <div key={proj.id}
@@ -2435,29 +2547,57 @@ const MODEL_INFO: Record<string, { dot: string; badge: string; badgeColor: strin
 
 function ModelPicker({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [dropPos, setDropPos] = useState<{ top: number; left: number; openUp: boolean } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
   const info = MODEL_INFO[value] ?? MODEL_INFO['sonnet'];
 
+  function openDropdown() {
+    if (!btnRef.current) return;
+    const r = btnRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    const openUp = spaceBelow < 280;
+    setDropPos({ top: openUp ? r.top : r.bottom + 4, left: r.left, openUp });
+    setOpen(true);
+  }
+
   useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    function onClose(e: MouseEvent) {
+      const target = e.target as HTMLElement;
+      if (!target.closest('.model-picker-dropdown-fixed') && !btnRef.current?.contains(target)) setOpen(false);
     }
-    if (open) document.addEventListener('mousedown', onClickOutside);
-    return () => document.removeEventListener('mousedown', onClickOutside);
+    if (open) document.addEventListener('mousedown', onClose);
+    return () => document.removeEventListener('mousedown', onClose);
+  }, [open]);
+
+  // Close on scroll/resize
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => { window.removeEventListener('scroll', close, true); window.removeEventListener('resize', close); };
   }, [open]);
 
   return (
-    <div className="model-picker" ref={ref}>
+    <div className="model-picker">
       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
         <span style={{ color: 'var(--text-muted)', fontSize: 10, fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase' }}>{label}</span>
-        <button className="model-picker-btn" onClick={() => setOpen((o) => !o)}>
+        <button ref={btnRef} className="model-picker-btn" onClick={() => open ? setOpen(false) : openDropdown()}>
           <span className="mp-dot" style={{ background: info.dot }} />
           <span className="mp-name">{value}</span>
           <span className="mp-chevron">{open ? '▲' : '▼'}</span>
         </button>
       </div>
-      {open && (
-        <div className="model-picker-dropdown">
+      {open && dropPos && (
+        <div
+          className="model-picker-dropdown model-picker-dropdown-fixed"
+          style={{
+            position: 'fixed',
+            left: dropPos.left,
+            ...(dropPos.openUp ? { bottom: window.innerHeight - dropPos.top } : { top: dropPos.top }),
+            zIndex: 9999,
+          }}
+        >
           {Object.entries(MODEL_INFO).map(([model, mi]) => (
             <div
               key={model}
@@ -3734,6 +3874,7 @@ function ChatTab({ project, onSwitchTab, initialSessionId, onSessionSelect }: Ch
   const [lockedMsg, setLockedMsg] = useState(false);
   const [ccStats, setCcStats] = useState<CCSessionStats | null>(null);
   const [cumulativeStats, setCumulativeStats] = useState<CCSessionStats | null>(null);
+  const [cloudyStats, setCloudyStats] = useState<CCSessionStats | null>(null);
   const [effort, setEffort] = useState<'low' | 'medium' | 'high'>(() => {
     const saved = localStorage.getItem('chat-effort');
     return (saved === 'low' || saved === 'medium' || saved === 'high') ? saved : 'medium';
@@ -3741,15 +3882,17 @@ function ChatTab({ project, onSwitchTab, initialSessionId, onSessionSelect }: Ch
   const [maxBudgetUsd, setMaxBudgetUsd] = useState<number>(() => {
     return parseFloat(localStorage.getItem('chat-budget') ?? '0') || 0;
   });
+  const [yolo, setYolo] = useState<boolean>(() => localStorage.getItem('chat-yolo') !== 'false');
   const [slashMenu, setSlashMenu] = useState<{ open: boolean; items: SlashCommand[]; idx: number }>({ open: false, items: [], idx: 0 });
   const [msgFilter, setMsgFilter] = useState<'all' | 'mine' | 'claude' | 'tools'>('all');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Persist effort + budget to localStorage
+  // Persist effort + budget + yolo to localStorage
   useEffect(() => { localStorage.setItem('chat-effort', effort); }, [effort]);
   useEffect(() => { localStorage.setItem('chat-budget', String(maxBudgetUsd)); }, [maxBudgetUsd]);
+  useEffect(() => { localStorage.setItem('chat-yolo', String(yolo)); }, [yolo]);
 
   const model = activeSession?.model ?? 'sonnet';
 
@@ -3847,6 +3990,7 @@ function ChatTab({ project, onSwitchTab, initialSessionId, onSessionSelect }: Ch
 
   // Fetch stats when active CC session changes + compute cumulative across all segments
   useEffect(() => {
+    setCloudyStats(null);
     if (!activeSessionId?.startsWith('cc:')) { setCcStats(null); setCumulativeStats(null); return; }
     fetch(`/api/projects/${project.id}/chats/${activeSessionId}/stats`)
       .then((r) => r.json())
@@ -3919,14 +4063,52 @@ function ChatTab({ project, onSwitchTab, initialSessionId, onSessionSelect }: Ch
           }
           return { ...prev, messages: msgs };
         });
+      } else if (event.type === 'chat_stats' && event.sessionId === activeSessionId) {
+        setCloudyStats((prev) => ({
+          inputTokens: (prev?.inputTokens ?? 0) + (event.inputTokens as number ?? 0),
+          outputTokens: (prev?.outputTokens ?? 0) + (event.outputTokens as number ?? 0),
+          cacheReadTokens: (prev?.cacheReadTokens ?? 0) + (event.cacheReadTokens as number ?? 0),
+          cacheWriteTokens: (prev?.cacheWriteTokens ?? 0) + (event.cacheWriteTokens as number ?? 0),
+          costUsd: (prev?.costUsd ?? 0) + (event.costUsd as number ?? 0),
+          durationMs: (prev?.durationMs ?? 0) + (event.durationMs as number ?? 0),
+          messageCount: (prev?.messageCount ?? 0) + 1,
+          lastTool: null,
+          firstTs: prev?.firstTs ?? new Date().toISOString(),
+          lastTs: new Date().toISOString(),
+          model: null,
+        }));
+      } else if (event.type === 'chat_tool_call' && event.sessionId === activeSessionId) {
+        // Inject a synthetic tool-call message into the stream
+        setActiveSession((prev) => {
+          if (!prev) return prev;
+          const synth: ChatMessage = {
+            role: 'assistant',
+            content: '',
+            ts: '__tool__',
+            blocks: [{ type: 'tool_use', toolName: event.toolName as string, toolInput: event.toolInput as Record<string, unknown>, toolId: '' }],
+          };
+          return { ...prev, messages: [...prev.messages, synth] };
+        });
+      } else if (event.type === 'chat_tool_result' && event.sessionId === activeSessionId) {
+        setActiveSession((prev) => {
+          if (!prev) return prev;
+          const synth: ChatMessage = {
+            role: 'user',
+            content: '',
+            ts: '__tool__',
+            blocks: [{ type: 'tool_result', resultContent: event.content as string, isError: !!(event.isError), toolUseId: '' }],
+          };
+          return { ...prev, messages: [...prev.messages, synth] };
+        });
       } else if (event.type === 'chat_done' && event.sessionId === activeSessionId) {
         setStreaming(false);
         setActiveSession((prev) => {
           if (!prev) return prev;
+          const now = new Date().toISOString();
           return {
             ...prev,
             messages: prev.messages.map((m) =>
-              m.ts === '__streaming__' ? { ...m, ts: new Date().toISOString() } : m
+              m.ts === '__streaming__' || m.ts === '__tool__' ? { ...m, ts: now } : m
             ),
           };
         });
@@ -4159,6 +4341,7 @@ function ChatTab({ project, onSwitchTab, initialSessionId, onSessionSelect }: Ch
       sessionId: activeSessionId,
       message: msg,
       effort,
+      skipPermissions: yolo,
       ...(maxBudgetUsd > 0 ? { maxBudgetUsd } : {}),
     });
 
@@ -4353,6 +4536,19 @@ function ChatTab({ project, onSwitchTab, initialSessionId, onSessionSelect }: Ch
                     style={{ fontSize: 11, width: 64 }}
                     title="Max spend per response (USD, 0 = unlimited)"
                   />
+                  <button
+                    onClick={() => setYolo((v) => !v)}
+                    title={yolo ? 'Yolo mode ON — file writes auto-approved. Click to require approval.' : 'Safe mode — file writes need approval. Click to enable yolo.'}
+                    style={{
+                      background: yolo ? 'rgba(239,68,68,0.12)' : 'var(--bg-card)',
+                      border: `1px solid ${yolo ? 'rgba(239,68,68,0.3)' : 'var(--border)'}`,
+                      color: yolo ? '#ef4444' : 'var(--text-muted)',
+                      borderRadius: 6, padding: '3px 8px', fontSize: 11, cursor: 'pointer',
+                      fontFamily: 'inherit', fontWeight: 600, whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {yolo ? '🔓 yolo' : '🔒 safe'}
+                  </button>
                 </>
               )}
               {activeMeta?.source === 'claude-code' && (
@@ -4406,10 +4602,30 @@ function ChatTab({ project, onSwitchTab, initialSessionId, onSessionSelect }: Ch
                 .map((msg, i) => (
                   <RichMessage key={i} msg={msg} isStreaming={msg.ts === '__streaming__'} />
                 ))}
+              {streaming && !(activeSession?.messages ?? []).some(m => m.ts === '__streaming__') && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 0' }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: 'rgba(232,112,58,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, flexShrink: 0 }}>🤖</div>
+                  <div className="chat-thinking-dots">
+                    <span /><span /><span />
+                  </div>
+                </div>
+              )}
               <div ref={messagesEndRef} />
             </div>
             {activeMeta?.source === 'claude-code' && (cumulativeStats ?? ccStats) && (
               <CcStatusBar stats={(cumulativeStats ?? ccStats)!} isActive={!!lockedMsg && liveWatch} />
+            )}
+            {activeMeta?.source === 'cloudy' && (activeSession?.messages?.length ?? 0) > 0 && (
+              <CcStatusBar
+                stats={cloudyStats ?? {
+                  inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0,
+                  costUsd: 0, durationMs: 0, messageCount: 0, lastTool: null,
+                  firstTs: activeSession?.messages?.[0]?.ts ?? null,
+                  lastTs: activeSession?.messages?.[activeSession.messages.length - 1]?.ts ?? null,
+                  model: null,
+                }}
+                isActive={streaming}
+              />
             )}
             {!lockedMsg ? (
               <>
@@ -5519,11 +5735,63 @@ export function DaemonApp() {
         {/* Main */}
         <div className="daemon-main">
           {!selectedProject ? (
+            projectsLoaded && projects.length === 0 ? (
+              /* ── Zero-state onboarding ── */
+              <div className="daemon-onboarding">
+                <div className="daemon-onboarding-hero">
+                  <IconCloud size={56} color="#e8703a" />
+                  <div className="daemon-onboarding-title">Welcome to Cloudy</div>
+                  <div className="daemon-onboarding-sub">AI-powered task orchestration for your projects</div>
+                </div>
+
+                <div className="daemon-onboarding-steps">
+                  <div className="daemon-onboarding-step">
+                    <div className="daemon-onboarding-step-num">1</div>
+                    <div>
+                      <div className="daemon-onboarding-step-title">Register a project</div>
+                      <div className="daemon-onboarding-step-desc">Point cloudy at any local directory — it doesn't need to be initialised yet.</div>
+                    </div>
+                  </div>
+                  <div className="daemon-onboarding-step">
+                    <div className="daemon-onboarding-step-num">2</div>
+                    <div>
+                      <div className="daemon-onboarding-step-title">Write a spec</div>
+                      <div className="daemon-onboarding-step-desc">Create a markdown spec file describing what you want to build. Drop it in <code>specs/</code>.</div>
+                    </div>
+                  </div>
+                  <div className="daemon-onboarding-step">
+                    <div className="daemon-onboarding-step-num">3</div>
+                    <div>
+                      <div className="daemon-onboarding-step-title">Plan &amp; run</div>
+                      <div className="daemon-onboarding-step-desc">Select specs in the Plan tab, generate a task plan, then execute it in the Run tab.</div>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  className="daemon-onboarding-cta"
+                  onClick={() => {
+                    // Trigger the register dialog via sidebar
+                    const addBtn = document.querySelector<HTMLElement>('.daemon-sidebar-add');
+                    addBtn?.click();
+                  }}
+                >
+                  + Register your first project
+                </button>
+
+                <div className="daemon-onboarding-cli">
+                  Or from the terminal:&nbsp;
+                  <code>cloudy dashboard</code>
+                  &nbsp;in any project directory
+                </div>
+              </div>
+            ) : (
             <div className="daemon-empty">
               <div className="daemon-empty-icon"><IconCloud size={48} color="#e8703a" /></div>
               <div className="daemon-empty-title">Select a project</div>
               <div className="daemon-empty-sub">← Choose from the sidebar to get started</div>
             </div>
+            )
           ) : (
             <>
               {/* Tabs */}

@@ -577,7 +577,7 @@ async function streamChatMessage(
   projectPath: string,
   sessionId: string,
   userMessage: string,
-  opts: { effort?: string; maxBudgetUsd?: number } = {},
+  opts: { effort?: string; maxBudgetUsd?: number; skipPermissions?: boolean } = {},
 ): Promise<void> {
   // Load session from disk
   let session = await loadChatSession(projectPath, sessionId);
@@ -639,9 +639,12 @@ async function streamChatMessage(
 
   const args = [
     '--print',
+    '--verbose',
     '--output-format', 'stream-json',
     '--model', modelId,
   ];
+  // Default to skip permissions in dashboard chat (trusted local env). Can be toggled off per-message.
+  if (opts.skipPermissions !== false) args.push('--dangerously-skip-permissions');
   if (opts.effort && ['low', 'medium', 'high'].includes(opts.effort)) {
     args.push('--effort', opts.effort);
   }
@@ -664,15 +667,42 @@ async function streamChatMessage(
   }
 
   let assistantContent = '';
+  let chatStdoutBuf = '';
 
   if (child.stdout) {
     child.stdout.on('data', (chunk: Buffer) => {
-      const text = chunk.toString();
-      for (const line of text.split('\n')) {
+      chatStdoutBuf += chunk.toString();
+      const lines = chatStdoutBuf.split('\n');
+      chatStdoutBuf = lines.pop() ?? '';
+      for (const line of lines) {
         if (!line.trim()) continue;
         try {
           const msg = JSON.parse(line);
           if (msg.type === 'assistant' && msg.message?.content) {
+            // Extract token usage from this assistant turn
+            const usage = msg.message.usage as Record<string, number> | undefined;
+            if (usage) {
+              const model = (msg.message.model as string | undefined) ?? null;
+              const m = (model ?? '').toLowerCase();
+              const p = m.includes('opus') ? { input: 15/1e6, cacheWrite: 18.75/1e6, cacheRead: 1.5/1e6, output: 75/1e6 }
+                      : m.includes('haiku') ? { input: 0.8/1e6, cacheWrite: 1/1e6, cacheRead: 0.08/1e6, output: 4/1e6 }
+                      : { input: 3/1e6, cacheWrite: 3.75/1e6, cacheRead: 0.30/1e6, output: 15/1e6 };
+              const inp = usage.input_tokens ?? 0;
+              const out = usage.output_tokens ?? 0;
+              const cw = usage.cache_creation_input_tokens ?? 0;
+              const cr = usage.cache_read_input_tokens ?? 0;
+              broadcastSse({
+                type: 'chat_stats',
+                sessionId: session!.id,
+                costUsd: inp * p.input + out * p.output + cw * p.cacheWrite + cr * p.cacheRead,
+                durationMs: 0,
+                inputTokens: inp,
+                outputTokens: out,
+                cacheReadTokens: cr,
+                cacheWriteTokens: cw,
+                model,
+              });
+            }
             for (const block of msg.message.content) {
               if (block.type === 'text') {
                 const newText = block.text.slice(assistantContent.length);
@@ -681,12 +711,32 @@ async function streamChatMessage(
                 if (newText) {
                   broadcastSse({ type: 'chat_token', sessionId: session!.id, token: newText });
                 }
+              } else if (block.type === 'tool_use') {
+                broadcastSse({ type: 'chat_tool_call', sessionId: session!.id, toolName: block.name, toolInput: block.input ?? {} });
               }
             }
-          } else if (msg.type === 'result' && msg.result && !assistantContent) {
+          } else if (msg.type === 'tool_result') {
+            const content = Array.isArray(msg.content)
+              ? msg.content.filter((b: { type: string }) => b.type === 'text').map((b: { text: string }) => b.text).join('')
+              : (msg.content ?? '');
+            if (content) broadcastSse({ type: 'chat_tool_result', sessionId: session!.id, content: String(content).slice(0, 300), isError: !!msg.is_error });
+          } else if (msg.type === 'result') {
+            // Broadcast usage stats to the dashboard
+            broadcastSse({
+              type: 'chat_stats',
+              sessionId: session!.id,
+              costUsd: msg.cost_usd ?? 0,
+              durationMs: msg.duration_ms ?? 0,
+              inputTokens: msg.input_tokens ?? 0,
+              outputTokens: msg.output_tokens ?? 0,
+              cacheReadTokens: msg.cache_read_tokens ?? 0,
+              cacheWriteTokens: msg.cache_write_tokens ?? 0,
+            });
             // Fallback: capture result field if no assistant messages were streamed
-            assistantContent = msg.result;
-            broadcastSse({ type: 'chat_token', sessionId: session!.id, token: assistantContent });
+            if (msg.result && !assistantContent) {
+              assistantContent = msg.result;
+              broadcastSse({ type: 'chat_token', sessionId: session!.id, token: assistantContent });
+            }
           }
         } catch { /* not JSON — ignore */ }
       }
@@ -739,6 +789,7 @@ async function streamChatMessageResume(
 
   const args = [
     '--print',
+    '--verbose',
     '--output-format', 'stream-json',
     '--resume', ccSessionId,
     userMessage,
@@ -754,15 +805,36 @@ async function streamChatMessageResume(
   let assistantContent = '';
   let sizeAtExit = 0;
   let exited = false;
+  let resumeStdoutBuf = '';
 
   if (child.stdout) {
     child.stdout.on('data', (chunk: Buffer) => {
-      const text = chunk.toString();
-      for (const line of text.split('\n')) {
+      resumeStdoutBuf += chunk.toString();
+      const lines = resumeStdoutBuf.split('\n');
+      resumeStdoutBuf = lines.pop() ?? '';
+      for (const line of lines) {
         if (!line.trim()) continue;
         try {
           const msg = JSON.parse(line);
           if (msg.type === 'assistant' && msg.message?.content) {
+            const usage = msg.message.usage as Record<string, number> | undefined;
+            if (usage) {
+              const model = (msg.message.model as string | undefined) ?? null;
+              const m = (model ?? '').toLowerCase();
+              const p = m.includes('opus') ? { input: 15/1e6, cacheWrite: 18.75/1e6, cacheRead: 1.5/1e6, output: 75/1e6 }
+                      : m.includes('haiku') ? { input: 0.8/1e6, cacheWrite: 1/1e6, cacheRead: 0.08/1e6, output: 4/1e6 }
+                      : { input: 3/1e6, cacheWrite: 3.75/1e6, cacheRead: 0.30/1e6, output: 15/1e6 };
+              const inp = usage.input_tokens ?? 0;
+              const out = usage.output_tokens ?? 0;
+              const cw = usage.cache_creation_input_tokens ?? 0;
+              const cr = usage.cache_read_input_tokens ?? 0;
+              broadcastSse({
+                type: 'chat_stats', sessionId: compositeId,
+                costUsd: inp * p.input + out * p.output + cw * p.cacheWrite + cr * p.cacheRead,
+                durationMs: 0, inputTokens: inp, outputTokens: out,
+                cacheReadTokens: cr, cacheWriteTokens: cw, model,
+              });
+            }
             for (const block of msg.message.content) {
               if (block.type === 'text') {
                 const newText = block.text.slice(assistantContent.length);
@@ -1349,7 +1421,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     if (method === 'POST' && subpath === '/chat') {
       if (!meta) { send404(res); return; }
       try {
-        const body = await parseBody(req) as { sessionId?: string; message: string; model?: string; effort?: string; maxBudgetUsd?: number };
+        const body = await parseBody(req) as { sessionId?: string; message: string; model?: string; effort?: string; maxBudgetUsd?: number; skipPermissions?: boolean };
         if (!body.message?.trim()) {
           sendJson(res, 400, { error: 'message required' });
           return;
@@ -1402,7 +1474,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         // Stream in background
         const streamFn = sessionId.startsWith(CC_PREFIX)
           ? streamChatMessageResume(meta.path, sessionId.slice(CC_PREFIX.length), body.message.trim(), projectId)
-          : streamChatMessage(meta.path, sessionId, body.message.trim(), { effort: body.effort, maxBudgetUsd: body.maxBudgetUsd });
+          : streamChatMessage(meta.path, sessionId, body.message.trim(), { effort: body.effort, maxBudgetUsd: body.maxBudgetUsd, skipPermissions: body.skipPermissions !== false });
         streamFn.catch((err: unknown) => {
           broadcastSse({ type: 'chat_error', sessionId, error: String(err) });
         });
