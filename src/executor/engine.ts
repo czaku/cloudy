@@ -1,32 +1,17 @@
-import type { ClaudeModel, ClaudeRunResult, Engine, PiMonoConfig } from '../core/types.js';
+import type { ClaudeModel, ClaudeRunResult } from '../core/types.js';
 import { runClaude } from './claude-runner.js';
-import { runPi } from './pi-runner.js';
 
 export interface EngineRunOptions {
   prompt: string;
-  engine: Engine;
+  engine?: string;
   claudeModel?: ClaudeModel;
-  piMono?: PiMonoConfig;
   cwd: string;
   onOutput?: (text: string) => void;
   abortSignal?: AbortSignal;
 }
 
 export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunResult> {
-  const { prompt, engine, claudeModel, piMono, cwd, onOutput, abortSignal } = options;
-
-  if (engine === 'pi-mono' && piMono) {
-    return runPi({
-      prompt,
-      provider: piMono.provider,
-      model: piMono.model,
-      piPath: piMono.piPath,
-      baseUrl: piMono.baseUrl,
-      cwd,
-      onOutput,
-      abortSignal,
-    });
-  }
+  const { prompt, claudeModel, cwd, onOutput, abortSignal } = options;
 
   return runClaude({
     prompt,

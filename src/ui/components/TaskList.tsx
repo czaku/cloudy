@@ -91,8 +91,8 @@ export function TaskList({
         const cost = costByTask[task.id];
         const duration = durationByTask[task.id];
         const rawEngine = engineByTask[task.id];
-        const engineBadge = rawEngine === 'pi-mono' ? 'pi' : rawEngine ? 'cc' : null;
-        const engineColor = rawEngine === 'pi-mono' ? 'yellow' : 'cyan';
+        const engineBadge = rawEngine ? 'cc' : null;
+        const engineColor = 'cyan';
 
         // Compact sub-info line (only when task has run)
         const hasInfo = cost !== undefined || duration !== undefined || engineBadge;

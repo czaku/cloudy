@@ -1,14 +1,7 @@
 // ── Model types ──────────────────────────────────────────────────────
 export type ClaudeModel = 'opus' | 'sonnet' | 'haiku';
 
-export type Engine = 'claude-code' | 'pi-mono';
-
-export interface PiMonoConfig {
-  provider: string;  // anthropic, openai, google, ollama, etc.
-  model: string;     // full model ID: gpt-4o-mini, gemini-2.0-flash, claude-haiku-4-5-20251001, etc.
-  piPath?: string;   // path to pi binary (default: 'pi')
-  baseUrl?: string;  // for OpenAI-compatible endpoints (Kimi, GLM, Minimax, etc.)
-}
+export type Engine = 'claude-code';
 
 export interface ModelConfig {
   planning: ClaudeModel;
@@ -192,8 +185,7 @@ export interface CloudyConfig {
   worktrees: boolean;          // use git worktrees for parallel task isolation
   runBranch: boolean;          // create a dedicated cloudy/run-* branch before executing tasks
   approval: ApprovalConfig;
-  engine: Engine;              // execution engine (default: claude-code)
-  piMono: PiMonoConfig;        // pi-mono engine configuration
+  engine: Engine;              // execution engine (always claude-code)
   review: ReviewConfig;        // post-run holistic review configuration
 }
 

@@ -115,10 +115,6 @@ export const initCommand = new Command('init')
   .option('--spec <file>', 'Spec/PRD file (repeatable: --spec A --spec B)', (v: string, prev: string[]) => [...prev, v], [] as string[])
   .option('--no-review', 'Auto-approve the generated plan without interactive review')
   .option('--verbose', 'Show live Claude output during planning')
-  .option('--engine <engine>', 'Execution engine for run phase: claude-code (default) or pi-mono')
-  .option('--pi-provider <provider>', 'Pi-mono provider: anthropic, openai, google, ollama, etc.')
-  .option('--pi-model <model>', 'Pi-mono model ID: gpt-4o-mini, gemini-2.0-flash, qwen2.5-coder:7b, etc.')
-  .option('--pi-base-url <url>', 'Pi-mono base URL for OpenAI-compatible endpoints')
   .option('--run-name <name>', 'Explicit run directory name (used by pipeline command)')
   .option('--questions-auto-answering-model <model>', 'Model used to auto-answer planning questions on timeout (default: planning model)')
   .option('--questions-timeout <seconds>', 'Seconds to wait for human answer before auto-assuming (default: 60)', parseInt)
@@ -128,10 +124,6 @@ export const initCommand = new Command('init')
     spec: string[];
     review: boolean;
     verbose?: boolean;
-    engine?: string;
-    piProvider?: string;
-    piModel?: string;
-    piBaseUrl?: string;
     runName?: string;
     questionsAutoAnsweringModel?: string;
     questionsTimeout?: number;
@@ -267,18 +259,6 @@ export const initCommand = new Command('init')
       model: opts.model ? parseModelFlag(opts.model) : undefined,
       planningModel: planningModel,
     });
-
-    // ── Engine config ─────────────────────────────────────────────────────────
-    if (opts.engine) {
-      if (opts.engine !== 'claude-code' && opts.engine !== 'pi-mono') {
-        p.log.error(`Unknown engine "${opts.engine}" — use claude-code or pi-mono`);
-        process.exit(1);
-      }
-      config.engine = opts.engine as 'claude-code' | 'pi-mono';
-    }
-    if (opts.piProvider) config.piMono = { ...config.piMono, provider: opts.piProvider };
-    if (opts.piModel) config.piMono = { ...config.piMono, model: opts.piModel };
-    if (opts.piBaseUrl) config.piMono = { ...config.piMono, baseUrl: opts.piBaseUrl };
 
     // ── Run directory ─────────────────────────────────────────────────────────
     // Create a named run dir after we know the goal (or use --run-name if provided by pipeline)

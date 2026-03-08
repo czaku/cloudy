@@ -47,10 +47,6 @@ export const runCommand = new Command('run')
   .option('--goal <goal>', 'Create a plan for this goal and run it immediately (skips cloudy init)')
   .option('--max-retries <n>', 'Max retries per task', parseInt)
   .option('--verbose', 'Show live Claude output for each task as it runs')
-  .option('--engine <engine>', 'Execution engine: claude-code (default) or pi-mono')
-  .option('--pi-provider <provider>', 'Pi-mono provider: anthropic, openai, google, ollama, etc.')
-  .option('--pi-model <model>', 'Pi-mono model ID: gpt-4o-mini, gemini-2.0-flash, qwen2.5-coder:7b, etc.')
-  .option('--pi-base-url <url>', 'Pi-mono base URL for OpenAI-compatible endpoints')
   .option('--run-review-model <model>', 'Model for post-run holistic review (haiku/sonnet/opus)')
 
   .option('--heartbeat-interval <seconds>', 'Write status.json to run dir every N seconds during execution', parseInt)
@@ -77,10 +73,6 @@ export const runCommand = new Command('run')
       resume?: boolean;
       goal?: string;
       verbose?: boolean;
-      engine?: string;
-      piProvider?: string;
-      piModel?: string;
-      piBaseUrl?: string;
       runReviewModel?: string;
       heartbeatInterval?: number;
       nonInteractive?: boolean;
@@ -239,18 +231,6 @@ export const runCommand = new Command('run')
           commands: [],
         };
       }
-
-      // Apply engine configuration
-      if (opts.engine) {
-        if (opts.engine !== 'claude-code' && opts.engine !== 'pi-mono') {
-          console.error(c(red, `✖  unknown engine "${opts.engine}" — use claude-code or pi-mono`));
-          process.exit(1);
-        }
-        config.engine = opts.engine as 'claude-code' | 'pi-mono';
-      }
-      if (opts.piProvider) config.piMono = { ...config.piMono, provider: opts.piProvider };
-      if (opts.piModel) config.piMono = { ...config.piMono, model: opts.piModel };
-      if (opts.piBaseUrl) config.piMono = { ...config.piMono, baseUrl: opts.piBaseUrl };
 
       // Apply review configuration
       if (opts.runReviewModel) {
@@ -782,9 +762,7 @@ export const runCommand = new Command('run')
 
         const pending = freshState.plan.tasks.filter((t) => t.status === 'pending');
         const engine = config.engine ?? 'claude-code';
-        const executionModel = engine === 'pi-mono'
-          ? `pi-mono/${config.piMono?.model ?? '?'}${config.piMono?.provider ? ` (${config.piMono.provider})` : ''}`
-          : config.autoModelRouting ? 'auto' : config.models.execution;
+        const executionModel = config.autoModelRouting ? 'auto' : config.models.execution;
         const parallelLabel = config.parallel ? `parallel ×${config.maxParallel}` : 'sequential';
 
         if (isAgentOutput) {
