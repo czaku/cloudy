@@ -87,6 +87,17 @@ export const pipelineCommand = new Command('pipeline')
         process.exit(1);
       }
 
+      // Phase size check
+      try {
+        const stateData = JSON.parse(await fs.readFile(path.join(runDir, 'state.json'), 'utf-8'));
+        const taskCount = stateData.plan?.tasks?.length ?? 0;
+        if (taskCount > 10) {
+          console.log(c(yellow, `  ⚠️  Large phase: ${taskCount} tasks planned. Consider splitting into 2 phases of ~${Math.ceil(taskCount/2)} tasks for better reliability.`));
+        } else if (taskCount > 6) {
+          console.log(c(dim, `  ℹ️  ${taskCount} tasks in this phase (recommended max: 6 for best quality)`));
+        }
+      } catch { /* non-fatal */ }
+
       // Inject pipelineContext into state.json
       try {
         const statePath = path.join(runDir, 'state.json');
