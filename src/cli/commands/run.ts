@@ -52,7 +52,7 @@ export const runCommand = new Command('run')
   .option('--pi-model <model>', 'Pi-mono model ID: gpt-4o-mini, gemini-2.0-flash, qwen2.5-coder:7b, etc.')
   .option('--pi-base-url <url>', 'Pi-mono base URL for OpenAI-compatible endpoints')
   .option('--run-review-model <model>', 'Model for post-run holistic review (haiku/sonnet/opus)')
-  .option('--no-post-review', 'Skip post-run holistic review')
+  .option('--no-run-review', 'Skip post-run holistic review')
   .option('--non-interactive', 'Skip all prompts and disable dashboard — set models via flags')
   .action(
     async (opts: {
@@ -80,7 +80,7 @@ export const runCommand = new Command('run')
       piModel?: string;
       piBaseUrl?: string;
       runReviewModel?: string;
-      postReview?: boolean; // false when --no-post-review
+      runReview?: boolean; // false when --no-post-review
       nonInteractive?: boolean;
     }) => {
       const isNonInteractive = opts.nonInteractive || !process.stdout.isTTY;
@@ -142,7 +142,7 @@ export const runCommand = new Command('run')
           opts.taskReviewModel = valModel as string;
         }
 
-        if (!opts.runReviewModel && opts.postReview !== false) {
+        if (!opts.runReviewModel && opts.runReview !== false) {
           const reviewModel = await p.select({
             message: 'Final review model (holistic post-run review):',
             options: [
@@ -155,7 +155,7 @@ export const runCommand = new Command('run')
           });
           if (p.isCancel(reviewModel)) { p.cancel('Cancelled.'); process.exit(0); }
           if (reviewModel === 'skip') {
-            opts.postReview = false;
+            opts.runReview = false;
           } else {
             opts.runReviewModel = reviewModel as string;
           }
@@ -238,7 +238,7 @@ export const runCommand = new Command('run')
       if (opts.piBaseUrl) config.piMono = { ...config.piMono, baseUrl: opts.piBaseUrl };
 
       // Apply review configuration
-      if (opts.postReview === false) {
+      if (opts.runReview === false) {
         config.review = { ...config.review, enabled: false };
       }
       if (opts.runReviewModel) {
