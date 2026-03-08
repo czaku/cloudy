@@ -251,6 +251,18 @@ export const initCommand = new Command('init')
       } catch { /* ignore */ }
     }
 
+    // Inject pipeline context from previous phases (if running as part of a pipeline)
+    const pipelineContextPath = path.join(cwd, '.cloudy/pipeline-context.md');
+    try {
+      const pipelineContext = await fs.readFile(pipelineContextPath, 'utf-8');
+      if (pipelineContext.trim()) {
+        claudeMdContent = claudeMdContent
+          ? `${claudeMdContent}\n\n---\n\n${pipelineContext}`
+          : pipelineContext;
+        p.log.info('Pipeline context found — injected into planning');
+      }
+    } catch { /* no pipeline context — normal single-phase run */ }
+
     // ── Planning ──────────────────────────────────────────────────────────────
     const PLANNING_TIMEOUT_MS = 15 * 60 * 1000;
     const planningAbort = new AbortController();
