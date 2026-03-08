@@ -61,7 +61,13 @@ function getPlansDir(projectPath: string): string {
 
 async function savePlanFromState(projectPath: string, planName: string, specPaths: string[]): Promise<SavedPlan | null> {
   try {
-    const stateFile = path.join(projectPath, CLAWDASH_DIR, 'state.json');
+    // Read the current run name to find the correct state.json
+    // (the root .cloudy/state.json is from a previous run and would be stale)
+    const currentFile = path.join(projectPath, CLAWDASH_DIR, 'current');
+    const currentRun = await fs.readFile(currentFile, 'utf-8').then((s) => s.trim()).catch(() => '');
+    const stateFile = currentRun
+      ? path.join(projectPath, CLAWDASH_DIR, RUNS_DIR, currentRun, 'state.json')
+      : path.join(projectPath, CLAWDASH_DIR, 'state.json');
     const state = await readJson<{ plan?: { goal?: string; tasks?: Array<{ id: string; title: string; status: string; description?: string }> } }>(stateFile);
     if (!state?.plan) return null;
 
@@ -836,7 +842,10 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     if (method === 'GET' && subpath === '/state') {
       if (!meta) { send404(res); return; }
       try {
-        const stateFile = path.join(meta.path, CLAWDASH_DIR, 'state.json');
+        const currentRun = await fs.readFile(path.join(meta.path, CLAWDASH_DIR, 'current'), 'utf-8').then((s) => s.trim()).catch(() => '');
+        const stateFile = currentRun
+          ? path.join(meta.path, CLAWDASH_DIR, RUNS_DIR, currentRun, 'state.json')
+          : path.join(meta.path, CLAWDASH_DIR, 'state.json');
         const state = await readJson(stateFile);
         sendJson(res, 200, state ?? {});
       } catch {
