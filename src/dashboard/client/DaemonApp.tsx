@@ -417,7 +417,7 @@ const DAEMON_CSS = `
 }
 .daemon-sidebar-project-meta {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   margin-top: 2px;
   display: flex;
   gap: 8px;
@@ -426,7 +426,7 @@ const DAEMON_CSS = `
 .daemon-sidebar-project-pill {
   padding: 1px 7px;
   border-radius: 10px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
@@ -448,7 +448,7 @@ const DAEMON_CSS = `
 .daemon-sidebar-add {
   padding: 10px 12px;
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 12px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -476,7 +476,7 @@ const DAEMON_CSS = `
   padding: 10px 16px;
   cursor: pointer;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 13px;
   border-bottom: 2px solid transparent;
   transition: color 0.1s;
   font-weight: 500;
@@ -489,7 +489,7 @@ const DAEMON_CSS = `
   border-bottom-color: #e8703a;
 }
 /* Tab info pill */
-.tab-info-pill { position: relative; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 20px; font-size: 11px; color: var(--text-muted); cursor: default; border: 1px solid transparent; transition: border-color 0.15s, background 0.15s; flex-shrink: 0; }
+.tab-info-pill { position: relative; display: flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 20px; font-size: 12px; color: var(--text-muted); cursor: default; border: 1px solid transparent; transition: border-color 0.15s, background 0.15s; flex-shrink: 0; }
 .tab-info-pill:hover, .tab-info-pill:focus { border-color: var(--border); background: var(--bg-card); outline: none; }
 .tab-info-pill-name { font-weight: 600; color: var(--text-secondary); max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tab-info-popover { display: none; position: absolute; right: 0; top: calc(100% + 6px); background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; min-width: 260px; box-shadow: 0 8px 24px rgba(0,0,0,0.25); z-index: 200; flex-direction: column; gap: 6px; }
@@ -883,7 +883,7 @@ const DAEMON_CSS = `
 .chat-msg { max-width: 85%; padding: 8px 12px; border-radius: 8px; font-size: 12px; line-height: 1.6; }
 .chat-msg.user { align-self: flex-end; background: rgba(59,130,246,0.22); border: 1px solid rgba(59,130,246,0.5); color: var(--text-primary); }
 .chat-msg.assistant { align-self: flex-start; background: rgba(232,112,58,0.22); border: 1px solid rgba(232,112,58,0.5); color: var(--text-primary); }
-.chat-msg-role { font-size: 10px; margin-bottom: 4px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.chat-msg-role { font-size: 12px; margin-bottom: 4px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .chat-msg.user .chat-msg-role { color: #60a5fa; }
 .chat-msg.assistant .chat-msg-role { color: #e8703a; }
 .chat-msg-ts { font-weight: 400; opacity: 0.5; font-size: 9px; font-family: 'SF Mono', monospace; white-space: nowrap; }
@@ -929,7 +929,7 @@ const DAEMON_CSS = `
 .cc-status-bar {
   display: flex; align-items: center; gap: 6px; padding: 5px 12px;
   background: var(--bg-secondary); border-top: 1px solid var(--border);
-  font-size: 11px; font-family: 'SF Mono', monospace; color: var(--text-muted);
+  font-size: 12px; font-family: 'SF Mono', monospace; color: var(--text-muted);
   flex-shrink: 0; white-space: nowrap; overflow: hidden;
 }
 .cc-status-bar.active { color: #e8703a; }
@@ -1035,7 +1035,7 @@ const DAEMON_CSS = `
   display: flex; align-items: center; gap: 5px; margin-bottom: 3px;
 }
 .chat-session-name {
-  font-size: 11px; color: var(--text-primary); font-weight: 500;
+  font-size: 12px; color: var(--text-primary); font-weight: 500;
   overflow: hidden; text-overflow: ellipsis;
   flex: 1;
   white-space: normal;
@@ -1044,7 +1044,7 @@ const DAEMON_CSS = `
   -webkit-box-orient: vertical;
 }
 .chat-session-meta {
-  font-size: 10px; color: var(--text-muted);
+  font-size: 11px; color: var(--text-muted);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .chat-session-delete {
@@ -1163,8 +1163,8 @@ const DAEMON_CSS = `
 .dashboard-card[title]:hover { border-color: #a78bfa; }
 .dashboard-card-icon { margin-bottom: 6px; opacity: 0.85; }
 .dashboard-card-value { font-size: 26px; font-weight: 700; color: var(--text-primary); line-height: 1; }
-.dashboard-card-label { font-size: 11px; color: var(--text-secondary); font-weight: 500; margin-top: 2px; }
-.dashboard-card-sub { font-size: 10px; color: var(--text-muted); margin-top: 1px; }
+.dashboard-card-label { font-size: 12px; color: var(--text-secondary); font-weight: 500; margin-top: 2px; }
+.dashboard-card-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
 .dashboard-live-banner {
   display: flex; align-items: center; gap: 8px; padding: 10px 14px;
   background: rgba(239,68,68,0.07); border: 1px solid rgba(239,68,68,0.25);
@@ -1450,7 +1450,7 @@ circle.traffic-light-active[fill="#f59e0b"] {
 .run-task-title { flex: 1; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
 .run-task-item.run-task-completed .run-task-title { color: var(--text-muted); font-weight: 400; }
 .run-task-item.run-task-skipped .run-task-title { color: var(--text-muted); font-weight: 400; }
-.run-task-status-label { font-size: 9px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); flex-shrink: 0; }
+.run-task-status-label { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); flex-shrink: 0; }
 .run-task-item.run-task-in_progress .run-task-status-label { color: #a78bfa; }
 .run-task-item.run-task-completed .run-task-status-label { color: #22c55e; }
 .run-task-item.run-task-failed .run-task-status-label { color: #ef4444; }
@@ -1542,7 +1542,7 @@ circle.traffic-light-active[fill="#f59e0b"] {
 .plan-active-session-card:hover { border-color: rgba(139,92,246,0.5); }
 .plan-active-session-header { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
 .plan-active-session-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
-.plan-active-session-meta { font-size: 10px; color: var(--text-muted); }
+.plan-active-session-meta { font-size: 11px; color: var(--text-muted); }
 /* ── Process switcher pills ── */
 .plan-process-switcher { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; background: var(--bg-secondary); }
 .plan-process-pill { padding: 3px 10px; border-radius: 12px; font-size: 11px; cursor: pointer; border: 1px solid rgba(139,92,246,0.35); background: rgba(139,92,246,0.08); color: #a78bfa; white-space: nowrap; transition: all 0.1s; }
@@ -3097,10 +3097,10 @@ function RunTab({ project }: RunTabProps) {
                   </div>
                   <span className="run-task-title">{task.title}</span>
                   {task.durationMs && task.durationMs > 0 && (
-                    <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>{task.durationMs > 60000 ? `${Math.floor(task.durationMs/60000)}m` : `${Math.round(task.durationMs/1000)}s`}</span>
+                    <span style={{ fontSize: 11, color: 'var(--text-muted)', flexShrink: 0 }}>{task.durationMs > 60000 ? `${Math.floor(task.durationMs/60000)}m` : `${Math.round(task.durationMs/1000)}s`}</span>
                   )}
                   {(task.retries ?? 0) > 0 && (
-                    <span style={{ fontSize: 9, color: '#f59e0b', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>↺{task.retries}</span>
+                    <span style={{ fontSize: 11, color: '#f59e0b', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>↺{task.retries}</span>
                   )}
                   <span className="run-task-status-label">{statusLabel[task.status] ?? task.status}</span>
                   {task.status === 'failed' && !effectivelyRunning && (
