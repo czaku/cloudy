@@ -9,6 +9,7 @@ export interface ExecutionPromptOptions {
   learningsContent?: string;       // contents of .cloudy/LEARNINGS.md
   handoffSummaries?: string;       // formatted dependency handoff sections
   conventionsContent?: string;     // CLAUDE.md / AGENTS.md from project root
+  rollingContextSummary?: string;  // AI-generated summary of what previous tasks in this run built
 }
 
 /**
@@ -28,6 +29,7 @@ export function buildExecutionPrompt(
   let learningsContent: string | undefined;
   let handoffSummaries: string | undefined;
   let conventionsContent: string | undefined;
+  let rollingContextSummary: string | undefined;
 
   if ('task' in taskOrOpts && 'plan' in taskOrOpts) {
     const opts = taskOrOpts as ExecutionPromptOptions;
@@ -38,6 +40,7 @@ export function buildExecutionPrompt(
     learningsContent = opts.learningsContent;
     handoffSummaries = opts.handoffSummaries;
     conventionsContent = opts.conventionsContent;
+    rollingContextSummary = opts.rollingContextSummary;
   } else {
     task = taskOrOpts as Task;
     plan = planArg!;
@@ -62,6 +65,14 @@ export function buildExecutionPrompt(
   // Inject accumulated project learnings from prior tasks
   if (learningsContent?.trim()) {
     parts.push(learningsContent.trim());
+    parts.push('');
+  }
+
+  // Inject rolling context summary (AI-generated summary of all previously completed tasks)
+  if (rollingContextSummary?.trim()) {
+    parts.push('## Progress So Far (Rolling Summary)');
+    parts.push('> This summarizes what previous tasks in this run already built. Do not re-implement these.');
+    parts.push(rollingContextSummary.trim());
     parts.push('');
   }
 
