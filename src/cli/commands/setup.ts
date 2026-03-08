@@ -2,14 +2,40 @@ import { Command } from 'commander';
 import * as p from '@clack/prompts';
 import { loadConfig, saveConfig } from '../../config/config.js';
 import { parseModelFlag } from '../../config/model-config.js';
-import { c, bold, dim, cyan, green } from '../../utils/colors.js';
+import { c, bold, dim, cyan, green, yellow } from '../../utils/colors.js';
 import type { ClaudeModel } from '../../core/types.js';
+import fs from 'node:fs/promises';
 
 const MODEL_CHOICES = [
   { value: 'sonnet', label: 'sonnet', hint: 'recommended — smart & fast' },
   { value: 'haiku',  label: 'haiku',  hint: 'cheap & quick' },
   { value: 'opus',   label: 'opus',   hint: 'most capable, slowest' },
 ];
+
+// ── cloudy.local hostname helper ────────────────────────────────────
+
+async function tryAddCloudyLocal(): Promise<void> {
+  const HOSTS_FILE = '/etc/hosts';
+  const ENTRY = '127.0.0.1 cloudy.local';
+  try {
+    const existing = await fs.readFile(HOSTS_FILE, 'utf-8');
+    if (existing.includes('cloudy.local')) {
+      console.log(c(green, '✓  cloudy.local already in /etc/hosts'));
+      return;
+    }
+    const updated = existing.trimEnd() + '\n' + ENTRY + '\n';
+    await fs.writeFile(HOSTS_FILE, updated, 'utf-8');
+    console.log(c(green, `✓  Added ${ENTRY} to /etc/hosts`));
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === 'EACCES' || code === 'EPERM') {
+      console.log(c(yellow, `⚠  Permission denied writing /etc/hosts. Run manually:`));
+      console.log(`   sudo sh -c 'echo "${ENTRY}" >> /etc/hosts'`);
+    } else {
+      console.log(c(yellow, `⚠  Could not update /etc/hosts: ${err instanceof Error ? err.message : String(err)}`));
+    }
+  }
+}
 
 export const setupCommand = new Command('setup')
   .description('Interactive wizard to configure cloudy for this project')
@@ -35,6 +61,7 @@ export const setupCommand = new Command('setup')
   .option('--dashboard-port <n>',      'Default dashboard port', parseInt)
   .option('--max-cost-per-task <usd>', 'Abort task if cost exceeds this ($0 = unlimited)', parseFloat)
   .option('--max-cost-per-run <usd>',  'Abort run if cost exceeds this ($0 = unlimited)', parseFloat)
+  .option('--setup-local-domain',      'Add 127.0.0.1 cloudy.local to /etc/hosts (non-interactive)')
   .action(async (opts: {
     nonInteractive?: boolean;
     planningModel?: string;
@@ -55,6 +82,7 @@ export const setupCommand = new Command('setup')
     dashboardPort?: number;
     maxCostPerTask?: number;
     maxCostPerRun?: number;
+    setupLocalDomain?: boolean;
   }) => {
     const cwd = process.cwd();
     const config = await loadConfig(cwd);
@@ -77,6 +105,10 @@ export const setupCommand = new Command('setup')
       if (opts.dashboardPort !== undefined) config.dashboardPort = opts.dashboardPort;
       if (opts.maxCostPerTask !== undefined) config.maxCostPerTaskUsd = opts.maxCostPerTask;
       if (opts.maxCostPerRun  !== undefined) config.maxCostPerRunUsd  = opts.maxCostPerRun;
+
+      if (opts.setupLocalDomain) {
+        await tryAddCloudyLocal();
+      }
 
       await saveConfig(cwd, config);
       console.log(c(green, '✅  config saved (non-interactive)'));
@@ -235,6 +267,23 @@ export const setupCommand = new Command('setup')
       },
     });
     if (p.isCancel(dashboardPort)) { p.cancel('Cancelled.'); process.exit(0); }
+
+    // ── cloudy.local hostname ─────────────────────────────────────────────
+    const hostsContent = await fs.readFile('/etc/hosts', 'utf-8').catch(() => '');
+    const cloudyLocalAlreadySet = hostsContent.includes('cloudy.local');
+
+    if (!cloudyLocalAlreadySet) {
+      const setupLocalDomain = await p.confirm({
+        message: 'Set up cloudy.local hostname? (adds 127.0.0.1 cloudy.local to /etc/hosts — may need sudo)',
+        initialValue: false,
+      });
+      if (p.isCancel(setupLocalDomain)) { p.cancel('Cancelled.'); process.exit(0); }
+      if (setupLocalDomain) {
+        await tryAddCloudyLocal();
+      }
+    } else {
+      p.log.info(`${c(green, '✓')}  cloudy.local already in /etc/hosts`);
+    }
 
     // ── Apply & save ──────────────────────────────────────────────────────────
     config.models.planning   = planningModel as ClaudeModel;

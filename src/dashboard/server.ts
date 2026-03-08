@@ -1,15 +1,81 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { readFileSync } from 'node:fs';
+import fs from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { Socket } from 'node:net';
 import type { DashboardCommand, OrchestratorEvent, ProjectState } from '../core/types.js';
 import { computeAcceptKey, encodeWebSocketFrame, decodeWebSocketFrame } from './ws-frames.js';
+import { STATE_FILE } from '../config/defaults.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 // ── Dashboard Server ────────────────────────────────────────────────
+
+// ── Run summary type (for /api/runs) ────────────────────────────────
+
+export interface RunSummary {
+  name: string;
+  status: 'running' | 'completed' | 'failed' | 'idle';
+  completedTasks: number;
+  totalTasks: number;
+  costUsd: number;
+  startedAt: string | null;
+}
+
+async function readRunSummaries(runsDir: string): Promise<RunSummary[]> {
+  const summaries: RunSummary[] = [];
+  try {
+    const entries = await fs.readdir(runsDir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const stateFile = join(runsDir, entry.name, STATE_FILE);
+      try {
+        const raw = await fs.readFile(stateFile, 'utf-8');
+        const state = JSON.parse(raw) as ProjectState;
+        const tasks = state.plan?.tasks ?? [];
+        const completedTasks = tasks.filter((t) => t.status === 'completed' || t.status === 'skipped').length;
+        const failedTasks = tasks.filter((t) => t.status === 'failed').length;
+        const inProgress = tasks.some((t) => t.status === 'in_progress');
+        let status: RunSummary['status'] = 'idle';
+        if (state.completedAt) {
+          status = failedTasks > 0 ? 'failed' : 'completed';
+        } else if (inProgress || state.startedAt) {
+          status = 'running';
+        }
+        summaries.push({
+          name: entry.name,
+          status,
+          completedTasks,
+          totalTasks: tasks.length,
+          costUsd: state.costSummary?.totalEstimatedUsd ?? 0,
+          startedAt: state.startedAt ?? null,
+        });
+      } catch {
+        // No state.json yet or malformed — still include as idle with minimal info
+        summaries.push({
+          name: entry.name,
+          status: 'idle',
+          completedTasks: 0,
+          totalTasks: 0,
+          costUsd: 0,
+          startedAt: null,
+        });
+      }
+    }
+  } catch {
+    // runsDir doesn't exist yet — return empty
+  }
+  // Sort by startedAt desc (null last)
+  summaries.sort((a, b) => {
+    if (!a.startedAt && !b.startedAt) return 0;
+    if (!a.startedAt) return 1;
+    if (!b.startedAt) return -1;
+    return b.startedAt.localeCompare(a.startedAt);
+  });
+  return summaries;
+}
 
 export async function startDashboardServer(
   port: number,
@@ -17,9 +83,13 @@ export async function startDashboardServer(
   options?: {
     onCommand?: (cmd: DashboardCommand) => void;
     getState?: () => ProjectState;
+    /** Optional path to .cloudy/runs/ dir — enables /api/runs and /api/switch-run */
+    runsDir?: string;
   },
 ): Promise<{ port: number; broadcast: (event: OrchestratorEvent) => void; waitForClient: (timeoutMs?: number) => Promise<void>; close: () => Promise<void> }> {
   const clients = new Set<Socket>();
+  // Track which run dir the WS is currently streaming (can be switched at runtime)
+  let currentRunDir: string | null = options?.runsDir ?? null;
 
   function broadcast(event: OrchestratorEvent): void {
     const frame = encodeWebSocketFrame(JSON.stringify(event));
@@ -45,6 +115,47 @@ export async function startDashboardServer(
       const currentState = options?.getState?.() ?? state;
       res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
       res.end(JSON.stringify(currentState));
+      return;
+    }
+
+    if (url === '/api/runs' && req.method === 'GET') {
+      const runsDir = options?.runsDir;
+      if (!runsDir) {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end('[]');
+        return;
+      }
+      readRunSummaries(runsDir).then((summaries) => {
+        res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+        res.end(JSON.stringify(summaries));
+      }).catch(() => {
+        res.writeHead(500);
+        res.end('error reading runs');
+      });
+      return;
+    }
+
+    if (url === '/api/switch-run' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+      req.on('end', () => {
+        try {
+          const { runName } = JSON.parse(body) as { runName: string };
+          if (options?.runsDir && runName) {
+            currentRunDir = join(options.runsDir, runName);
+            // Broadcast a switch notification to all connected clients
+            const switchEvent = encodeWebSocketFrame(JSON.stringify({ type: 'run_switched', runName }));
+            for (const socket of clients) {
+              if (!socket.destroyed) socket.write(switchEvent);
+            }
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' });
+          res.end(JSON.stringify({ ok: true, runName }));
+        } catch {
+          res.writeHead(400);
+          res.end('invalid body');
+        }
+      });
       return;
     }
 

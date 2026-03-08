@@ -345,6 +345,11 @@ export function App() {
     rawDispatch({ type: 'clear_output' });
   }
 
+  function handleSwitchRun(_runName: string) {
+    // After switching, reset state and let the WS re-init bring the new run's data
+    rawDispatch({ type: 'clear_output' });
+  }
+
   return (
     <div className="app-root">
       <Header
@@ -354,6 +359,7 @@ export function App() {
         wsConnected={state.wsConnected}
         onStartRun={() => sendCommand('start_run')}
         onStopRun={() => sendCommand('stop_run')}
+        onSwitchRun={handleSwitchRun}
       />
 
       {state.approvalRequest && (

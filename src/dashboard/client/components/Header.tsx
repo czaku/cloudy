@@ -2,6 +2,7 @@ import React from 'react';
 import type { RunStatus } from '../types';
 import { formatElapsedShort } from '../utils/formatters';
 import { ThemeToggle } from './ThemeToggle';
+import { RunPicker } from './RunPicker';
 
 interface HeaderProps {
   goal: string | undefined;
@@ -10,6 +11,7 @@ interface HeaderProps {
   wsConnected: boolean;
   onStartRun: () => void;
   onStopRun: () => void;
+  onSwitchRun?: (runName: string) => void;
 }
 
 const STATUS_LABELS: Record<RunStatus, string> = {
@@ -28,7 +30,7 @@ const STATUS_ICONS: Record<RunStatus, string> = {
   stopped: '■',
 };
 
-export function Header({ goal, runStatus, elapsedMs, wsConnected, onStartRun, onStopRun }: HeaderProps) {
+export function Header({ goal, runStatus, elapsedMs, wsConnected, onStartRun, onStopRun, onSwitchRun }: HeaderProps) {
   const isRunning = runStatus === 'running';
 
   return (
@@ -40,6 +42,7 @@ export function Header({ goal, runStatus, elapsedMs, wsConnected, onStartRun, on
         <div className="goal-text">{goal ?? 'Waiting for plan...'}</div>
       </div>
       <div className="header-right">
+        {onSwitchRun && <RunPicker onSwitch={onSwitchRun} />}
         <div className="control-buttons">
           <button
             className="ctrl-btn ctrl-btn-start"
