@@ -4,6 +4,7 @@ import * as readline from 'node:readline';
 import { Command } from 'commander';
 import * as p from '@clack/prompts';
 import { createPlan } from '../../planner/planner.js';
+import type { PlanQuestion } from '../../planner/planner.js';
 import { loadConfig, saveConfig } from '../../config/config.js';
 import {
   mergeModelConfig,
@@ -384,13 +385,14 @@ export const initCommand = new Command('scope')
     spinner.stop(`Plan ready  ·  ${plan.tasks.length} tasks  ·  ${elapsed}s`);
 
     // ── Planning Q&A ──────────────────────────────────────────────────────────
-    const planQuestions: string[] = (plan as any)._questions ?? [];
+    const planQuestions: PlanQuestion[] = (plan as any)._questions ?? [];
     delete (plan as any)._questions;
 
     const autoAnswerModel: ClaudeModel = opts.questionsAutoAnsweringModel
       ? (parseModelFlag(opts.questionsAutoAnsweringModel) as ClaudeModel)
       : (planningModel as ClaudeModel);
     const questionTimeoutMs = (opts.questionsTimeout ?? 60) * 1000;
+    const timeoutSec = opts.questionsTimeout ?? 60;
     const isInteractive = opts.review && process.stdout.isTTY && process.stdin.isTTY;
 
     if (planQuestions.length > 0) {
@@ -399,23 +401,45 @@ export const initCommand = new Command('scope')
       p.log.info(`💭  ${planQuestions.length} planning question(s) — answer to refine the plan:`);
 
       for (let qi = 0; qi < planQuestions.length; qi++) {
-        const question = planQuestions[qi];
+        const q = planQuestions[qi];
         const questionId = `q${qi + 1}`;
         let answer: string | null = null;
 
         // Always show the question so it's visible in logs and CI output
-        console.log(`\n  ${c(cyan + bold, `Question ${qi + 1}/${planQuestions.length}:`)}  ${question}`);
+        console.log(`\n  ${c(cyan + bold, `Question ${qi + 1}/${planQuestions.length}:`)}  ${q.text}`);
+        if (q.options && q.options.length > 0) {
+          console.log(`  ${c(dim, 'Options: ' + q.options.join(' / '))}`);
+        }
 
         if (isInteractive) {
-          console.log(`  ${c(dim, `(${opts.questionsTimeout ?? 60}s to answer — press Enter to skip and let the AI assume)`)}`);
+          console.log(`  ${c(dim, `(${timeoutSec}s to answer — press Enter to skip and let the AI assume)`)}`);
 
-          answer = await promptWithTimeout(
-            `  ${c(bold, '→')} `,
-            questionTimeoutMs,
-            (remaining) => {
-              process.stdout.write(`\r  ${c(dim, `⏱  ${remaining}s remaining…`)}  `);
-            },
-          );
+          if (q.type === 'select' && q.options && q.options.length > 0) {
+            const selected = await p.select({
+              message: q.text,
+              options: q.options.map((v) => ({ value: v, label: v })),
+            });
+            answer = p.isCancel(selected) ? null : (selected as string);
+          } else if (q.type === 'multiselect' && q.options && q.options.length > 0) {
+            const selected = await p.multiselect({
+              message: q.text,
+              options: q.options.map((v) => ({ value: v, label: v })),
+              required: false,
+            });
+            answer = p.isCancel(selected) ? null : (selected as string[]).join(', ');
+          } else if (q.type === 'confirm') {
+            const confirmed = await p.confirm({ message: q.text });
+            answer = p.isCancel(confirmed) ? null : (confirmed ? 'yes' : 'no');
+          } else {
+            // text (default) — use existing promptWithTimeout
+            answer = await promptWithTimeout(
+              `  ${c(bold, '→')} `,
+              questionTimeoutMs,
+              (remaining) => {
+                process.stdout.write(`\r  ${c(dim, `⏱  ${remaining}s remaining…`)}  `);
+              },
+            );
+          }
 
           if (answer !== null) {
             process.stdout.write('\r' + ' '.repeat(40) + '\r');
@@ -427,14 +451,15 @@ export const initCommand = new Command('scope')
         } else if (process.stdin.readable && !process.stdin.isTTY) {
           // Daemon / piped mode — emit structured marker so the web UI can show a question card,
           // then wait on stdin for the answer with a timeout.
-          const timeoutSec = opts.questionsTimeout ?? 60;
           process.stdout.write(`\nCLOUDY_PLAN_QUESTION:${JSON.stringify({
-            question,
+            questionType: q.type,
+            options: q.options,
+            question: q.text,
             index: qi + 1,
             total: planQuestions.length,
             timeoutSec,
           })}\n`);
-          answer = await new Promise<string | null>((resolve) => {
+          const rawAnswer = await new Promise<string | null>((resolve) => {
             let buf = '';
             const timer = setTimeout(() => { resolve(null); }, timeoutSec * 1000);
             const onData = (chunk: Buffer) => {
@@ -449,16 +474,36 @@ export const initCommand = new Command('scope')
             };
             process.stdin.on('data', onData);
           });
+          // For select/multiselect/confirm, the answer from stdin may be JSON-encoded
+          if (rawAnswer !== null) {
+            try {
+              const parsed = JSON.parse(rawAnswer);
+              if (Array.isArray(parsed)) {
+                answer = parsed.join(', ');
+              } else if (typeof parsed === 'boolean') {
+                answer = parsed ? 'yes' : 'no';
+              } else {
+                answer = String(parsed);
+              }
+            } catch {
+              answer = rawAnswer;
+            }
+          } else {
+            answer = null;
+          }
         } else {
           console.log(`  ${c(dim, '(non-interactive — AI will auto-decide)')}`);
         }
 
         if (answer === null) {
           // AI auto-assumption using the configured model
+          const optionsHint = q.options && q.options.length > 0
+            ? `\nAvailable options: ${q.options.join(', ')}`
+            : '';
           const assumptionPrompt = `You are a technical planner resolving an ambiguous design question so that implementation can proceed.
 ${specContent ? `\n## Spec Context (first 3000 chars)\n${specContent.slice(0, 3000)}\n` : ''}${claudeMdContent ? `\n## Project Context (CLAUDE.md)\n${claudeMdContent.slice(0, 2000)}\n` : ''}
 ## Question
-${question}
+${q.text}${optionsHint}
 
 ## Your Task
 Make a reasonable technical assumption to resolve this question. Base your assumption on:
@@ -469,10 +514,13 @@ Make a reasonable technical assumption to resolve this question. Base your assum
 Respond with ONLY valid JSON:
 {"assumption": "One concise sentence stating the decision", "reasoning": "One sentence explaining why"}`;
 
-          let assumptionResult = { assumption: `Proceeding with default approach for: ${question}`, reasoning: 'Spec context insufficient for a specific assumption; defaulting to common patterns.' };
+          let assumptionResult = { assumption: `Proceeding with default approach for: ${q.text}`, reasoning: 'Spec context insufficient for a specific assumption; defaulting to common patterns.' };
           try {
             const { runClaude } = await import('../../executor/claude-runner.js');
-            const result = await runClaude({ prompt: assumptionPrompt, model: autoAnswerModel, cwd });
+            const result = await Promise.race([
+              runClaude({ prompt: assumptionPrompt, model: autoAnswerModel, cwd }),
+              new Promise<never>((_, reject) => setTimeout(() => reject(new Error('assumption timeout')), 30_000)),
+            ]);
             if (result.success) {
               const jsonMatch = result.output.match(/\{[\s\S]*\}/);
               if (jsonMatch) {
@@ -489,7 +537,7 @@ Respond with ONLY valid JSON:
 
           decisionLog.push({
             questionId,
-            question,
+            question: q.text,
             answeredBy: 'agent',
             answer: assumptionResult.assumption,
             reasoning: assumptionResult.reasoning,
@@ -498,7 +546,7 @@ Respond with ONLY valid JSON:
         } else {
           decisionLog.push({
             questionId,
-            question,
+            question: q.text,
             answeredBy: 'human',
             answer,
             timestamp: new Date().toISOString(),

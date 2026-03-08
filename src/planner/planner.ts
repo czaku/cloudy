@@ -6,6 +6,13 @@ import { loadRecentRunInsights } from '../knowledge/run-logger.js';
 import { log } from '../utils/logger.js';
 import fs from 'node:fs/promises';
 
+export interface PlanQuestion {
+  type: 'text' | 'select' | 'multiselect' | 'confirm';
+  text: string;
+  options?: string[];
+  defaultValue?: string;
+}
+
 interface RawTask {
   id: string;
   title: string;
@@ -19,7 +26,7 @@ interface RawTask {
 
 interface RawPlan {
   tasks: RawTask[];
-  questions?: string[];
+  questions?: Array<PlanQuestion | string>;
 }
 
 /**
@@ -399,9 +406,23 @@ function parsePlanOutput(output: string): RawPlan {
     if (!parsed.tasks || !Array.isArray(parsed.tasks)) {
       throw new Error('Response missing "tasks" array');
     }
+    const questions: PlanQuestion[] = Array.isArray(parsed.questions)
+      ? parsed.questions.map((q) => {
+          if (typeof q === 'string') {
+            return { type: 'text' as const, text: q };
+          }
+          // Already structured — ensure required fields
+          return {
+            type: q.type ?? 'text',
+            text: q.text,
+            options: q.options,
+            defaultValue: q.defaultValue,
+          } as PlanQuestion;
+        }).filter((q) => q.text && q.text.trim())
+      : [];
     return {
       tasks: parsed.tasks,
-      questions: Array.isArray(parsed.questions) ? parsed.questions.filter(q => typeof q === 'string' && q.trim()) : [],
+      questions,
     };
   } catch (err) {
     throw new Error(

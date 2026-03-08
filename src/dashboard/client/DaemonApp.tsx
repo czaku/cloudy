@@ -43,6 +43,24 @@ interface SavedPlan {
 
 type ActiveTab = 'dashboard' | 'chat' | 'plan' | 'run' | 'history' | 'memory';
 
+interface PlanChatMsg {
+  id: string;
+  kind: 'agent-log' | 'question' | 'answer' | 'summary' | 'error';
+  logs?: Array<{ level: string; msg: string }>;
+  question?: {
+    questionType: string;
+    options?: string[];
+    text: string;
+    index: number;
+    total: number;
+    timeoutSec: number;
+  };
+  answered?: string | string[] | boolean;
+  answerText?: string;
+  plan?: SavedPlan;
+  errorText?: string;
+}
+
 interface CCSessionStats {
   inputTokens: number;
   outputTokens: number;
@@ -1290,6 +1308,28 @@ circle.traffic-light-active[fill="#f59e0b"] {
 .activity-text { font-weight: 600; }
 .activity-sep { opacity: 0.4; }
 .activity-stat { font-family: 'SF Mono', monospace; }
+/* ── Plan chat bubbles ── */
+.plan-chat-scroll { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+.pcb-agent { max-width: 80%; align-self: flex-start; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px 12px 12px 2px; padding: 10px 14px; }
+.pcb-user { max-width: 80%; align-self: flex-end; background: rgba(167,139,250,0.15); border: 1px solid rgba(167,139,250,0.3); border-radius: 12px 12px 2px 12px; padding: 10px 14px; }
+.pcb-label { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 4px; }
+.pcb-log-lines { display: flex; flex-direction: column; gap: 2px; }
+.pcb-log-line { font-size: 11px; font-family: monospace; color: var(--text-secondary); }
+.pcb-log-line.warn { color: #fb923c; }
+.pcb-q-text { font-size: 13px; font-weight: 600; color: var(--text-primary); margin-bottom: 10px; line-height: 1.5; }
+.pcb-q-badge { font-size: 10px; font-weight: 700; color: #a78bfa; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+.pcb-select-options { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.pcb-select-option { padding: 5px 12px; border-radius: 16px; border: 1px solid var(--border); background: var(--bg-secondary); color: var(--text-primary); font-size: 12px; cursor: pointer; font-family: inherit; transition: all 0.12s; }
+.pcb-select-option:hover, .pcb-select-option.selected { border-color: #a78bfa; background: rgba(167,139,250,0.12); color: #a78bfa; }
+.pcb-confirm-btns { display: flex; gap: 8px; margin-bottom: 10px; }
+.pcb-q-textarea { width: 100%; background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; color: var(--text-primary); font-size: 12px; font-family: monospace; padding: 8px; resize: none; outline: none; margin-bottom: 10px; box-sizing: border-box; }
+.pcb-q-textarea:focus { border-color: #a78bfa; }
+.pcb-q-actions { display: flex; gap: 8px; }
+.pcb-q-timeout { font-size: 10px; color: var(--text-muted); margin-top: 6px; }
+.pcb-answered-text { font-size: 11px; color: var(--text-muted); font-style: italic; }
+.pcb-summary-tasks { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
+.pcb-summary-task { font-size: 11px; color: var(--text-secondary); display: flex; gap: 6px; align-items: flex-start; }
+.pcb-error { color: #f87171; }
 `;
 
 function injectStyles() {
@@ -1402,6 +1442,164 @@ const QUICK_SEARCHES = [
   { label: '🚀 launch', q: 'launch' },
 ];
 
+// ── PlanChatBubble ─────────────────────────────────────────────────────
+
+interface PlanChatBubbleProps {
+  msg: PlanChatMsg;
+  isPending: boolean;
+  onAnswer: (answer: string, display: string) => void;
+  onAiDecide: () => void;
+}
+
+function PlanChatBubble({ msg, isPending, onAnswer, onAiDecide }: PlanChatBubbleProps) {
+  const [textAnswer, setTextAnswer] = React.useState('');
+  const [selectedOptions, setSelectedOptions] = React.useState<string[]>([]);
+
+  if (msg.kind === 'agent-log') {
+    return (
+      <div className="pcb-agent">
+        <div className="pcb-label">Agent</div>
+        <div className="pcb-log-lines">
+          {(msg.logs ?? []).map((l, i) => (
+            <div key={i} className={`pcb-log-line${l.level === 'warn' ? ' warn' : ''}`}>
+              {l.level === 'warn' ? '⚠ ' : ''}{l.msg}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (msg.kind === 'answer') {
+    return (
+      <div className="pcb-user">
+        <div className="pcb-label" style={{ textAlign: 'right' }}>You</div>
+        <div style={{ fontSize: 13, color: 'var(--text-primary)' }}>{msg.answerText}</div>
+      </div>
+    );
+  }
+
+  if (msg.kind === 'error') {
+    return (
+      <div className="pcb-agent pcb-error">
+        <div className="pcb-label" style={{ color: '#f87171' }}>Error</div>
+        <div style={{ fontSize: 13 }}>{msg.errorText}</div>
+      </div>
+    );
+  }
+
+  if (msg.kind === 'summary' && msg.plan) {
+    const plan = msg.plan;
+    return (
+      <div className="pcb-agent">
+        <div className="pcb-label" style={{ color: '#22c55e' }}>Plan Ready</div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 8 }}>
+          <span style={{ fontSize: 20, fontWeight: 800, color: '#22c55e' }}>{plan.tasks.length} tasks</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{plan.goal}</span>
+        </div>
+        <div className="pcb-summary-tasks">
+          {plan.tasks.map((t, i) => (
+            <div key={t.id} className="pcb-summary-task">
+              <span style={{ color: 'var(--text-muted)', minWidth: 16 }}>{i + 1}</span>
+              <span>{t.title}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (msg.kind === 'question' && msg.question) {
+    const q = msg.question;
+    const isAnswered = msg.answered !== undefined;
+
+    return (
+      <div className="pcb-agent" style={{ maxWidth: '90%' }}>
+        <div className="pcb-q-badge">Question {q.index} of {q.total}</div>
+        <div className="pcb-q-text">{q.text}</div>
+
+        {isAnswered ? (
+          <div className="pcb-answered-text">
+            Answered: {Array.isArray(msg.answered) ? (msg.answered as string[]).join(', ') : String(msg.answered)}
+          </div>
+        ) : isPending ? (
+          <>
+            {(q.questionType === 'select') && q.options && (
+              <div className="pcb-select-options">
+                {q.options.map((opt) => (
+                  <button
+                    key={opt}
+                    className="pcb-select-option"
+                    onClick={() => onAnswer(opt, opt)}
+                  >{opt}</button>
+                ))}
+              </div>
+            )}
+
+            {(q.questionType === 'multiselect') && q.options && (
+              <>
+                <div className="pcb-select-options">
+                  {q.options.map((opt) => (
+                    <button
+                      key={opt}
+                      className={`pcb-select-option${selectedOptions.includes(opt) ? ' selected' : ''}`}
+                      onClick={() => setSelectedOptions((prev) =>
+                        prev.includes(opt) ? prev.filter((o) => o !== opt) : [...prev, opt]
+                      )}
+                    >{opt}</button>
+                  ))}
+                </div>
+                <div className="pcb-q-actions">
+                  <button className="plan-action-btn"
+                    onClick={() => onAnswer(selectedOptions.join(', '), selectedOptions.join(', '))}
+                    disabled={selectedOptions.length === 0}
+                  >Send</button>
+                  <button className="daemon-btn" onClick={onAiDecide}>Let AI decide</button>
+                </div>
+              </>
+            )}
+
+            {q.questionType === 'confirm' && (
+              <div className="pcb-confirm-btns">
+                <button className="plan-action-btn" onClick={() => onAnswer('yes', 'Yes')}>Yes</button>
+                <button className="daemon-btn" onClick={() => onAnswer('no', 'No')}>No</button>
+              </div>
+            )}
+
+            {(q.questionType === 'text' || (q.questionType !== 'select' && q.questionType !== 'multiselect' && q.questionType !== 'confirm')) && (
+              <>
+                <textarea
+                  className="pcb-q-textarea"
+                  rows={3}
+                  placeholder="Type your answer… (leave blank to let AI decide)"
+                  value={textAnswer}
+                  onChange={(e) => setTextAnswer(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      const val = textAnswer.trim();
+                      if (val) onAnswer(val, val); else onAiDecide();
+                    }
+                  }}
+                  autoFocus
+                />
+                <div className="pcb-q-actions">
+                  <button className="plan-action-btn" onClick={() => { const v = textAnswer.trim(); if (v) onAnswer(v, v); else onAiDecide(); }}>Send</button>
+                  <button className="daemon-btn" onClick={onAiDecide}>Let AI decide</button>
+                </div>
+              </>
+            )}
+
+            <div className="pcb-q-timeout">Auto-answers in {q.timeoutSec}s if no response</div>
+          </>
+        ) : null}
+      </div>
+    );
+  }
+
+  return null;
+}
+
 function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
   // ── Left panel state ────────────────────────────────────────────────
   const [specs, setSpecs] = useState<SpecFile[]>([]);
@@ -1416,13 +1614,10 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
   // ── Planning (scope) state ──────────────────────────────────────────
   const [selectedSpecs, setSelectedSpecs] = useState<Set<string>>(new Set());
   const [showPlanOutput, setShowPlanOutput] = useState(false);
-  const [qaAnswer, setQaAnswer] = useState('');
   const [planModel, setPlanModel] = useState('sonnet');
-  const [planQuestion, setPlanQuestion] = useState<{ question: string; index: number; total: number; timeoutSec: number } | null>(null);
-  const [planError, setPlanError] = useState<string | null>(null);
-  const [completedPlan, setCompletedPlan] = useState<SavedPlan | null>(null);
-  const [planLogs, setPlanLogs] = useState<Array<{ level: string; msg: string }>>([]);
-  const planLogsEndRef = useRef<HTMLDivElement>(null);
+  const [chatMsgs, setChatMsgs] = useState<PlanChatMsg[]>([]);
+  const [pendingQuestion, setPendingQuestion] = useState<PlanChatMsg | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const isPlanning = project.activeProcess === 'init';
 
   const MAX_SPEC_FILE_BYTES = 30_000;
@@ -1475,45 +1670,91 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
 
   useEffect(() => { loadSavedPlans(); }, [loadSavedPlans]);
 
-  // Refresh saved plans + capture completed plan when plan_saved SSE event arrives
+  // Refresh saved plans + append summary chat msg when plan_saved SSE event arrives
   useEffect(() => {
     if (onPlanSavedEvent) {
       setSavedPlans((prev) => [onPlanSavedEvent, ...prev.filter((p) => p.id !== onPlanSavedEvent.id)]);
-      setCompletedPlan(onPlanSavedEvent);
-      setPlanQuestion(null);
-      setPlanError(null);
+      setPendingQuestion(null);
+      setChatMsgs((prev) => [
+        ...prev,
+        {
+          id: `summary-${Date.now()}`,
+          kind: 'summary',
+          plan: onPlanSavedEvent,
+        },
+      ]);
     }
   }, [onPlanSavedEvent]);
 
   // Listen for plan_question / plan_progress / plan_failed events scoped to this project
   useEffect(() => {
     const es = new EventSource('/api/live');
+    const lastAgentMsgTimeRef = { current: 0 };
     es.onmessage = (e) => {
-      let ev: { type: string; projectId?: string; question?: string; index?: number; total?: number; timeoutSec?: number; level?: string; msg?: string } | null = null;
+      let ev: { type: string; projectId?: string; questionType?: string; question?: string; options?: string[]; index?: number; total?: number; timeoutSec?: number; level?: string; msg?: string } | null = null;
       try { ev = JSON.parse(e.data); } catch { return; }
       if (!ev || ev.projectId !== project.id) return;
-      if (ev.type === 'plan_question') {
-        setPlanQuestion({ question: ev.question!, index: ev.index!, total: ev.total!, timeoutSec: ev.timeoutSec ?? 60 });
-      } else if (ev.type === 'plan_progress') {
-        setPlanLogs((prev) => [...prev.slice(-49), { level: ev!.level ?? 'info', msg: ev!.msg ?? '' }]);
+      if (ev.type === 'plan_progress') {
+        const now = Date.now();
+        const logEntry = { level: ev.level ?? 'info', msg: ev.msg ?? '' };
+        setChatMsgs((prev) => {
+          const last = prev[prev.length - 1];
+          if (last && last.kind === 'agent-log' && now - lastAgentMsgTimeRef.current < 3000) {
+            // Append to last agent-log bubble
+            const updated = { ...last, logs: [...(last.logs ?? []), logEntry] };
+            return [...prev.slice(0, -1), updated];
+          }
+          lastAgentMsgTimeRef.current = now;
+          return [
+            ...prev,
+            {
+              id: `log-${now}-${Math.random()}`,
+              kind: 'agent-log' as const,
+              logs: [logEntry],
+            },
+          ];
+        });
+        lastAgentMsgTimeRef.current = now;
+      } else if (ev.type === 'plan_question') {
+        const qMsg: PlanChatMsg = {
+          id: `q-${Date.now()}`,
+          kind: 'question',
+          question: {
+            questionType: ev.questionType ?? 'text',
+            options: ev.options,
+            text: ev.question ?? '',
+            index: ev.index ?? 1,
+            total: ev.total ?? 1,
+            timeoutSec: ev.timeoutSec ?? 60,
+          },
+        };
+        setChatMsgs((prev) => [...prev, qMsg]);
+        setPendingQuestion(qMsg);
       } else if (ev.type === 'plan_failed') {
-        setPlanQuestion(null);
-        setPlanError('Planning failed — check your spec or try again.');
+        setPendingQuestion(null);
+        setChatMsgs((prev) => [
+          ...prev,
+          {
+            id: `err-${Date.now()}`,
+            kind: 'error',
+            errorText: 'Planning failed — check your spec or try again.',
+          },
+        ]);
       } else if (ev.type === 'plan_completed' && !onPlanSavedEvent) {
-        setPlanQuestion(null);
+        setPendingQuestion(null);
       }
     };
     return () => es.close();
   }, [project.id]);
 
   useEffect(() => {
-    if (isPlanning) { setShowPlanOutput(true); setCompletedPlan(null); setPlanError(null); setPlanQuestion(null); setPlanLogs([]); }
+    if (isPlanning) { setShowPlanOutput(true); setChatMsgs([]); setPendingQuestion(null); }
   }, [isPlanning]);
 
-  // Auto-scroll plan logs to bottom
+  // Auto-scroll chat to bottom
   useEffect(() => {
-    planLogsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [planLogs]);
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMsgs]);
 
   // ── Left panel: planning actions ────────────────────────────────────
   function toggleSpec(specPath: string) {
@@ -1535,14 +1776,24 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
     }).catch(() => {});
   }
 
-  async function handleAnswer() {
-    await apiPost(`/api/projects/${project.id}/plan-input`, { answer: qaAnswer });
-    setQaAnswer('');
-  }
-
-  async function handleAiDecide() {
-    await apiPost(`/api/projects/${project.id}/plan-input`, { answer: '' });
-    setQaAnswer('');
+  async function submitAnswer(answerText: string, displayText: string) {
+    if (!pendingQuestion) return;
+    // Mark the question as answered in chatMsgs
+    const qId = pendingQuestion.id;
+    setChatMsgs((prev) =>
+      prev.map((m) => m.id === qId ? { ...m, answered: answerText } : m)
+    );
+    // Append right-aligned answer bubble
+    setChatMsgs((prev) => [
+      ...prev,
+      {
+        id: `ans-${Date.now()}`,
+        kind: 'answer',
+        answerText: displayText,
+      },
+    ]);
+    setPendingQuestion(null);
+    await apiPost(`/api/projects/${project.id}/plan-input`, { answer: answerText });
   }
 
   function handleBackFromPlan() {
@@ -1559,6 +1810,8 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
   // ─── Render ──────────────────────────────────────────────────────────
   // When planning is active or output exists, switch to full-height chat view
   if (showPlanOutput) {
+    const hasError = chatMsgs.some((m) => m.kind === 'error');
+    const hasSummary = chatMsgs.some((m) => m.kind === 'summary');
     return (
       <div className="plan-split">
         <div className="plan-chat-view">
@@ -1568,8 +1821,9 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
             <div className="plan-chat-title">
               {isPlanning
                 ? <><span className="spinner" style={{ width: 12, height: 12, flexShrink: 0 }} />Planning…</>
-                : planError ? '✗ Planning failed'
-                : '✓ Plan ready'}
+                : hasError ? '✗ Planning failed'
+                : hasSummary ? '✓ Plan ready'
+                : 'Planning'}
             </div>
             {isPlanning && (
               <button className="plan-stop-btn" style={{ marginLeft: 'auto' }}
@@ -1579,145 +1833,79 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
             )}
           </div>
 
-          {/* Body */}
-          <div className="plan-status-body">
-            {/* Error state */}
-            {planError && (
-              <div className="plan-status-error">
-                <span style={{ fontSize: 24 }}>✗</span>
-                <span>{planError}</span>
-                <button className="plan-chat-back" style={{ marginTop: 8 }} onClick={handleBackFromPlan}>← Back to specs</button>
+          {/* Chat body */}
+          <div className="plan-chat-scroll">
+            {/* Empty / initial state while planning hasn't emitted anything yet */}
+            {chatMsgs.length === 0 && isPlanning && (
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 12, color: 'var(--text-muted)', fontSize: 12 }}>
+                <span className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
+                <span>Claude is reading your spec…</span>
+                <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>This takes 2–5 minutes. No input needed.</span>
               </div>
             )}
 
-            {/* Running — spinner + live log */}
-            {isPlanning && !planQuestion && (
-              <div className="plan-status-working">
-                <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
-                <div className="plan-status-label">
-                  {planLogs.length > 0 ? planLogs[planLogs.length - 1].msg : 'Claude is reading your spec…'}
-                </div>
-                <div className="plan-status-sub">This takes 2–5 minutes. No input needed.</div>
-                {planLogs.length > 0 && (
-                  <div className="plan-log-list">
-                    {planLogs.map((l, i) => (
-                      <div key={i} className={`plan-log-line${l.level === 'warn' ? ' warn' : l.level === 'error' ? ' error' : ''}`}>
-                        {l.level === 'warn' ? '⚠ ' : ''}{l.msg}
-                      </div>
-                    ))}
-                    <div ref={planLogsEndRef} />
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Question card */}
-            {isPlanning && planQuestion && (
-              <div className="plan-question-card">
-                <div className="plan-question-badge">Question {planQuestion.index} of {planQuestion.total}</div>
-                <div className="plan-question-text">{planQuestion.question}</div>
-                <textarea className="plan-question-input" rows={3}
-                  placeholder="Type your answer… (leave blank to let AI decide)"
-                  value={qaAnswer}
-                  onChange={(e) => setQaAnswer(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      apiPost(`/api/projects/${project.id}/plan-input`, { answer: qaAnswer }).catch(() => {});
-                      setQaAnswer('');
-                      setPlanQuestion(null);
-                    }
-                  }}
-                  autoFocus
-                />
-                <div className="plan-question-actions">
-                  <button className="plan-action-btn" onClick={() => {
-                    apiPost(`/api/projects/${project.id}/plan-input`, { answer: qaAnswer }).catch(() => {});
-                    setQaAnswer('');
-                    setPlanQuestion(null);
-                  }}>Send answer</button>
-                  <button className="daemon-btn" onClick={() => {
-                    apiPost(`/api/projects/${project.id}/plan-input`, { answer: '' }).catch(() => {});
-                    setQaAnswer('');
-                    setPlanQuestion(null);
-                  }}>Let AI decide</button>
-                </div>
-                <div className="plan-question-timeout">Auto-answers in {planQuestion.timeoutSec}s if no response</div>
-              </div>
-            )}
-
-            {/* Completed — task list */}
-            {!isPlanning && completedPlan && (
-              <div className="plan-result">
-                <div className="plan-result-header">
-                  <span className="plan-result-count">{completedPlan.tasks.length} tasks</span>
-                  <span className="plan-result-goal">{completedPlan.goal}</span>
-                </div>
-                <div className="plan-result-tasks">
-                  {completedPlan.tasks.map((t, i) => (
-                    <div key={t.id} className="plan-result-task">
-                      <span className="plan-result-task-num">{i + 1}</span>
-                      <span className="plan-result-task-title">{t.title}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="plan-result-actions">
-                  <button className="plan-action-btn" onClick={handleBackFromPlan}>← Back to specs</button>
-                </div>
-              </div>
-            )}
+            {chatMsgs.map((msg) => (
+              <PlanChatBubble
+                key={msg.id}
+                msg={msg}
+                isPending={pendingQuestion?.id === msg.id}
+                onAnswer={(answer, display) => submitAnswer(answer, display)}
+                onAiDecide={() => submitAnswer('', 'AI decides…')}
+              />
+            ))}
+            <div ref={chatEndRef} />
           </div>
         </div>
 
         {/* ── Right panel: Saved plans (always visible) ── */}
         <div className="plan-right">
-        <div className="plan-right-header">
-          <IconPipeline size={12} color="currentColor" />
-          Saved Plans
-          {savedPlans.length > 0 && (
-            <span style={{ marginLeft: 'auto', background: 'rgba(167,139,250,0.15)', color: '#a78bfa', borderRadius: 8, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>
-              {savedPlans.length}
-            </span>
-          )}
-        </div>
+          <div className="plan-right-header">
+            <IconPipeline size={12} color="currentColor" />
+            Saved Plans
+            {savedPlans.length > 0 && (
+              <span style={{ marginLeft: 'auto', background: 'rgba(167,139,250,0.15)', color: '#a78bfa', borderRadius: 8, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>
+                {savedPlans.length}
+              </span>
+            )}
+          </div>
 
-        <div className="plan-right-body">
-          {plansLoading && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {[0, 1].map((i) => (
-                <div key={i} className="skeleton skeleton-block" style={{ height: 72, opacity: 1 - i * 0.3 }} />
-              ))}
-            </div>
-          )}
-          {!plansLoading && savedPlans.length === 0 && (
-            <div className="daemon-empty" style={{ padding: '24px 12px', fontSize: 11, textAlign: 'center' }}>
-              <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>No plans yet</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>Select specs on the left and plan them</div>
-            </div>
-          )}
-          {!plansLoading && savedPlans.map((plan) => (
-            <div key={plan.id} className="saved-plan-card">
-              <button
-                className="saved-plan-delete"
-                onClick={(e) => deletePlan(plan.id, e)}
-                title="Delete plan"
-              >×</button>
-              <div className="saved-plan-name">{plan.name}</div>
-              {plan.goal && plan.goal !== plan.name && (
-                <div className="saved-plan-goal" title={plan.goal}>{plan.goal}</div>
-              )}
-              <div className="saved-plan-footer">
-                <span className="saved-plan-badge">{plan.taskCount} tasks</span>
-                <span className={`saved-plan-status ${plan.status}`}>{plan.status}</span>
-                <span className="saved-plan-time">{relativeTime(plan.createdAt)}</span>
+          <div className="plan-right-body">
+            {plansLoading && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {[0, 1].map((i) => (
+                  <div key={i} className="skeleton skeleton-block" style={{ height: 72, opacity: 1 - i * 0.3 }} />
+                ))}
               </div>
-            </div>
-          ))}
+            )}
+            {!plansLoading && savedPlans.length === 0 && (
+              <div className="daemon-empty" style={{ padding: '24px 12px', fontSize: 11, textAlign: 'center' }}>
+                <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>No plans yet</div>
+                <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>Select specs on the left and plan them</div>
+              </div>
+            )}
+            {!plansLoading && savedPlans.map((plan) => (
+              <div key={plan.id} className="saved-plan-card">
+                <button
+                  className="saved-plan-delete"
+                  onClick={(e) => deletePlan(plan.id, e)}
+                  title="Delete plan"
+                >×</button>
+                <div className="saved-plan-name">{plan.name}</div>
+                {plan.goal && plan.goal !== plan.name && (
+                  <div className="saved-plan-goal" title={plan.goal}>{plan.goal}</div>
+                )}
+                <div className="saved-plan-footer">
+                  <span className="saved-plan-badge">{plan.taskCount} tasks</span>
+                  <span className={`saved-plan-status ${plan.status}`}>{plan.status}</span>
+                  <span className="saved-plan-time">{relativeTime(plan.createdAt)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
   // ── Spec selector (default view) ─────────────────────────────────────
   return (

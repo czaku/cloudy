@@ -68,12 +68,20 @@ Respond with ONLY valid JSON (no markdown, no explanation), matching this struct
     }
   ],
   "questions": [
-    "Should auth use JWT or session cookies? The spec says 'stateless' but doesn't specify.",
-    "Which cloud region should S3 buckets target — the spec omits this."
+    { "type": "select", "text": "Should auth use JWT or session cookies?", "options": ["JWT (stateless)", "Session cookies (stateful)"] },
+    { "type": "text", "text": "Which cloud region should S3 buckets target?" },
+    { "type": "confirm", "text": "Should we include rate limiting on all API endpoints?" }
   ]
 }
 
 The "questions" array must contain 0–3 high-impact clarifying questions. Only include questions about decisions that would materially change the task design — architecture choices, external service selection, data model decisions. If the spec is clear and complete, return an empty array. Do NOT ask about implementation details that can be inferred from context or convention.
+
+Each question must have a "type" field:
+- Use "select" when there are 2–4 mutually exclusive choices — always include an "options" array.
+- Use "multiselect" when multiple options can be selected — always include an "options" array.
+- Use "confirm" for yes/no decisions.
+- Use "text" for open-ended questions where options cannot be enumerated.
+Always include "options" for select/multiselect types. Never include "options" for text/confirm types.
 
 Important:
 - Task IDs must be "task-1", "task-2", etc.
