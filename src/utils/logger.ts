@@ -34,6 +34,10 @@ function formatMessage(level: LogLevel, message: string): string {
   return `[${ts}] [${level.toUpperCase()}] ${message}\n`;
 }
 
+// When running as a daemon child (piped stdio, no TTY), emit a structured marker
+// so the daemon server can broadcast log lines as plan_progress SSE events.
+const isPiped = !process.stdout.isTTY;
+
 async function writeLog(level: LogLevel, message: string): Promise<void> {
   if (LEVEL_PRIORITY[level] < LEVEL_PRIORITY[currentLevel]) return;
 
@@ -41,6 +45,11 @@ async function writeLog(level: LogLevel, message: string): Promise<void> {
 
   if (logDir) {
     await appendFile(path.join(logDir, 'cloudy.log'), formatted);
+  }
+
+  // Emit structured marker to stdout so the daemon can pick it up
+  if (isPiped) {
+    process.stdout.write(`CLOUDY_LOG:${JSON.stringify({ level, msg: message })}\n`);
   }
 }
 

@@ -1179,6 +1179,11 @@ circle.traffic-light-active[fill="#f59e0b"] {
 .plan-status-label { font-size: 15px; font-weight: 600; color: var(--text-primary); }
 .plan-status-sub { font-size: 12px; color: var(--text-muted); }
 .plan-status-error { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #f87171; font-size: 13px; text-align: center; }
+/* Planning progress log */
+.plan-log-list { width: 100%; max-width: 520px; max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.plan-log-line { font-size: 11px; font-family: monospace; padding: 2px 0; color: var(--text-muted); white-space: pre-wrap; word-break: break-word; }
+.plan-log-line.warn { color: #fb923c; }
+.plan-log-line.error { color: #f87171; }
 /* Question card */
 .plan-question-card { width: 100%; max-width: 480px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
 .plan-question-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a78bfa; }
@@ -1416,6 +1421,8 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
   const [planQuestion, setPlanQuestion] = useState<{ question: string; index: number; total: number; timeoutSec: number } | null>(null);
   const [planError, setPlanError] = useState<string | null>(null);
   const [completedPlan, setCompletedPlan] = useState<SavedPlan | null>(null);
+  const [planLogs, setPlanLogs] = useState<Array<{ level: string; msg: string }>>([]);
+  const planLogsEndRef = useRef<HTMLDivElement>(null);
   const isPlanning = project.activeProcess === 'init';
 
   const MAX_SPEC_FILE_BYTES = 30_000;
@@ -1478,15 +1485,17 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
     }
   }, [onPlanSavedEvent]);
 
-  // Listen for plan_question / plan_failed events scoped to this project
+  // Listen for plan_question / plan_progress / plan_failed events scoped to this project
   useEffect(() => {
     const es = new EventSource('/api/live');
     es.onmessage = (e) => {
-      let ev: { type: string; projectId?: string; question?: string; index?: number; total?: number; timeoutSec?: number } | null = null;
+      let ev: { type: string; projectId?: string; question?: string; index?: number; total?: number; timeoutSec?: number; level?: string; msg?: string } | null = null;
       try { ev = JSON.parse(e.data); } catch { return; }
       if (!ev || ev.projectId !== project.id) return;
       if (ev.type === 'plan_question') {
         setPlanQuestion({ question: ev.question!, index: ev.index!, total: ev.total!, timeoutSec: ev.timeoutSec ?? 60 });
+      } else if (ev.type === 'plan_progress') {
+        setPlanLogs((prev) => [...prev.slice(-49), { level: ev!.level ?? 'info', msg: ev!.msg ?? '' }]);
       } else if (ev.type === 'plan_failed') {
         setPlanQuestion(null);
         setPlanError('Planning failed — check your spec or try again.');
@@ -1498,8 +1507,13 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
   }, [project.id]);
 
   useEffect(() => {
-    if (isPlanning) { setShowPlanOutput(true); setCompletedPlan(null); setPlanError(null); setPlanQuestion(null); }
+    if (isPlanning) { setShowPlanOutput(true); setCompletedPlan(null); setPlanError(null); setPlanQuestion(null); setPlanLogs([]); }
   }, [isPlanning]);
+
+  // Auto-scroll plan logs to bottom
+  useEffect(() => {
+    planLogsEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [planLogs]);
 
   // ── Left panel: planning actions ────────────────────────────────────
   function toggleSpec(specPath: string) {
@@ -1576,12 +1590,24 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
               </div>
             )}
 
-            {/* Running — spinner */}
+            {/* Running — spinner + live log */}
             {isPlanning && !planQuestion && (
               <div className="plan-status-working">
                 <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
-                <div className="plan-status-label">Claude is reading your spec…</div>
+                <div className="plan-status-label">
+                  {planLogs.length > 0 ? planLogs[planLogs.length - 1].msg : 'Claude is reading your spec…'}
+                </div>
                 <div className="plan-status-sub">This takes 2–5 minutes. No input needed.</div>
+                {planLogs.length > 0 && (
+                  <div className="plan-log-list">
+                    {planLogs.map((l, i) => (
+                      <div key={i} className={`plan-log-line${l.level === 'warn' ? ' warn' : l.level === 'error' ? ' error' : ''}`}>
+                        {l.level === 'warn' ? '⚠ ' : ''}{l.msg}
+                      </div>
+                    ))}
+                    <div ref={planLogsEndRef} />
+                  </div>
+                )}
               </div>
             )}
 

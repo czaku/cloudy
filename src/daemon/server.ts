@@ -417,6 +417,15 @@ function spawnCloudyProcess(
           } catch { /* malformed — ignore */ }
           continue;
         }
+        // Structured log marker — broadcast as plan_progress SSE (init only)
+        if (line.includes('CLOUDY_LOG:') && type === 'init') {
+          const jsonStr = line.slice(line.indexOf('CLOUDY_LOG:') + 'CLOUDY_LOG:'.length).trim();
+          try {
+            const entry = JSON.parse(jsonStr) as { level: string; msg: string };
+            broadcastSse({ type: 'plan_progress', projectId, level: entry.level, msg: entry.msg });
+          } catch { /* malformed — ignore */ }
+          continue;
+        }
         if (!isSpinnerLine(line)) {
           broadcastSse({ type: sseOutputType, projectId, line });
           pushToBuffer(line);
