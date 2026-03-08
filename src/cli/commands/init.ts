@@ -185,6 +185,22 @@ export const initCommand = new Command('scope')
           } else {
             parts.push(content);
           }
+          // Guard: reject individual files that are too large
+          const MAX_FILE_BYTES = 30_000; // ~7.5K tokens — one focused feature
+          if (content.length > MAX_FILE_BYTES) {
+            p.log.error(
+              `Spec file "${path.basename(specPath)}" is ${Math.round(content.length / 1024)}KB — exceeds the ${Math.round(MAX_FILE_BYTES / 1024)}KB per-file limit.\n\n` +
+              `  Good specs are focused: one feature or a handful of related tasks.\n` +
+              `  Large files like TASKS.md / ARCHITECTURE.md are reference docs — not specs.\n\n` +
+              `  ✦ Write a dedicated spec file for the feature you want to build:\n` +
+              `      ## Title\n` +
+              `      Goal, background, steps, acceptance criteria.\n` +
+              `      Aim for 2–10KB. Run cloudy init once per feature.\n\n` +
+              `  ✦ Or split this file and pass the relevant section only:\n` +
+              `      cloudy init --spec ./specs/feature-x.md`
+            );
+            process.exit(1);
+          }
           p.log.info(`Spec loaded: ${specPath}  (${Math.round(content.length / 1024)}KB)`);
         } catch (err) {
           p.log.error(`Cannot read spec file "${specPath}": ${err instanceof Error ? err.message : String(err)}`);
@@ -198,12 +214,12 @@ export const initCommand = new Command('scope')
 
       specContent = parts.join('\n\n---\n\n');
 
-      // Guard: reject if combined spec is too large for the planner context
-      const MAX_SPEC_BYTES = 150_000; // ~37K tokens — safe planning budget
-      if (specContent.length > MAX_SPEC_BYTES) {
+      // Guard: reject if combined spec is too large
+      const MAX_COMBINED_BYTES = 50_000; // ~12.5K tokens — hard ceiling for planner
+      if (specContent.length > MAX_COMBINED_BYTES) {
         p.log.error(
-          `Combined spec is ${Math.round(specContent.length / 1024)}KB — exceeds the ${Math.round(MAX_SPEC_BYTES / 1024)}KB limit.\n` +
-          `  Split into separate cloudy init runs, or trim the specs.`
+          `Combined spec is ${Math.round(specContent.length / 1024)}KB — exceeds the ${Math.round(MAX_COMBINED_BYTES / 1024)}KB combined limit.\n\n` +
+          `  Split into separate cloudy init runs, one feature at a time.`
         );
         process.exit(1);
       }
@@ -408,6 +424,31 @@ export const initCommand = new Command('scope')
             process.stdout.write('\r' + ' '.repeat(40) + '\r');
             console.log(`  ${c(yellow, '⏱  timeout — asking the AI to assume…')}`);
           }
+        } else if (process.stdin.readable && !process.stdin.isTTY) {
+          // Daemon / piped mode — emit structured marker so the web UI can show a question card,
+          // then wait on stdin for the answer with a timeout.
+          const timeoutSec = opts.questionsTimeout ?? 60;
+          process.stdout.write(`\nCLOUDY_PLAN_QUESTION:${JSON.stringify({
+            question,
+            index: qi + 1,
+            total: planQuestions.length,
+            timeoutSec,
+          })}\n`);
+          answer = await new Promise<string | null>((resolve) => {
+            let buf = '';
+            const timer = setTimeout(() => { resolve(null); }, timeoutSec * 1000);
+            const onData = (chunk: Buffer) => {
+              buf += chunk.toString();
+              const nl = buf.indexOf('\n');
+              if (nl !== -1) {
+                clearTimeout(timer);
+                process.stdin.off('data', onData);
+                const line = buf.slice(0, nl).trim();
+                resolve(line || null);
+              }
+            };
+            process.stdin.on('data', onData);
+          });
         } else {
           console.log(`  ${c(dim, '(non-interactive — AI will auto-decide)')}`);
         }

@@ -58,13 +58,15 @@ function closeServer(server: http.Server): Promise<void> {
   return new Promise((resolve) => server.close(() => resolve()));
 }
 
-async function get(base: string, path: string) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function get(base: string, path: string): Promise<{ status: number; body: any }> {
   const res = await fetch(`${base}${path}`);
   const body = await res.json().catch(() => null);
   return { status: res.status, body };
 }
 
-async function post(base: string, path: string, data: unknown) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function post(base: string, path: string, data: unknown): Promise<{ status: number; body: any }> {
   const res = await fetch(`${base}${path}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -74,7 +76,8 @@ async function post(base: string, path: string, data: unknown) {
   return { status: res.status, body };
 }
 
-async function del(base: string, path: string) {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function del(base: string, path: string): Promise<{ status: number; body: any }> {
   const res = await fetch(`${base}${path}`, { method: 'DELETE' });
   const body = await res.json().catch(() => null);
   return { status: res.status, body };

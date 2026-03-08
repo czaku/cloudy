@@ -45,7 +45,7 @@ export async function createPlan(
 
   const prompt = buildPlanningPrompt(goal, specContent, claudeMdContent, runInsights);
 
-  const timeoutMs = Number(process.env['CLOUDY_PLANNING_TIMEOUT_MS']) || 300_000;
+  const timeoutMs = Number(process.env['CLOUDY_PLANNING_TIMEOUT_MS']) || 900_000; // 15 min
 
   const planningCall = runClaude({
     prompt,

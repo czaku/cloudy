@@ -53,7 +53,7 @@ const FAKE_PROJECT = '/fake/project';
 const ENCODED = FAKE_PROJECT.replace(/\//g, '-');
 
 function mockSessionFile(lines: string[]) {
-  vi.mocked(fs.readFile).mockResolvedValue(lines.join('\n') as unknown as Buffer);
+  vi.mocked(fs.readFile).mockResolvedValue(lines.join('\n') as unknown as Parameters<typeof fs.readFile>[0] extends never ? never : Awaited<ReturnType<typeof fs.readFile>>);
   vi.mocked(fs.stat).mockResolvedValue({ mtimeMs: Date.now(), mtime: new Date(), birthtime: new Date() } as ReturnType<typeof fs.stat> extends Promise<infer T> ? T : never);
 }
 

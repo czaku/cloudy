@@ -111,6 +111,7 @@ export interface OutputLine {
   toolName?: string;
   toolHint?: string;
   isError?: boolean;
+  collapsed?: boolean;
 }
 
 export interface ApprovalRequest {

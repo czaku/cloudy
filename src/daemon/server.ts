@@ -379,6 +379,27 @@ function spawnCloudyProcess(
     projectOutputBuffer.set(projectId, buf);
   }
 
+  // Strip ANSI codes and drop pure spinner/progress lines before broadcast
+  // eslint-disable-next-line no-control-regex
+  const _ansiRe = /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g;
+  function isSpinnerLine(raw: string): boolean {
+    const s = raw.replace(_ansiRe, '').trim();
+    if (!s || s.length <= 2) return true;
+    // "Planning with sonnet… (287s)..◎" — per-second progress ticker (any variant)
+    if (/^Planning with \S+/.test(s)) return true;
+    // "[project] Claude" / "[project]|" / "[project]□[?25l" — terminal UI chrome
+    if (/^\[[\w-]+\]/.test(s)) return true;
+    // clack interactive prompt chrome — "◆ What would you like to do?"
+    if (/^[◆◇]\s/.test(s)) return true;
+    // clack option rows — "● ✅ Approve" / "○ ✍ Revise" / "○ ✗ Cancel"
+    if (/^[●○◉◎•]\s/.test(s)) return true;
+    // clack box drawing — "└", "│" alone or with whitespace
+    if (/^[└│┌┐┘├┤┬┴┼─]\s*$/.test(s)) return true;
+    // lone spinner chars
+    if (/^[.◎○◉oO|\\\/\-]+$/.test(s)) return true;
+    return false;
+  }
+
   let stdoutBuf = '';
   if (child.stdout) {
     child.stdout.on('data', (chunk: Buffer) => {
@@ -386,7 +407,17 @@ function spawnCloudyProcess(
       const lines = stdoutBuf.split('\n');
       stdoutBuf = lines.pop() ?? '';
       for (const line of lines) {
-        if (line.trim()) {
+        if (!line.trim()) continue;
+        // Structured question marker from cloudy scope — broadcast as plan_question SSE, not output
+        if (line.includes('CLOUDY_PLAN_QUESTION:')) {
+          const jsonStr = line.slice(line.indexOf('CLOUDY_PLAN_QUESTION:') + 'CLOUDY_PLAN_QUESTION:'.length).trim();
+          try {
+            const q = JSON.parse(jsonStr);
+            broadcastSse({ type: 'plan_question', projectId, ...q });
+          } catch { /* malformed — ignore */ }
+          continue;
+        }
+        if (!isSpinnerLine(line)) {
           broadcastSse({ type: sseOutputType, projectId, line });
           pushToBuffer(line);
         }
@@ -401,7 +432,7 @@ function spawnCloudyProcess(
       const lines = stderrBuf.split('\n');
       stderrBuf = lines.pop() ?? '';
       for (const line of lines) {
-        if (line.trim()) {
+        if (line.trim() && !isSpinnerLine(line)) {
           broadcastSse({ type: sseOutputType, projectId, line });
           pushToBuffer(line);
         }
@@ -891,14 +922,45 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       }
       try {
         const body = await parseBody(req) as { specPaths?: string[]; planName?: string; model?: string };
-        const specArgs: string[] = [];
-        for (const sp of body.specPaths ?? []) {
-          specArgs.push('--spec', sp);
+
+        // Fast-fail: check spec sizes before spawning anything
+        const MAX_FILE_BYTES = 30_000;
+        const MAX_COMBINED_BYTES = 50_000;
+        const specPaths = body.specPaths ?? [];
+        let combinedBytes = 0;
+        for (const sp of specPaths) {
+          let stat: { size: number } | null = null;
+          try { stat = await fs.stat(sp); } catch { /* file not found — let init handle it */ }
+          if (stat && stat.size > MAX_FILE_BYTES) {
+            sendJson(res, 422, {
+              error: `Spec file "${path.basename(sp)}" is ${Math.round(stat.size / 1024)}KB — exceeds the ${Math.round(MAX_FILE_BYTES / 1024)}KB limit.`,
+              hint: 'Good specs are focused: one feature, 2–10KB. Large files like TASKS.md are reference docs — not specs. Write a dedicated spec for the feature you want to build.',
+            });
+            return;
+          }
+          combinedBytes += stat?.size ?? 0;
         }
+        if (combinedBytes > MAX_COMBINED_BYTES) {
+          sendJson(res, 422, {
+            error: `Combined specs are ${Math.round(combinedBytes / 1024)}KB — exceeds the ${Math.round(MAX_COMBINED_BYTES / 1024)}KB combined limit.`,
+            hint: 'Plan one feature at a time. Split your work into separate spec files and run cloudy init once per feature.',
+          });
+          return;
+        }
+
+        const specArgs: string[] = [];
+        for (const sp of specPaths) specArgs.push('--spec', sp);
         const modelArg = body.model ? ['--model', body.model] : ['--model', 'sonnet'];
+        // Generate a stable run-name so scope exits immediately after saving the plan
+        // (--run-name triggers pipeline-mode exit, preventing scope from auto-spawning cloudy run)
+        const ts = new Date().toISOString().slice(0, 16).replace('T', '-').replace(/:/g, '');
+        const slug = specPaths[0]
+          ? path.basename(specPaths[0], '.md').replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 24)
+          : 'plan';
+        const runName = `scope-${ts}-${slug}`;
         spawnCloudyProcess(projectId, meta.path, 'init', [
-          'scope', ...specArgs, ...modelArg,
-        ], body.planName, body.specPaths);
+          'scope', ...specArgs, ...modelArg, '--run-name', runName,
+        ], body.planName, specPaths);
         sendJson(res, 200, { ok: true, started: true });
       } catch (err) {
         sendJson(res, 500, { error: String(err) });
@@ -998,6 +1060,34 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       }
       proc.child.kill('SIGTERM');
       sendJson(res, 200, { ok: true });
+      return;
+    }
+
+    // POST /api/projects/:id/retry
+    if (method === 'POST' && subpath === '/retry') {
+      if (!meta) { send404(res); return; }
+      if (activeProcesses.has(projectId)) {
+        sendJson(res, 409, { error: 'A process is already running. Stop it first.' });
+        return;
+      }
+      try {
+        const body = await parseBody(req) as { taskId?: string; executionModel?: string; reviewModel?: string };
+        const execModel = body.executionModel ?? 'sonnet';
+        const reviewModel = body.reviewModel ?? 'sonnet';
+        const retryArgs = body.taskId ? ['--retry', body.taskId] : ['--retry-failed'];
+        spawnCloudyProcess(projectId, meta.path, 'run', [
+          'build', '--non-interactive', '--agent-output',
+          '--execution-model', execModel,
+          '--task-review-model', 'haiku',
+          '--run-review-model', reviewModel,
+          '--heartbeat-interval', '5',
+          ...retryArgs,
+        ]);
+        broadcastSse({ type: 'run_started', projectId });
+        sendJson(res, 200, { ok: true });
+      } catch (err) {
+        sendJson(res, 500, { error: String(err) });
+      }
       return;
     }
 

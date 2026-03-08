@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTheme } from './hooks/useTheme';
-import { OutputLog } from './components/OutputLog';
-import { parseClaudeOutputLine, makeEventLine } from './utils/parseOutput';
-import type { OutputLine } from './types';
+import { stripAnsi } from './utils/parseOutput';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -1106,6 +1104,8 @@ circle.traffic-light-active[fill="#f59e0b"] {
 .spec-drag-card { display: flex; align-items: flex-start; gap: 6px; padding: 7px 8px; border-radius: 5px; border: 1px solid var(--border); background: var(--bg-card); margin-bottom: 5px; cursor: grab; transition: border-color 0.12s, box-shadow 0.12s; user-select: none; }
 .spec-drag-card:hover { border-color: #a78bfa; box-shadow: 0 0 0 1px rgba(167,139,250,0.2); }
 .spec-drag-card.in-chain { border-color: rgba(34,197,94,0.4); background: rgba(34,197,94,0.04); }
+.spec-drag-card.spec-card-oversized { border-color: rgba(248,113,113,0.35); background: rgba(248,113,113,0.04); }
+.spec-drag-card.spec-card-oversized:hover { border-color: #f87171; }
 .spec-drag-card.dragging { opacity: 0.4; }
 .spec-drag-handle { color: var(--text-muted); font-size: 13px; cursor: grab; flex-shrink: 0; line-height: 1; padding-top: 1px; }
 .spec-card-title { font-size: 11px; font-weight: 600; color: var(--text-primary); line-height: 1.3; }
@@ -1173,6 +1173,30 @@ circle.traffic-light-active[fill="#f59e0b"] {
 .plan-chat-title { font-size: 12px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 6px; }
 .plan-chat-body { flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 .plan-chat-input-area { flex-shrink: 0; border-top: 1px solid var(--border); }
+/* Planning status body — replaces output log */
+.plan-status-body { flex: 1; overflow-y: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 32px 24px; gap: 24px; }
+.plan-status-working { display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
+.plan-status-label { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+.plan-status-sub { font-size: 12px; color: var(--text-muted); }
+.plan-status-error { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #f87171; font-size: 13px; text-align: center; }
+/* Question card */
+.plan-question-card { width: 100%; max-width: 480px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+.plan-question-badge { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #a78bfa; }
+.plan-question-text { font-size: 14px; font-weight: 600; color: var(--text-primary); line-height: 1.5; }
+.plan-question-input { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; font-size: 13px; color: var(--text-primary); font-family: inherit; resize: vertical; outline: none; }
+.plan-question-input:focus { border-color: #a78bfa; }
+.plan-question-actions { display: flex; gap: 8px; }
+.plan-question-timeout { font-size: 10px; color: var(--text-muted); }
+/* Completed plan task list */
+.plan-result { width: 100%; max-width: 520px; display: flex; flex-direction: column; gap: 12px; }
+.plan-result-header { display: flex; align-items: baseline; gap: 10px; }
+.plan-result-count { font-size: 22px; font-weight: 800; color: #22c55e; }
+.plan-result-goal { font-size: 13px; color: var(--text-muted); }
+.plan-result-tasks { display: flex; flex-direction: column; gap: 4px; }
+.plan-result-task { display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px; }
+.plan-result-task-num { font-size: 10px; font-weight: 700; color: var(--text-muted); min-width: 16px; }
+.plan-result-task-title { font-size: 12px; color: var(--text-primary); }
+.plan-result-actions { margin-top: 4px; }
 /* Q&A choice chips */
 .plan-qa-choices { padding: 10px 12px 0; }
 .plan-qa-question { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; font-weight: 600; }
@@ -1188,6 +1212,7 @@ circle.traffic-light-active[fill="#f59e0b"] {
 /* Plan action footer — sticky bottom of left panel */
 .plan-action-footer { flex-shrink: 0; border-top: 1px solid var(--border); background: var(--bg-secondary); padding: 10px 12px; display: flex; flex-direction: column; gap: 7px; }
 .plan-action-footer-idle { display: flex; align-items: center; justify-content: center; padding: 8px 0; font-size: 11px; color: var(--text-muted); }
+.plan-size-error { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; background: rgba(248,113,113,0.08); border: 1px solid rgba(248,113,113,0.25); border-radius: 5px; font-size: 11px; color: #f87171; }
 .plan-action-name-input { background: var(--bg-card); border: 1px solid var(--border); border-radius: 5px; padding: 5px 10px; font-size: 11px; color: var(--text-primary); outline: none; font-family: inherit; width: 100%; box-sizing: border-box; }
 .plan-action-name-input:focus { border-color: #a78bfa; }
 .plan-action-name-input::placeholder { color: var(--text-muted); }
@@ -1220,6 +1245,29 @@ circle.traffic-light-active[fill="#f59e0b"] {
 .run-traffic-status-text { }
 .run-traffic-title { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 3px; }
 .run-traffic-sub { font-size: 11px; color: var(--text-muted); }
+/* Run progress view */
+.run-progress-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+.run-progress-header { display: flex; align-items: center; gap: 16px; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; margin: 14px 16px 0; flex-shrink: 0; }
+.run-progress-title { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 3px; }
+.run-progress-sub { font-size: 11px; color: var(--text-muted); }
+.run-progress-bar-wrap { height: 4px; background: var(--border); margin: 12px 16px 0; border-radius: 2px; flex-shrink: 0; overflow: hidden; }
+.run-progress-bar { height: 100%; background: linear-gradient(90deg, #a78bfa, #7c3aed); border-radius: 2px; transition: width 0.4s ease; }
+.run-task-list { flex: 1; overflow-y: auto; padding: 10px 16px; display: flex; flex-direction: column; gap: 4px; }
+.run-task-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; background: var(--bg-card); border: 1px solid var(--border); font-size: 12px; }
+.run-task-item.run-task-completed { border-color: rgba(34,197,94,0.25); }
+.run-task-item.run-task-failed { border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.04); }
+.run-task-item.run-task-in_progress { border-color: rgba(167,139,250,0.4); background: rgba(167,139,250,0.05); }
+.run-task-icon { font-size: 13px; flex-shrink: 0; width: 16px; text-align: center; }
+.run-task-item.run-task-completed .run-task-icon { color: #22c55e; }
+.run-task-item.run-task-failed .run-task-icon { color: #ef4444; }
+.run-task-item.run-task-in_progress .run-task-icon { color: #a78bfa; }
+.run-task-item.run-task-skipped .run-task-icon { color: var(--text-muted); }
+.run-task-title { flex: 1; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.run-task-item.run-task-completed .run-task-title { color: var(--text-secondary); }
+.run-task-item.run-task-skipped .run-task-title { color: var(--text-muted); }
+.run-task-retry-btn { font-size: 10px; padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.4); background: none; color: #ef4444; cursor: pointer; flex-shrink: 0; }
+.run-task-retry-btn:hover { background: rgba(239,68,68,0.08); }
+.run-progress-footer { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
 /* Activity badge */
 .activity-badge {
   display: flex; align-items: center; gap: 5px;
@@ -1327,8 +1375,6 @@ function ProjectSidebar({ projects, selectedId, onSelect }: ProjectSidebarProps)
 
 interface BuildTabProps {
   project: ProjectStatusSnapshot;
-  outputLines: OutputLine[];
-  onClearOutput: () => void;
   onPlanSavedEvent?: SavedPlan | null;
 }
 
@@ -1351,7 +1397,7 @@ const QUICK_SEARCHES = [
   { label: '🚀 launch', q: 'launch' },
 ];
 
-function PlanBuildTab({ project, outputLines, onClearOutput, onPlanSavedEvent }: BuildTabProps) {
+function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
   // ── Left panel state ────────────────────────────────────────────────
   const [specs, setSpecs] = useState<SpecFile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1367,7 +1413,23 @@ function PlanBuildTab({ project, outputLines, onClearOutput, onPlanSavedEvent }:
   const [showPlanOutput, setShowPlanOutput] = useState(false);
   const [qaAnswer, setQaAnswer] = useState('');
   const [planModel, setPlanModel] = useState('sonnet');
+  const [planQuestion, setPlanQuestion] = useState<{ question: string; index: number; total: number; timeoutSec: number } | null>(null);
+  const [planError, setPlanError] = useState<string | null>(null);
+  const [completedPlan, setCompletedPlan] = useState<SavedPlan | null>(null);
   const isPlanning = project.activeProcess === 'init';
+
+  const MAX_SPEC_FILE_BYTES = 30_000;
+  const MAX_SPEC_COMBINED_BYTES = 50_000;
+
+  const selectedSpecObjects = specs.filter((s) => selectedSpecs.has(s.path));
+  const oversizedFiles = selectedSpecObjects.filter((s) => s.sizeBytes > MAX_SPEC_FILE_BYTES);
+  const combinedBytes = selectedSpecObjects.reduce((sum, s) => sum + s.sizeBytes, 0);
+  const combinedTooBig = combinedBytes > MAX_SPEC_COMBINED_BYTES;
+  const specSizeError = oversizedFiles.length > 0
+    ? `"${oversizedFiles[0].title}" is ${Math.round(oversizedFiles[0].sizeBytes / 1024)}KB — max is ${Math.round(MAX_SPEC_FILE_BYTES / 1024)}KB per file.`
+    : combinedTooBig
+      ? `Combined selection is ${Math.round(combinedBytes / 1024)}KB — max is ${Math.round(MAX_SPEC_COMBINED_BYTES / 1024)}KB.`
+      : null;
 
   const filteredSpecs = search.trim()
     ? specs.filter((s) => {
@@ -1406,15 +1468,37 @@ function PlanBuildTab({ project, outputLines, onClearOutput, onPlanSavedEvent }:
 
   useEffect(() => { loadSavedPlans(); }, [loadSavedPlans]);
 
-  // Refresh saved plans when plan_saved SSE event arrives
+  // Refresh saved plans + capture completed plan when plan_saved SSE event arrives
   useEffect(() => {
     if (onPlanSavedEvent) {
       setSavedPlans((prev) => [onPlanSavedEvent, ...prev.filter((p) => p.id !== onPlanSavedEvent.id)]);
+      setCompletedPlan(onPlanSavedEvent);
+      setPlanQuestion(null);
+      setPlanError(null);
     }
   }, [onPlanSavedEvent]);
 
+  // Listen for plan_question / plan_failed events scoped to this project
   useEffect(() => {
-    if (isPlanning) setShowPlanOutput(true);
+    const es = new EventSource('/api/live');
+    es.onmessage = (e) => {
+      let ev: { type: string; projectId?: string; question?: string; index?: number; total?: number; timeoutSec?: number } | null = null;
+      try { ev = JSON.parse(e.data); } catch { return; }
+      if (!ev || ev.projectId !== project.id) return;
+      if (ev.type === 'plan_question') {
+        setPlanQuestion({ question: ev.question!, index: ev.index!, total: ev.total!, timeoutSec: ev.timeoutSec ?? 60 });
+      } else if (ev.type === 'plan_failed') {
+        setPlanQuestion(null);
+        setPlanError('Planning failed — check your spec or try again.');
+      } else if (ev.type === 'plan_completed' && !onPlanSavedEvent) {
+        setPlanQuestion(null);
+      }
+    };
+    return () => es.close();
+  }, [project.id]);
+
+  useEffect(() => {
+    if (isPlanning) { setShowPlanOutput(true); setCompletedPlan(null); setPlanError(null); setPlanQuestion(null); }
   }, [isPlanning]);
 
   // ── Left panel: planning actions ────────────────────────────────────
@@ -1428,7 +1512,7 @@ function PlanBuildTab({ project, outputLines, onClearOutput, onPlanSavedEvent }:
   }
 
   async function handleScope() {
-    if (selectedSpecs.size === 0) return;
+    if (selectedSpecs.size === 0 || specSizeError) return;
     setShowPlanOutput(true);
     await apiPost(`/api/projects/${project.id}/plan`, {
       specPaths: Array.from(selectedSpecs),
@@ -1449,7 +1533,6 @@ function PlanBuildTab({ project, outputLines, onClearOutput, onPlanSavedEvent }:
 
   function handleBackFromPlan() {
     setShowPlanOutput(false);
-    onClearOutput();
   }
 
   async function deletePlan(planId: string, e: React.MouseEvent) {
@@ -1458,25 +1541,6 @@ function PlanBuildTab({ project, outputLines, onClearOutput, onPlanSavedEvent }:
     setSavedPlans((prev) => prev.filter((p) => p.id !== planId));
   }
 
-  // ── Detect choice questions from recent output ───────────────────────
-  // If the last few text lines look like a question + options, extract them
-  const pendingChoices = React.useMemo(() => {
-    if (!isPlanning) return null;
-    const textLines = outputLines.filter((l) => l.type === 'text').slice(-8);
-    const lastIdx = textLines.length - 1;
-    if (lastIdx < 1) return null;
-    // Look for "• option" or "○ option" bullets at the end
-    const opts: string[] = [];
-    let qi = lastIdx;
-    while (qi >= 0 && /^[•○◉◎]\s/.test(textLines[qi].content)) {
-      opts.unshift(textLines[qi].content.replace(/^[•○◉◎]\s*/, '').trim());
-      qi--;
-    }
-    if (opts.length >= 2 && qi >= 0) {
-      return { question: textLines[qi].content, options: opts };
-    }
-    return null;
-  }, [outputLines, isPlanning]);
 
   // ─── Render ──────────────────────────────────────────────────────────
   // When planning is active or output exists, switch to full-height chat view
@@ -1484,88 +1548,99 @@ function PlanBuildTab({ project, outputLines, onClearOutput, onPlanSavedEvent }:
     return (
       <div className="plan-split">
         <div className="plan-chat-view">
-          {/* Chat header */}
+          {/* Header */}
           <div className="plan-chat-header">
             <button className="plan-chat-back" onClick={handleBackFromPlan}>← Specs</button>
             <div className="plan-chat-title">
               {isPlanning
                 ? <><span className="spinner" style={{ width: 12, height: 12, flexShrink: 0 }} />Planning…</>
-                : '✓ Plan complete'}
-              {selectedSpecs.size > 0 && (
-                <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: 11 }}>
-                  {' '}· {selectedSpecs.size} spec{selectedSpecs.size !== 1 ? 's' : ''}
-                </span>
-              )}
+                : planError ? '✗ Planning failed'
+                : '✓ Plan ready'}
             </div>
             {isPlanning && (
-              <button
-                className="plan-stop-btn"
-                style={{ marginLeft: 'auto' }}
-                onClick={() => fetch(`/api/projects/${project.id}/stop`, { method: 'POST' }).catch(() => {})}
-              >✕ Stop</button>
+              <button className="plan-stop-btn" style={{ marginLeft: 'auto' }}
+                onClick={() => fetch(`/api/projects/${project.id}/stop`, { method: 'POST' }).catch(() => {})}>
+                ✕ Stop
+              </button>
             )}
           </div>
 
-          {/* Full-height chat output */}
-          <div className="plan-chat-body">
-            <OutputLog lines={outputLines} onClear={onClearOutput} fill hideHeader />
-          </div>
+          {/* Body */}
+          <div className="plan-status-body">
+            {/* Error state */}
+            {planError && (
+              <div className="plan-status-error">
+                <span style={{ fontSize: 24 }}>✗</span>
+                <span>{planError}</span>
+                <button className="plan-chat-back" style={{ marginTop: 8 }} onClick={handleBackFromPlan}>← Back to specs</button>
+              </div>
+            )}
 
-          {/* Bottom bar — always visible while planning */}
-          {isPlanning && (
-            <div className="plan-chat-input-area">
-              {pendingChoices ? (
-                /* Claude asked a multiple-choice question */
-                <>
-                  <div className="plan-qa-choices">
-                    <div className="plan-qa-question">💬 {pendingChoices.question}</div>
-                    <div className="plan-qa-chips">
-                      {pendingChoices.options.map((opt) => (
-                        <button key={opt} className="plan-qa-chip"
-                          onClick={() => {
-                            apiPost(`/api/projects/${project.id}/plan-input`, { answer: opt }).catch(() => {});
-                            setQaAnswer('');
-                          }}
-                        >{opt}</button>
-                      ))}
-                    </div>
-                  </div>
-                  <div className="chat-input-row" style={{ background: 'var(--bg-secondary)' }}>
-                    <textarea className="chat-input" rows={1}
-                      placeholder="Or type a custom answer…"
-                      value={qaAnswer}
-                      onChange={(e) => setQaAnswer(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAnswer(); } }}
-                    />
-                    <button className="plan-action-btn" style={{ fontSize: 11, padding: '6px 12px' }} onClick={handleAnswer}>Send</button>
-                  </div>
-                </>
-              ) : (
-                /* No question pending — show working state + optional guidance input */
-                <div className="plan-working-bar">
-                  <div className="plan-working-status">
-                    <span className="spinner" style={{ width: 10, height: 10 }} />
-                    Claude is reading the spec and generating your plan — no input needed
-                  </div>
-                  <details className="plan-guidance-details">
-                    <summary>Add guidance</summary>
-                    <div className="chat-input-row" style={{ background: 'var(--bg-secondary)', padding: '6px 10px' }}>
-                      <textarea className="chat-input" rows={2}
-                        placeholder="Optional: steer Claude's planning direction…"
-                        value={qaAnswer}
-                        onChange={(e) => setQaAnswer(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAnswer(); } }}
-                      />
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        <button className="plan-action-btn" style={{ fontSize: 11, padding: '6px 12px' }} onClick={handleAnswer}>Send</button>
-                        <button className="daemon-btn" style={{ fontSize: 11 }} onClick={handleAiDecide}>AI decides</button>
-                      </div>
-                    </div>
-                  </details>
+            {/* Running — spinner */}
+            {isPlanning && !planQuestion && (
+              <div className="plan-status-working">
+                <span className="spinner" style={{ width: 32, height: 32, borderWidth: 3 }} />
+                <div className="plan-status-label">Claude is reading your spec…</div>
+                <div className="plan-status-sub">This takes 2–5 minutes. No input needed.</div>
+              </div>
+            )}
+
+            {/* Question card */}
+            {isPlanning && planQuestion && (
+              <div className="plan-question-card">
+                <div className="plan-question-badge">Question {planQuestion.index} of {planQuestion.total}</div>
+                <div className="plan-question-text">{planQuestion.question}</div>
+                <textarea className="plan-question-input" rows={3}
+                  placeholder="Type your answer… (leave blank to let AI decide)"
+                  value={qaAnswer}
+                  onChange={(e) => setQaAnswer(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      apiPost(`/api/projects/${project.id}/plan-input`, { answer: qaAnswer }).catch(() => {});
+                      setQaAnswer('');
+                      setPlanQuestion(null);
+                    }
+                  }}
+                  autoFocus
+                />
+                <div className="plan-question-actions">
+                  <button className="plan-action-btn" onClick={() => {
+                    apiPost(`/api/projects/${project.id}/plan-input`, { answer: qaAnswer }).catch(() => {});
+                    setQaAnswer('');
+                    setPlanQuestion(null);
+                  }}>Send answer</button>
+                  <button className="daemon-btn" onClick={() => {
+                    apiPost(`/api/projects/${project.id}/plan-input`, { answer: '' }).catch(() => {});
+                    setQaAnswer('');
+                    setPlanQuestion(null);
+                  }}>Let AI decide</button>
                 </div>
-              )}
-            </div>
-          )}
+                <div className="plan-question-timeout">Auto-answers in {planQuestion.timeoutSec}s if no response</div>
+              </div>
+            )}
+
+            {/* Completed — task list */}
+            {!isPlanning && completedPlan && (
+              <div className="plan-result">
+                <div className="plan-result-header">
+                  <span className="plan-result-count">{completedPlan.tasks.length} tasks</span>
+                  <span className="plan-result-goal">{completedPlan.goal}</span>
+                </div>
+                <div className="plan-result-tasks">
+                  {completedPlan.tasks.map((t, i) => (
+                    <div key={t.id} className="plan-result-task">
+                      <span className="plan-result-task-num">{i + 1}</span>
+                      <span className="plan-result-task-title">{t.title}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="plan-result-actions">
+                  <button className="plan-action-btn" onClick={handleBackFromPlan}>← Back to specs</button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* ── Right panel: Saved plans (always visible) ── */}
@@ -1690,18 +1765,24 @@ function PlanBuildTab({ project, outputLines, onClearOutput, onPlanSavedEvent }:
           {/* Spec cards */}
           {!loading && filteredSpecs.map((spec) => {
             const isSelected = selectedSpecs.has(spec.path);
+            const kb = Math.round(spec.sizeBytes / 1024);
+            const tooBig = spec.sizeBytes > MAX_SPEC_FILE_BYTES;
             return (
-              <div key={spec.path} className={`spec-drag-card${isSelected ? ' in-chain' : ''}`}
-                onClick={() => toggleSpec(spec.path)} title="Click to select"
+              <div key={spec.path} className={`spec-drag-card${isSelected ? ' in-chain' : ''}${tooBig ? ' spec-card-oversized' : ''}`}
+                onClick={() => toggleSpec(spec.path)} title={tooBig ? `${kb}KB — exceeds 30KB limit. Write a focused spec for one feature.` : 'Click to select'}
               >
                 <input type="checkbox" checked={isSelected} onChange={() => toggleSpec(spec.path)}
                   onClick={(e) => e.stopPropagation()} style={{ flexShrink: 0, marginTop: 2 }} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div className="spec-card-title">
                     {isSelected && <span style={{ color: '#22c55e', marginRight: 4 }}>✓</span>}
+                    {tooBig && <span style={{ marginRight: 4 }} title="Too large">⚠️</span>}
                     {spec.title}
                   </div>
-                  <div className="spec-card-path">{spec.relativePath}</div>
+                  <div className="spec-card-path" style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <span>{spec.relativePath}</span>
+                    <span style={{ color: tooBig ? '#f87171' : 'var(--text-muted)', fontWeight: tooBig ? 600 : 400, fontSize: 10 }}>{kb}KB</span>
+                  </div>
                 </div>
               </div>
             );
@@ -1711,12 +1792,22 @@ function PlanBuildTab({ project, outputLines, onClearOutput, onPlanSavedEvent }:
         {/* Sticky action footer */}
         {selectedSpecs.size > 0 ? (
           <div className="plan-action-footer">
-            <input className="plan-action-name-input" type="text"
-              placeholder="Plan name (optional)…" value={planName}
-              onChange={(e) => setPlanName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleScope(); }} />
+            {specSizeError ? (
+              <div className="plan-size-error">
+                <span>⚠️ {specSizeError}</span>
+                <span style={{ color: 'var(--text-muted)', fontSize: 10, marginTop: 2 }}>
+                  Good specs are focused: one feature, 2–10KB. Large files like TASKS.md are reference docs — not specs.
+                </span>
+              </div>
+            ) : (
+              <input className="plan-action-name-input" type="text"
+                placeholder="Plan name (optional)…" value={planName}
+                onChange={(e) => setPlanName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleScope(); }} />
+            )}
             <div className="plan-action-btn-row">
-              <button className="plan-action-btn" onClick={handleScope}>
+              <button className="plan-action-btn" onClick={handleScope} disabled={!!specSizeError}
+                style={specSizeError ? { opacity: 0.4, cursor: 'not-allowed' } : undefined}>
                 ✦ Plan {selectedSpecs.size} spec{selectedSpecs.size !== 1 ? 's' : ''} →
               </button>
               <select value={planModel} onChange={(e) => setPlanModel(e.target.value)}
@@ -1783,7 +1874,6 @@ function PlanBuildTab({ project, outputLines, onClearOutput, onPlanSavedEvent }:
 
 interface RunTabProps {
   project: ProjectStatusSnapshot;
-  outputLines: OutputLine[];
 }
 
 interface PlanChainStep {
@@ -1793,7 +1883,24 @@ interface PlanChainStep {
   taskCount: number;
 }
 
-function RunTab({ project, outputLines }: RunTabProps) {
+interface RunTask {
+  id: string;
+  title: string;
+  status: string;
+}
+
+function taskStatusIcon(status: string): string {
+  switch (status) {
+    case 'completed': return '✓';
+    case 'failed': return '✗';
+    case 'in_progress': return '⚡';
+    case 'skipped': return '⊘';
+    case 'rolled_back': return '↩';
+    default: return '○';
+  }
+}
+
+function RunTab({ project }: RunTabProps) {
   const [executionModel, setExecutionModel] = useState('sonnet');
   const [reviewModel, setReviewModel] = useState('sonnet');
   const [savedPlans, setSavedPlans] = useState<SavedPlan[]>([]);
@@ -1802,6 +1909,10 @@ function RunTab({ project, outputLines }: RunTabProps) {
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [dropOnEmpty, setDropOnEmpty] = useState(false);
   const [draggingStepId, setDraggingStepId] = useState<string | null>(null);
+  const [runTasks, setRunTasks] = useState<RunTask[]>([]);
+  const [costUsd, setCostUsd] = useState(0);
+  const [viewMode, setViewMode] = useState<'config' | 'progress'>('config');
+  const prevIsRunning = useRef(false);
 
   const isRunning = project.activeProcess === 'run' || project.status === 'running';
   const MODEL_OPTIONS = ['haiku', 'sonnet', 'opus'];
@@ -1812,6 +1923,47 @@ function RunTab({ project, outputLines }: RunTabProps) {
       .then((d: SavedPlan[]) => setSavedPlans(d))
       .catch(() => {});
   }, [project.id]);
+
+  async function fetchRunState() {
+    try {
+      const r = await fetch(`/api/projects/${project.id}/state`);
+      const data = await r.json() as { plan?: { tasks?: RunTask[] }; costSummary?: { totalEstimatedUsd?: number } };
+      const tasks = data?.plan?.tasks ?? [];
+      if (tasks.length > 0) {
+        setRunTasks(tasks);
+        setCostUsd(data?.costSummary?.totalEstimatedUsd ?? 0);
+      }
+    } catch { /* ignore */ }
+  }
+
+  // Poll state while running
+  useEffect(() => {
+    if (!isRunning) return;
+    setViewMode('progress');
+    fetchRunState();
+    const interval = setInterval(fetchRunState, 3000);
+    return () => clearInterval(interval);
+  }, [isRunning, project.id]);
+
+  // Fetch final state once when run finishes
+  useEffect(() => {
+    if (prevIsRunning.current && !isRunning) {
+      setTimeout(fetchRunState, 600);
+    }
+    prevIsRunning.current = isRunning;
+  }, [isRunning]);
+
+  async function handleRetryTask(taskId: string) {
+    if (isRunning) return;
+    setViewMode('progress');
+    await apiPost(`/api/projects/${project.id}/retry`, { taskId, executionModel, reviewModel }).catch(() => {});
+  }
+
+  async function handleRetryFailed() {
+    if (isRunning) return;
+    setViewMode('progress');
+    await apiPost(`/api/projects/${project.id}/retry`, { executionModel, reviewModel }).catch(() => {});
+  }
 
   const chainPlanIds = new Set(chainSteps.map((s) => s.planId));
 
@@ -1896,6 +2048,87 @@ function RunTab({ project, outputLines }: RunTabProps) {
 
   const trafficStatus = isRunning ? 'running' : project.status === 'failed' ? 'error' : chainSteps.length > 0 ? 'completed' : 'idle';
 
+  const failedTasks = runTasks.filter((t) => t.status === 'failed');
+  const doneTasks = runTasks.filter((t) => t.status === 'completed' || t.status === 'skipped');
+  const progressPct = runTasks.length > 0 ? (doneTasks.length / runTasks.length) * 100 : 0;
+  const runTrafficStatus = isRunning ? 'running' : failedTasks.length > 0 ? 'error' : runTasks.length > 0 ? 'completed' : 'idle';
+
+  // Progress view: shown while running or after a run has results
+  if (viewMode === 'progress' && (isRunning || runTasks.length > 0)) {
+    return (
+      <div className="run-progress-view">
+        {/* Header */}
+        <div className="run-progress-header">
+          <IconTrafficLight status={runTrafficStatus} />
+          <div>
+            <div className="run-progress-title">
+              {isRunning ? 'Running…' : failedTasks.length > 0 ? 'Run failed' : 'Run complete'}
+            </div>
+            <div className="run-progress-sub">
+              {doneTasks.length}/{runTasks.length} tasks
+              {costUsd > 0 ? ` · $${costUsd.toFixed(3)}` : ''}
+            </div>
+          </div>
+        </div>
+
+        {/* Progress bar */}
+        <div className="run-progress-bar-wrap">
+          <div className="run-progress-bar" style={{ width: `${progressPct}%` }} />
+        </div>
+
+        {/* Task list */}
+        <div className="run-task-list">
+          {runTasks.map((task) => (
+            <div key={task.id} className={`run-task-item run-task-${task.status}`}>
+              <span className="run-task-icon">{taskStatusIcon(task.status)}</span>
+              <span className="run-task-title">{task.title}</span>
+              {task.status === 'failed' && !isRunning && (
+                <button className="run-task-retry-btn" onClick={() => handleRetryTask(task.id)}>↺ retry</button>
+              )}
+            </div>
+          ))}
+          {runTasks.length === 0 && isRunning && (
+            <div style={{ color: 'var(--text-muted)', fontSize: 11, padding: '20px 8px', textAlign: 'center' }}>
+              Starting tasks…
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="run-progress-footer">
+          {isRunning && (
+            <button
+              className="daemon-btn"
+              onClick={() => fetch(`/api/projects/${project.id}/stop`, { method: 'POST' }).catch(() => {})}
+              style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.4)' }}
+            >✕ Stop</button>
+          )}
+          {!isRunning && failedTasks.length > 0 && (
+            <>
+              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Exec:</span>
+              <select className="daemon-model-select" value={executionModel} onChange={(e) => setExecutionModel(e.target.value)}>
+                {MODEL_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>Review:</span>
+              <select className="daemon-model-select" value={reviewModel} onChange={(e) => setReviewModel(e.target.value)}>
+                {MODEL_OPTIONS.map((m) => <option key={m} value={m}>{m}</option>)}
+              </select>
+              <button className="daemon-btn primary" onClick={handleRetryFailed}>
+                ↺ Retry failed ({failedTasks.length})
+              </button>
+            </>
+          )}
+          {!isRunning && (
+            <button className="daemon-btn" onClick={() => { setRunTasks([]); setViewMode('config'); }} style={{ fontSize: 11 }}>
+              ← New chain
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Config view: chain builder (default)
   return (
     <div className="run-split">
       {/* ── Left panel: Ready Plans ── */}
@@ -1938,12 +2171,12 @@ function RunTab({ project, outputLines }: RunTabProps) {
           <IconTrafficLight status={trafficStatus} />
           <div className="run-traffic-status-text">
             <div className="run-traffic-title">
-              {isRunning ? 'Running…' : chainSteps.length === 0 ? 'No chain' : 'Ready'}
+              {chainSteps.length === 0 ? 'No chain' : 'Ready'}
             </div>
             <div className="run-traffic-sub">
-              {isRunning ? 'Executing — check History when complete' :
-               chainSteps.length === 0 ? 'Drag plans from the left to build a chain' :
-               `${chainSteps.length} plan${chainSteps.length !== 1 ? 's' : ''} queued`}
+              {chainSteps.length === 0
+                ? 'Drag plans from the left to build a chain'
+                : `${chainSteps.length} plan${chainSteps.length !== 1 ? 's' : ''} queued`}
             </div>
           </div>
         </div>
@@ -2022,13 +2255,6 @@ function RunTab({ project, outputLines }: RunTabProps) {
               ))}
             </div>
           )}
-
-          {/* Run output */}
-          {outputLines.length > 0 && (
-            <div style={{ width: '100%', marginTop: 16 }}>
-              <OutputLog lines={outputLines} onClear={() => {}} />
-            </div>
-          )}
         </div>
 
         {/* Footer with model selects + run button */}
@@ -2051,21 +2277,12 @@ function RunTab({ project, outputLines }: RunTabProps) {
           </select>
           <button
             className="daemon-btn primary"
-            disabled={chainSteps.length === 0 || isRunning}
+            disabled={chainSteps.length === 0}
             onClick={handleRunChain}
           >
-            {isRunning ? '⏳ Running…' : `▶ Run Chain (${chainSteps.length})`}
+            {`▶ Run Chain (${chainSteps.length})`}
           </button>
-          {isRunning && (
-            <button
-              className="daemon-btn"
-              onClick={() => fetch(`/api/projects/${project.id}/stop`, { method: 'POST' }).catch(() => {})}
-              style={{ fontSize: 11, color: '#ef4444', borderColor: 'rgba(239,68,68,0.4)' }}
-            >
-              ✕ Stop
-            </button>
-          )}
-          {chainSteps.length > 0 && !isRunning && (
+          {chainSteps.length > 0 && (
             <button className="daemon-btn" onClick={() => setChainSteps([])} style={{ fontSize: 11 }}>Clear</button>
           )}
         </div>
@@ -2748,7 +2965,7 @@ function ChatTab({ project, onSwitchTab, initialSessionId, onSessionSelect }: Ch
       let event: SseEvent;
       try { event = JSON.parse(e.data); } catch { return; }
       if (event.type === 'chat_token' && event.sessionId === activeSessionId) {
-        const token = event.token as string;
+        const token = stripAnsi(event.token as string);
         setActiveSession((prev) => {
           if (!prev) return prev;
           const msgs = [...prev.messages];
@@ -4204,7 +4421,6 @@ export function DaemonApp() {
   }
   const [sseConnected, setSseConnected] = useState(false);
   // Per-project output lines, keyed by projectId
-  const [outputByProject, setOutputByProject] = useState<Record<string, OutputLine[]>>({});
   // Last plan_saved event per project
   const [planSavedEvent, setPlanSavedEvent] = useState<SavedPlan | null>(null);
 
@@ -4241,19 +4457,6 @@ export function DaemonApp() {
         if (event.type === 'project_status') {
           setProjects((event.projects as ProjectStatusSnapshot[]) ?? []);
           setProjectsLoaded(true);
-        } else if (event.type === 'run_started') {
-          const pid = event.projectId as string;
-          setOutputByProject((prev) => ({ ...prev, [pid]: [] }));
-        } else if (event.type === 'plan_output' || event.type === 'run_output_daemon') {
-          const pid = event.projectId as string;
-          const rawLine = event.line as string;
-          const parsed = parseClaudeOutputLine(pid, rawLine);
-          const newLines = parsed.length > 0 ? parsed : [makeEventLine(pid, rawLine, 'event')];
-          setOutputByProject((prev) => {
-            const existing = prev[pid] ?? [];
-            const combined = [...existing, ...newLines];
-            return { ...prev, [pid]: combined.slice(-500) };
-          });
         } else if (event.type === 'plan_saved') {
           setPlanSavedEvent(event.plan as SavedPlan);
         } else if (event.type === 'project_registered' || event.type === 'project_removed') {
@@ -4271,15 +4474,6 @@ export function DaemonApp() {
             .then((r) => r.json())
             .then((data: ProjectStatusSnapshot[]) => setProjects(data))
             .catch(() => {});
-          // Append a terminal line to the output buffer
-          const isFailure = event.type === 'plan_failed' || event.type === 'run_failed_daemon';
-          const label = event.type.startsWith('plan')
-            ? (isFailure ? '✗ Planning failed' : '✓ Planning complete')
-            : (isFailure ? '✗ Run failed'      : '✓ Run complete');
-          setOutputByProject((prev) => ({
-            ...prev,
-            [pid]: [...(prev[pid] ?? []), makeEventLine(pid, label, isFailure ? 'error' : 'success')],
-          }));
         }
       };
 
@@ -4321,11 +4515,6 @@ export function DaemonApp() {
     }
   }, [projects, selectedId]);
 
-  function clearProjectOutput(projectId: string) {
-    setOutputByProject((prev) => ({ ...prev, [projectId]: [] }));
-  }
-
-  const projectOutput = selectedId ? (outputByProject[selectedId] ?? []) : [];
 
   const TABS: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
     { id: 'dashboard', label: 'Dashboard', icon: <IconLightning size={14} color="currentColor" /> },
@@ -4430,8 +4619,6 @@ export function DaemonApp() {
                   <PlanBuildTab
                     key={selectedProject.id}
                     project={selectedProject}
-                    outputLines={projectOutput}
-                    onClearOutput={() => clearProjectOutput(selectedProject.id)}
                     onPlanSavedEvent={planSavedEvent}
                   />
                 )}
@@ -4439,7 +4626,6 @@ export function DaemonApp() {
                   <RunTab
                     key={selectedProject.id}
                     project={selectedProject}
-                    outputLines={projectOutput}
                   />
                 )}
                 {activeTab === 'chat' && (

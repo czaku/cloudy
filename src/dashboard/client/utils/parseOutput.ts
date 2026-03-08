@@ -1,4 +1,4 @@
-import type { OutputLine } from '../types';
+import type { OutputLine } from '../types.js';
 
 let lineCounter = 0;
 function nextId(): string {
@@ -31,7 +31,7 @@ function getToolHint(input: Record<string, unknown>): string {
 // ── ANSI / terminal noise stripping ──────────────────────────────────────────
 
 /** Strip all ANSI escape sequences from a string */
-function stripAnsi(s: string): string {
+export function stripAnsi(s: string): string {
   // eslint-disable-next-line no-control-regex
   return s.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g, '');
 }
@@ -56,6 +56,14 @@ function isNoiseLine(raw: string): boolean {
   if (/^[└│]\s*$/.test(s)) return true;            // clack box chars
   // cloudy scope command echo lines
   if (/^☁\s+cloudy\s+scope\s+/.test(s)) return true;
+  // planning progress spinner: "Planning with sonnet… (287s)..◎" — any variant
+  if (/^Planning with \S+/.test(s)) return true;
+  // clack interactive prompt chrome
+  if (/^[◆◇]\s/.test(s)) return true;           // "◆ What would you like to do?"
+  if (/^[●○◉◎•]\s/.test(s)) return true;         // "● ✅ Approve" / "○ ✍ Revise"
+  if (/^[└│┌┐┘├┤┬┴┼─]\s*$/.test(s)) return true; // clack box chars
+  // bare spinner chars
+  if (/^[.◎○◉oO]+$/.test(s)) return true;
   return false;
 }
 
@@ -63,7 +71,7 @@ function isNoiseLine(raw: string): boolean {
  * Filter a (possibly multi-line) text block: split by newline, drop noise lines,
  * strip ANSI, rejoin non-empty lines.
  */
-function filterTextBlock(raw: string): string {
+export function filterTextBlock(raw: string): string {
   return raw
     .split('\n')
     .filter((l) => !isNoiseLine(l))

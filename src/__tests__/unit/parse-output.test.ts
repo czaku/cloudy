@@ -48,12 +48,13 @@ describe('parseClaudeOutputLine', () => {
     expect(parseClaudeOutputLine(TASK_ID, '\n')).toEqual([]);
   });
 
-  it('returns a text line for non-JSON input', () => {
+  it('returns an event line for non-JSON input (not rendered as a chat bubble)', () => {
     const result = parseClaudeOutputLine(TASK_ID, 'plain text output');
     expect(result).toHaveLength(1);
-    expect(result[0].type).toBe('text');
+    expect(result[0].type).toBe('event');
     expect(result[0].content).toBe('plain text output');
-    expect(result[0].taskId).toBe(TASK_ID);
+    // non-JSON lines have no taskId — they are not attributed to a specific task
+    expect(result[0].taskId).toBeUndefined();
   });
 
   it('skips system init messages', () => {
@@ -179,11 +180,11 @@ describe('parseClaudeOutputLine', () => {
     expect(parseClaudeOutputLine(TASK_ID, unknown)).toHaveLength(0);
   });
 
-  it('handles malformed partial JSON gracefully (treats as plain text)', () => {
+  it('handles malformed partial JSON gracefully (treats as event, not chat bubble)', () => {
     const partial = '{"type":"assistant","message":{"content":[';
     const result = parseClaudeOutputLine(TASK_ID, partial);
     expect(result).toHaveLength(1);
-    expect(result[0].type).toBe('text');
+    expect(result[0].type).toBe('event');
     expect(result[0].content).toBe(partial);
   });
 });
