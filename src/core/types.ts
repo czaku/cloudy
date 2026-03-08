@@ -328,6 +328,12 @@ export interface ProjectStatusSnapshot {
   taskProgress: { done: number; total: number } | null;
   costUsd: number | null;
   activeProcess: 'init' | 'run' | 'pipeline' | null;
+  processes?: Array<{
+    id: string;
+    type: 'init' | 'run' | 'pipeline';
+    specName?: string;
+    startedAt: string;
+  }>;
 }
 
 export interface SpecFile {

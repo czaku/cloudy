@@ -2,6 +2,7 @@ import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import os from 'node:os';
+import crypto from 'node:crypto';
 import type { Dirent } from 'node:fs';
 import { spawn, type ChildProcess } from 'node:child_process';
 import type { ProjectMeta, ProjectStatusSnapshot, SpecFile } from '../core/types.js';
@@ -9,6 +10,35 @@ import { listProjects, addProject, removeProject, findProject } from './registry
 import { detectSpecFiles, scanClaudeCodeSessions, loadClaudeCodeMessages, computeSessionStats } from './scanner.js';
 import { CLAWDASH_DIR, RUNS_DIR } from '../config/defaults.js';
 import { readJson, ensureDir, writeJson } from '../utils/fs.js';
+
+// ── Stuck task cleanup ────────────────────────────────────────────────
+
+/**
+ * When a child process exits unexpectedly, any tasks left as `in_progress`
+ * are stuck forever. This function reads the current state.json and marks
+ * them as `failed`, then returns the count so callers can broadcast an SSE.
+ */
+async function cleanupStuckTasks(projectPath: string): Promise<number> {
+  try {
+    const currentFile = path.join(projectPath, CLAWDASH_DIR, 'current');
+    const currentRun = await fs.readFile(currentFile, 'utf-8').then((s) => s.trim()).catch(() => '');
+    const stateFile = currentRun
+      ? path.join(projectPath, CLAWDASH_DIR, RUNS_DIR, currentRun, 'state.json')
+      : path.join(projectPath, CLAWDASH_DIR, 'state.json');
+    const state = await readJson<{ plan?: { tasks?: Array<{ id: string; status: string; error?: string }> } }>(stateFile);
+    const tasks = state?.plan?.tasks ?? [];
+    const stuck = tasks.filter((t) => t.status === 'in_progress');
+    if (stuck.length === 0) return 0;
+    for (const t of stuck) {
+      t.status = 'failed';
+      t.error = 'Process ended unexpectedly during execution';
+    }
+    await writeJson(stateFile, state);
+    return stuck.length;
+  } catch {
+    return 0;
+  }
+}
 
 // ── CC session resume tracker ─────────────────────────────────────────
 // Tracks active web-initiated claude --resume processes so we can detect
@@ -51,9 +81,27 @@ interface SavedPlan {
   createdAt: string;
   taskCount: number;
   completedCount: number;
+  deliveredAt?: string;   // ISO timestamp when the run completed successfully
+  specSha?: string;       // Short SHA-256 of the first spec file (8 hex chars)
 }
 
 // ── Plan persistence helpers ──────────────────────────────────────────
+
+async function updatePlanStatus(
+  projectPath: string,
+  planId: string,
+  status: SavedPlan['status'],
+  deliveredAt?: string,
+): Promise<void> {
+  try {
+    const planFile = path.join(getPlansDir(projectPath), `${planId}.json`);
+    const plan = await readJson<SavedPlan>(planFile);
+    if (!plan) return;
+    plan.status = status;
+    if (deliveredAt) plan.deliveredAt = deliveredAt;
+    await writeJson(planFile, plan);
+  } catch { /* ignore */ }
+}
 
 function getPlansDir(projectPath: string): string {
   return path.join(projectPath, CLAWDASH_DIR, PLANS_DIR_NAME);
@@ -84,6 +132,16 @@ async function savePlanFromState(projectPath: string, planName: string, specPath
       taskCount: tasks.length,
       completedCount: tasks.filter((t) => t.status === 'completed').length,
     };
+
+    // Compute short SHA of first spec file
+    let specSha: string | undefined;
+    if (specPaths[0]) {
+      try {
+        const content = await fs.readFile(specPaths[0], 'utf-8');
+        specSha = crypto.createHash('sha256').update(content).digest('hex').slice(0, 8);
+      } catch { /* ignore */ }
+    }
+    if (specSha) plan.specSha = specSha;
 
     await ensureDir(getPlansDir(projectPath));
     await writeJson(path.join(getPlansDir(projectPath), `${id}.json`), plan);
@@ -210,12 +268,24 @@ function broadcastSse(data: unknown): void {
 // ── Active child processes (per project) ────────────────────────────
 
 interface ActiveProcess {
+  id: string;          // unique processId (UUID-like)
   type: 'init' | 'run' | 'pipeline';
   child: ChildProcess;
   projectId: string;
+  planIds?: string[];
+  specName?: string;   // short name from spec path for display
+  startedAt: string;   // ISO timestamp
 }
 
-const activeProcesses = new Map<string, ActiveProcess>();
+const activeProcesses = new Map<string, ActiveProcess>(); // key: process.id (not projectId)
+
+function getProjectProcesses(projectId: string): ActiveProcess[] {
+  return [...activeProcesses.values()].filter((p) => p.projectId === projectId);
+}
+
+function getRunningProcess(projectId: string, type?: ActiveProcess['type']): ActiveProcess | undefined {
+  return getProjectProcesses(projectId).find((p) => !type || p.type === type);
+}
 
 // ── Per-project output ring buffer (for replay on reconnect) ─────────
 
@@ -279,18 +349,25 @@ async function getProjectStatus(meta: ProjectMeta): Promise<ProjectStatusSnapsho
     } catch { /* no current run */ }
   } catch { /* no state yet */ }
 
-  const proc = activeProcesses.get(meta.id);
+  const procs = getProjectProcesses(meta.id);
+  const anyProc = procs[0];
 
   return {
     id: meta.id,
     name: meta.name,
     path: meta.path,
-    status: proc ? 'running' : status,
+    status: anyProc ? 'running' : status,
     lastRunAt,
     activePlan,
     taskProgress,
     costUsd,
-    activeProcess: proc?.type ?? null,
+    activeProcess: anyProc?.type ?? null, // legacy compat: first process type
+    processes: procs.map((p) => ({
+      id: p.id,
+      type: p.type,
+      specName: p.specName,
+      startedAt: p.startedAt,
+    })),
   };
 }
 
@@ -364,7 +441,7 @@ function spawnCloudyProcess(
   args: string[],
   planName?: string,
   specPaths?: string[],
-): ChildProcess {
+): ActiveProcess {
   const cloudyBin = process.argv[1]; // path to cloudy.js
   const child = spawn(process.execPath, [cloudyBin, ...args], {
     cwd: projectPath,
@@ -372,8 +449,12 @@ function spawnCloudyProcess(
     env: { ...process.env },
   });
 
-  const proc: ActiveProcess = { type, child, projectId };
-  activeProcesses.set(projectId, proc);
+  const processId = `${type}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  const specName = specPaths?.[0]
+    ? path.basename(specPaths[0], path.extname(specPaths[0]))
+    : undefined;
+  const proc: ActiveProcess = { id: processId, type, child, projectId, specName, startedAt: new Date().toISOString() };
+  activeProcesses.set(processId, proc);
 
   const sseOutputType = type === 'init' ? 'plan_output' : 'run_output_daemon';
 
@@ -419,7 +500,7 @@ function spawnCloudyProcess(
           const jsonStr = line.slice(line.indexOf('CLOUDY_PLAN_QUESTION:') + 'CLOUDY_PLAN_QUESTION:'.length).trim();
           try {
             const q = JSON.parse(jsonStr);
-            broadcastSse({ type: 'plan_question', projectId, ...q });
+            broadcastSse({ type: 'plan_question', projectId, processId, ...q });
           } catch { /* malformed — ignore */ }
           continue;
         }
@@ -428,12 +509,12 @@ function spawnCloudyProcess(
           const jsonStr = line.slice(line.indexOf('CLOUDY_LOG:') + 'CLOUDY_LOG:'.length).trim();
           try {
             const entry = JSON.parse(jsonStr) as { level: string; msg: string };
-            broadcastSse({ type: 'plan_progress', projectId, level: entry.level, msg: entry.msg });
+            broadcastSse({ type: 'plan_progress', projectId, processId, level: entry.level, msg: entry.msg });
           } catch { /* malformed — ignore */ }
           continue;
         }
         if (!isSpinnerLine(line)) {
-          broadcastSse({ type: sseOutputType, projectId, line });
+          broadcastSse({ type: sseOutputType, projectId, processId, line });
           pushToBuffer(line);
         }
       }
@@ -448,7 +529,7 @@ function spawnCloudyProcess(
       stderrBuf = lines.pop() ?? '';
       for (const line of lines) {
         if (line.trim() && !isSpinnerLine(line)) {
-          broadcastSse({ type: sseOutputType, projectId, line });
+          broadcastSse({ type: sseOutputType, projectId, processId, line });
           pushToBuffer(line);
         }
       }
@@ -456,21 +537,38 @@ function spawnCloudyProcess(
   }
 
   child.on('exit', (code) => {
-    activeProcesses.delete(projectId);
-    projectOutputBuffer.delete(projectId);
+    activeProcesses.delete(processId);
+    // Only delete output buffer if no other processes remain for this project
+    if (getProjectProcesses(projectId).length === 0) {
+      projectOutputBuffer.delete(projectId);
+    }
     if (type === 'init') {
-      broadcastSse({ type: code === 0 ? 'plan_completed' : 'plan_failed', projectId, code });
+      broadcastSse({ type: code === 0 ? 'plan_completed' : 'plan_failed', projectId, processId, code });
       if (code === 0 && planName) {
         savePlanFromState(projectPath, planName, specPaths ?? []).then((plan) => {
-          if (plan) broadcastSse({ type: 'plan_saved', projectId, plan });
+          if (plan) broadcastSse({ type: 'plan_saved', projectId, processId, plan });
         });
       }
     } else {
-      broadcastSse({ type: code === 0 ? 'run_completed_daemon' : 'run_failed_daemon', projectId, code });
+      // For run/pipeline: clean up any in_progress tasks left dangling by a crash
+      cleanupStuckTasks(projectPath).then((stuckCount) => {
+        broadcastSse({ type: code === 0 ? 'run_completed_daemon' : 'run_failed_daemon', projectId, processId, code });
+        if (stuckCount > 0) {
+          broadcastSse({ type: 'tasks_stuck', projectId, processId, count: stuckCount });
+        }
+        // Update plan statuses for queued planIds
+        if (proc.planIds?.length) {
+          const newStatus = code === 0 ? 'completed' : 'failed';
+          const deliveredAt = code === 0 ? new Date().toISOString() : undefined;
+          for (const planId of proc.planIds) {
+            updatePlanStatus(projectPath, planId, newStatus, deliveredAt).catch(() => {});
+          }
+        }
+      });
     }
   });
 
-  return child;
+  return proc;
 }
 
 // ── Chat execution ────────────────────────────────────────────────────
@@ -505,16 +603,11 @@ async function streamChatMessage(
   // Keep in active streams map
   activeChatStreams.set(sessionId, session);
 
-  // Build system prompt with project context
-  let systemPrompt = `You are a helpful AI assistant working in the context of a software project.
-You help the developer understand, plan, and improve their codebase.
-When asked to plan a feature or task, describe what you'd do in clear steps.
-Project directory: ${projectPath}`;
-
-  // Try to load CLAUDE.md for project context
+  // Build context prefix (embedded in prompt, not --system-prompt flag to avoid arg issues)
+  let contextPrefix = '';
   try {
     const claudeMd = await fs.readFile(`${projectPath}/CLAUDE.md`, 'utf-8');
-    systemPrompt += `\n\nProject context (CLAUDE.md):\n${claudeMd.slice(0, 3000)}`;
+    contextPrefix = `<context>\nProject: ${projectPath}\n${claudeMd.slice(0, 1500)}\n</context>\n\n`;
   } catch { /* no CLAUDE.md */ }
 
   // Build conversation history as a single prompt
@@ -523,9 +616,9 @@ Project directory: ${projectPath}`;
     .map(m => `${m.role === 'user' ? 'Human' : 'Assistant'}: ${m.content}`)
     .join('\n\n');
 
-  const fullPrompt = historyText
+  const fullPrompt = contextPrefix + (historyText
     ? `${historyText}\n\nHuman: ${userMessage}`
-    : userMessage;
+    : userMessage);
 
   // Spawn claude --print with the conversation
   const { findClaudeBinary } = await import('../utils/claude-path.js');
@@ -548,7 +641,6 @@ Project directory: ${projectPath}`;
     '--print',
     '--output-format', 'stream-json',
     '--model', modelId,
-    '--system-prompt', systemPrompt,
   ];
   if (opts.effort && ['low', 'medium', 'high'].includes(opts.effort)) {
     args.push('--effort', opts.effort);
@@ -558,11 +650,18 @@ Project directory: ${projectPath}`;
   }
   args.push(fullPrompt);
 
+  const { CLAUDECODE: _cc, CLAUDE_CODE_ENTRYPOINT: _cce, ...chatEnv } = process.env;
   const child = spawn(claudeBin, args, {
     cwd: projectPath,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env },
+    env: chatEnv,
   });
+
+  // Capture stderr for error reporting
+  let stderrOutput = '';
+  if (child.stderr) {
+    child.stderr.on('data', (chunk: Buffer) => { stderrOutput += chunk.toString().slice(0, 500); });
+  }
 
   let assistantContent = '';
 
@@ -576,7 +675,6 @@ Project directory: ${projectPath}`;
           if (msg.type === 'assistant' && msg.message?.content) {
             for (const block of msg.message.content) {
               if (block.type === 'text') {
-                // Stream token by token (split into words for smooth streaming)
                 const newText = block.text.slice(assistantContent.length);
                 assistantContent = block.text;
                 session!.streamingContent = assistantContent;
@@ -585,6 +683,10 @@ Project directory: ${projectPath}`;
                 }
               }
             }
+          } else if (msg.type === 'result' && msg.result && !assistantContent) {
+            // Fallback: capture result field if no assistant messages were streamed
+            assistantContent = msg.result;
+            broadcastSse({ type: 'chat_token', sessionId: session!.id, token: assistantContent });
           }
         } catch { /* not JSON — ignore */ }
       }
@@ -600,7 +702,8 @@ Project directory: ${projectPath}`;
   if (assistantContent) {
     session.messages.push({ role: 'assistant', content: assistantContent, ts: new Date().toISOString() });
   } else {
-    session.messages.push({ role: 'assistant', content: '(no response)', ts: new Date().toISOString() });
+    const errDetail = stderrOutput ? ` (${stderrOutput.trim().slice(0, 200)})` : '';
+    session.messages.push({ role: 'assistant', content: `(no response${errDetail})`, ts: new Date().toISOString() });
   }
   session.streamingContent = '';
   session.updatedAt = new Date().toISOString();
@@ -641,10 +744,11 @@ async function streamChatMessageResume(
     userMessage,
   ];
 
+  const { CLAUDECODE: _cc2, CLAUDE_CODE_ENTRYPOINT: _cce2, ...resumeEnv } = process.env;
   const child = spawn(claudeBin, args, {
     cwd: projectPath,
     stdio: ['ignore', 'pipe', 'pipe'],
-    env: { ...process.env },
+    env: resumeEnv,
   });
 
   let assistantContent = '';
@@ -763,7 +867,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
     // Replay buffered output lines for any active process
     for (const [pid, lines] of projectOutputBuffer) {
-      const proc = activeProcesses.get(pid);
+      const proc = getProjectProcesses(pid)[0]; // get first process for this project
       const outputType = proc?.type === 'init' ? 'plan_output' : 'run_output_daemon';
       for (const line of lines) {
         sendSse(client, { type: outputType, projectId: pid, line });
@@ -934,12 +1038,9 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     // POST /api/projects/:id/plan
     if (method === 'POST' && subpath === '/plan') {
       if (!meta) { send404(res); return; }
-      if (activeProcesses.has(projectId)) {
-        sendJson(res, 409, { error: 'A process is already running. Stop it first.' });
-        return;
-      }
+      // No guard — allow parallel planning sessions
       try {
-        const body = await parseBody(req) as { specPaths?: string[]; planName?: string; model?: string };
+        const body = await parseBody(req) as { specPaths?: string[]; planName?: string; model?: string; planIds?: string[] };
 
         // Fast-fail: check spec sizes before spawning anything
         const MAX_FILE_BYTES = 30_000;
@@ -976,10 +1077,11 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           ? path.basename(specPaths[0], '.md').replace(/[^a-z0-9]+/gi, '-').toLowerCase().slice(0, 24)
           : 'plan';
         const runName = `scope-${ts}-${slug}`;
-        spawnCloudyProcess(projectId, meta.path, 'init', [
+        const proc = spawnCloudyProcess(projectId, meta.path, 'init', [
           'scope', ...specArgs, ...modelArg, '--run-name', runName,
         ], body.planName, specPaths);
-        sendJson(res, 200, { ok: true, started: true });
+        if (body.planIds?.length) proc.planIds = body.planIds;
+        sendJson(res, 200, { ok: true, started: true, processId: proc.id });
       } catch (err) {
         sendJson(res, 500, { error: String(err) });
       }
@@ -988,7 +1090,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
     // POST /api/projects/:id/plan-input
     if (method === 'POST' && subpath === '/plan-input') {
-      const proc = activeProcesses.get(projectId);
+      const proc = getRunningProcess(projectId, 'init');
       if (!proc || !proc.child.stdin) {
         sendJson(res, 404, { error: 'No active planning process' });
         return;
@@ -1007,37 +1109,37 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     // POST /api/projects/:id/run
     if (method === 'POST' && subpath === '/run') {
       if (!meta) { send404(res); return; }
-      if (activeProcesses.has(projectId)) {
-        sendJson(res, 409, { error: 'A process is already running. Stop it first.' });
+      if (!!getRunningProcess(projectId, 'run')) {
+        sendJson(res, 409, { error: 'A run is already in progress. Stop it first.' });
         return;
       }
       try {
-        const body = await parseBody(req) as { executionModel?: string; reviewModel?: string; planIds?: string[] };
+        const body = await parseBody(req) as { executionModel?: string; taskReviewModel?: string; runReviewModel?: string; planIds?: string[]; parallel?: boolean; maxParallel?: number; noValidate?: boolean; maxRetries?: number; effort?: string };
         const execModel = body.executionModel ?? 'sonnet';
-        const reviewModel = body.reviewModel ?? 'sonnet';
+        const taskReviewModel = body.taskReviewModel ?? 'haiku';
+        const runReviewModel = body.runReviewModel ?? 'sonnet';
 
-        if (body.planIds?.length) {
-          // Load the first plan and run it
-          const planFile = path.join(getPlansDir(meta.path), `${body.planIds[0]}.json`);
-          const plan = await readJson<SavedPlan>(planFile).catch(() => null);
-          if (plan?.specPaths?.length) {
-            const specArgs: string[] = [];
-            for (const sp of plan.specPaths) specArgs.push('--spec', sp);
-            spawnCloudyProcess(projectId, meta.path, 'run', ['run', '--agent-output', ...specArgs]);
-            sendJson(res, 200, { ok: true, started: true });
-            return;
-          }
-        }
+        const extraArgs: string[] = [];
+        if (body.parallel) { extraArgs.push('--parallel'); }
+        if (body.maxParallel) { extraArgs.push('--max-parallel', String(body.maxParallel)); }
+        if (body.noValidate) { extraArgs.push('--no-validate'); }
+        if (body.maxRetries) { extraArgs.push('--max-retries', String(body.maxRetries)); }
+        if (body.effort) { extraArgs.push('--effort', body.effort); }
 
-        spawnCloudyProcess(projectId, meta.path, 'run', [
+        // planIds is used client-side to identify which plan was queued;
+        // execution always goes through cloudy build using the current state.json
+
+        const proc = spawnCloudyProcess(projectId, meta.path, 'run', [
           'build',
           '--non-interactive',
           '--agent-output',
           '--execution-model', execModel,
-          '--task-review-model', 'haiku',
-          '--run-review-model', reviewModel,
+          '--task-review-model', taskReviewModel,
+          '--run-review-model', runReviewModel,
           '--heartbeat-interval', '5',
+          ...extraArgs,
         ]);
+        if (body.planIds?.length) proc.planIds = body.planIds;
         broadcastSse({ type: 'run_started', projectId });
         sendJson(res, 200, { ok: true, started: true });
       } catch (err) {
@@ -1049,8 +1151,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     // POST /api/projects/:id/pipeline
     if (method === 'POST' && subpath === '/pipeline') {
       if (!meta) { send404(res); return; }
-      if (activeProcesses.has(projectId)) {
-        sendJson(res, 409, { error: 'A process is already running. Stop it first.' });
+      if (!!getRunningProcess(projectId, 'pipeline')) {
+        sendJson(res, 409, { error: 'A pipeline is already running. Stop it first.' });
         return;
       }
       try {
@@ -1071,7 +1173,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
     // POST /api/projects/:id/stop
     if (method === 'POST' && subpath === '/stop') {
-      const proc = activeProcesses.get(projectId);
+      const proc = getProjectProcesses(projectId)[0]; // stop the first/any process
       if (!proc) {
         sendJson(res, 404, { error: 'No active process' });
         return;
@@ -1084,22 +1186,32 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     // POST /api/projects/:id/retry
     if (method === 'POST' && subpath === '/retry') {
       if (!meta) { send404(res); return; }
-      if (activeProcesses.has(projectId)) {
-        sendJson(res, 409, { error: 'A process is already running. Stop it first.' });
+      if (!!getRunningProcess(projectId, 'run')) {
+        sendJson(res, 409, { error: 'A run is already in progress. Stop it first.' });
         return;
       }
       try {
-        const body = await parseBody(req) as { taskId?: string; executionModel?: string; reviewModel?: string };
+        const body = await parseBody(req) as { taskId?: string; executionModel?: string; taskReviewModel?: string; runReviewModel?: string; parallel?: boolean; maxParallel?: number; noValidate?: boolean; maxRetries?: number; effort?: string };
         const execModel = body.executionModel ?? 'sonnet';
-        const reviewModel = body.reviewModel ?? 'sonnet';
+        const taskReviewModel = body.taskReviewModel ?? 'haiku';
+        const runReviewModel = body.runReviewModel ?? 'sonnet';
         const retryArgs = body.taskId ? ['--retry', body.taskId] : ['--retry-failed'];
+
+        const extraArgs: string[] = [];
+        if (body.parallel) { extraArgs.push('--parallel'); }
+        if (body.maxParallel) { extraArgs.push('--max-parallel', String(body.maxParallel)); }
+        if (body.noValidate) { extraArgs.push('--no-validate'); }
+        if (body.maxRetries) { extraArgs.push('--max-retries', String(body.maxRetries)); }
+        if (body.effort) { extraArgs.push('--effort', body.effort); }
+
         spawnCloudyProcess(projectId, meta.path, 'run', [
           'build', '--non-interactive', '--agent-output',
           '--execution-model', execModel,
-          '--task-review-model', 'haiku',
-          '--run-review-model', reviewModel,
+          '--task-review-model', taskReviewModel,
+          '--run-review-model', runReviewModel,
           '--heartbeat-interval', '5',
           ...retryArgs,
+          ...extraArgs,
         ]);
         broadcastSse({ type: 'run_started', projectId });
         sendJson(res, 200, { ok: true });

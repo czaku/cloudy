@@ -14,6 +14,12 @@ interface ProjectStatusSnapshot {
   taskProgress: { done: number; total: number } | null;
   costUsd: number | null;
   activeProcess: 'init' | 'run' | 'pipeline' | null;
+  processes?: Array<{
+    id: string;
+    type: 'init' | 'run' | 'pipeline';
+    specName?: string;
+    startedAt: string;
+  }>;
 }
 
 interface SpecFile {
@@ -39,6 +45,8 @@ interface SavedPlan {
   createdAt: string;
   taskCount: number;
   completedCount: number;
+  deliveredAt?: string;
+  specSha?: string;
 }
 
 type ActiveTab = 'dashboard' | 'chat' | 'plan' | 'run' | 'history' | 'memory';
@@ -1265,6 +1273,18 @@ circle.traffic-light-active[fill="#f59e0b"] {
 .plan-action-btn.planning { background: linear-gradient(135deg, #a78bfa 0%, #7c5fa3 100%); }
 .plan-stop-btn { background: rgba(239,68,68,0.1); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); border-radius: 6px; padding: 9px 12px; font-size: 12px; font-weight: 700; cursor: pointer; transition: background 0.12s; flex-shrink: 0; }
 .plan-stop-btn:hover { background: rgba(239,68,68,0.2); }
+.plan-spec-chip { display: inline-flex; align-items: center; gap: 3px; background: rgba(139,92,246,0.1); border: 1px solid rgba(139,92,246,0.25); border-radius: 10px; padding: 1px 8px; font-size: 10px; color: #a78bfa; font-weight: 600; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+/* Register project dialog */
+.register-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 9999; }
+.register-dialog { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; width: 440px; max-width: calc(100vw - 40px); display: flex; flex-direction: column; gap: 6px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); }
+.register-dialog-title { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 2px; }
+.register-dialog-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; line-height: 1.5; }
+.register-dialog-sub code { background: var(--bg-secondary); border-radius: 3px; padding: 1px 5px; font-size: 11px; color: var(--text-secondary); }
+.register-dialog-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); margin-top: 4px; }
+.register-dialog-input { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 7px; padding: 9px 12px; font-size: 13px; color: var(--text-primary); outline: none; font-family: 'SF Mono', monospace; }
+.register-dialog-input:focus { border-color: rgba(139,92,246,0.5); }
+.register-dialog-error { font-size: 11px; color: #ef4444; margin-top: 4px; }
+.register-dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
 .plan-selection-count { font-size: 10px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
 .plan-selection-clear { background: none; border: none; color: #a78bfa; font-size: 10px; cursor: pointer; padding: 0; text-decoration: underline; }
 .plan-selection-clear:hover { color: #c4b5fd; }
@@ -1287,28 +1307,88 @@ circle.traffic-light-active[fill="#f59e0b"] {
 .run-traffic-title { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 3px; }
 .run-traffic-sub { font-size: 11px; color: var(--text-muted); }
 /* Run progress view */
-.run-progress-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
-.run-progress-header { display: flex; align-items: center; gap: 16px; padding: 14px 16px; background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; margin: 14px 16px 0; flex-shrink: 0; }
-.run-progress-title { font-size: 15px; font-weight: 700; color: var(--text-primary); margin-bottom: 3px; }
-.run-progress-sub { font-size: 11px; color: var(--text-muted); }
-.run-progress-bar-wrap { height: 4px; background: var(--border); margin: 12px 16px 0; border-radius: 2px; flex-shrink: 0; overflow: hidden; }
-.run-progress-bar { height: 100%; background: linear-gradient(90deg, #a78bfa, #7c3aed); border-radius: 2px; transition: width 0.4s ease; }
-.run-task-list { flex: 1; overflow-y: auto; padding: 10px 16px; display: flex; flex-direction: column; gap: 4px; }
-.run-task-item { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 6px; background: var(--bg-card); border: 1px solid var(--border); font-size: 12px; }
-.run-task-item.run-task-completed { border-color: rgba(34,197,94,0.25); }
-.run-task-item.run-task-failed { border-color: rgba(239,68,68,0.3); background: rgba(239,68,68,0.04); }
-.run-task-item.run-task-in_progress { border-color: rgba(167,139,250,0.4); background: rgba(167,139,250,0.05); }
-.run-task-icon { font-size: 13px; flex-shrink: 0; width: 16px; text-align: center; }
-.run-task-item.run-task-completed .run-task-icon { color: #22c55e; }
-.run-task-item.run-task-failed .run-task-icon { color: #ef4444; }
-.run-task-item.run-task-in_progress .run-task-icon { color: #a78bfa; }
-.run-task-item.run-task-skipped .run-task-icon { color: var(--text-muted); }
-.run-task-title { flex: 1; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.run-task-item.run-task-completed .run-task-title { color: var(--text-secondary); }
-.run-task-item.run-task-skipped .run-task-title { color: var(--text-muted); }
-.run-task-retry-btn { font-size: 10px; padding: 2px 7px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.4); background: none; color: #ef4444; cursor: pointer; flex-shrink: 0; }
+.run-progress-view { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: var(--bg-primary); }
+.run-progress-hero { display: flex; align-items: center; gap: 20px; padding: 20px 20px 16px; flex-shrink: 0; }
+.run-progress-ring-wrap { position: relative; width: 100px; height: 100px; flex-shrink: 0; }
+.run-progress-ring-wrap svg { transform: rotate(-90deg); }
+.run-progress-ring-bg { fill: none; stroke: var(--border); stroke-width: 6; }
+.run-progress-ring-fill { fill: none; stroke: #a78bfa; stroke-width: 6; stroke-linecap: round; transition: stroke-dashoffset 0.6s cubic-bezier(.4,0,.2,1); }
+.run-progress-ring-fill.complete { stroke: #22c55e; }
+.run-progress-ring-fill.failed { stroke: #ef4444; }
+.run-progress-ring-pct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 800; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.run-progress-info { flex: 1; min-width: 0; }
+.run-progress-headline { font-size: 18px; font-weight: 800; color: var(--text-primary); margin-bottom: 4px; letter-spacing: -0.3px; }
+.run-progress-subline { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; }
+.run-progress-bar-wrap { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+.run-progress-bar { height: 100%; border-radius: 3px; background: linear-gradient(90deg, #7c3aed, #a78bfa, #c084fc); background-size: 200% 100%; transition: width 0.6s cubic-bezier(.4,0,.2,1); }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.run-progress-bar.running { animation: shimmer 2s linear infinite; }
+.run-progress-bar.complete { background: linear-gradient(90deg, #16a34a, #22c55e); animation: none; }
+.run-progress-bar.failed { background: #ef4444; animation: none; }
+.run-task-list { flex: 1; overflow-y: auto; padding: 0 16px 10px; display: flex; flex-direction: column; gap: 6px; }
+.run-task-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: var(--bg-card); border: 1px solid var(--border); font-size: 12px; transition: all 0.3s ease; border-left: 3px solid transparent; }
+.run-task-item.run-task-completed { border-left-color: #22c55e; opacity: 0.75; }
+.run-task-item.run-task-failed { border-left-color: #ef4444; background: rgba(239,68,68,0.04); }
+@keyframes task-pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(167,139,250,0.15), 0 0 0 0 rgba(167,139,250,0.1); border-left-color: #a78bfa; } 50% { box-shadow: 0 0 12px 2px rgba(167,139,250,0.12), 0 0 0 0 rgba(167,139,250,0); border-left-color: #c084fc; } }
+.run-task-item.run-task-in_progress { border-left-color: #a78bfa; background: rgba(167,139,250,0.06); animation: task-pulse 2s ease-in-out infinite; }
+.run-task-item.run-task-skipped { opacity: 0.45; }
+.run-task-icon-wrap { width: 22px; height: 22px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; flex-shrink: 0; }
+.run-task-icon-wrap.status-completed { background: rgba(34,197,94,0.15); color: #22c55e; }
+.run-task-icon-wrap.status-failed { background: rgba(239,68,68,0.15); color: #ef4444; }
+.run-task-icon-wrap.status-in_progress { background: rgba(167,139,250,0.2); color: #a78bfa; }
+.run-task-icon-wrap.status-pending { background: var(--bg-secondary); color: var(--text-muted); }
+.run-task-icon-wrap.status-skipped { background: var(--bg-secondary); color: var(--text-muted); }
+@keyframes spin-icon { to { transform: rotate(360deg); } }
+.run-task-icon-wrap.status-in_progress .spin { display: inline-block; animation: spin-icon 1s linear infinite; }
+.run-task-title { flex: 1; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500; }
+.run-task-item.run-task-completed .run-task-title { color: var(--text-muted); font-weight: 400; }
+.run-task-item.run-task-skipped .run-task-title { color: var(--text-muted); font-weight: 400; }
+.run-task-status-label { font-size: 9px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted); flex-shrink: 0; }
+.run-task-item.run-task-in_progress .run-task-status-label { color: #a78bfa; }
+.run-task-item.run-task-completed .run-task-status-label { color: #22c55e; }
+.run-task-item.run-task-failed .run-task-status-label { color: #ef4444; }
+.run-task-retry-btn { font-size: 10px; padding: 3px 8px; border-radius: 4px; border: 1px solid rgba(239,68,68,0.4); background: none; color: #ef4444; cursor: pointer; flex-shrink: 0; }
 .run-task-retry-btn:hover { background: rgba(239,68,68,0.08); }
-.run-progress-footer { padding: 10px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
+.run-task-expand-btn { font-size: 10px; width: 18px; text-align: center; color: var(--text-muted); cursor: pointer; flex-shrink: 0; transition: transform 0.15s; user-select: none; }
+.run-task-expand-btn.open { transform: rotate(90deg); }
+.run-task-detail { padding: 10px 12px 12px 44px; border-top: 1px solid var(--border); font-size: 11px; color: var(--text-secondary); display: flex; flex-direction: column; gap: 8px; }
+.run-task-detail-section { }
+.run-task-detail-label { font-size: 9px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 3px; }
+.run-task-detail-text { line-height: 1.5; color: var(--text-secondary); white-space: pre-wrap; }
+.run-task-detail-files { display: flex; flex-wrap: wrap; gap: 4px; }
+.run-task-detail-file { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 3px; padding: 1px 6px; font-family: 'SF Mono', monospace; font-size: 9px; color: var(--text-muted); }
+.run-task-detail-criteria { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 3px; }
+.run-task-detail-criteria li { display: flex; gap: 6px; align-items: flex-start; }
+.run-task-detail-criteria li::before { content: '·'; color: #a78bfa; flex-shrink: 0; }
+/* Live output terminal */
+.run-task-live-output { background: #0a0a0f; border: 1px solid rgba(139,92,246,0.2); border-radius: 6px; padding: 8px 10px; max-height: 180px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; scroll-behavior: smooth; }
+.run-task-live-line { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 10px; color: #c4c4d0; line-height: 1.4; word-break: break-all; white-space: pre-wrap; }
+.run-task-live-line:last-child { color: #a78bfa; }
+/* Question banner */
+.run-question-banner { margin: 0 12px 8px; background: rgba(245,158,11,0.08); border: 1.5px solid rgba(245,158,11,0.5); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 10px; animation: pulse-border 1.5s ease-in-out infinite; }
+@keyframes pulse-border { 0%,100% { border-color: rgba(245,158,11,0.5); } 50% { border-color: rgba(245,158,11,0.95); box-shadow: 0 0 12px rgba(245,158,11,0.25); } }
+.run-question-banner-header { display: flex; align-items: center; gap: 8px; }
+.run-question-banner-icon { font-size: 16px; }
+.run-question-banner-title { flex: 1; font-size: 12px; font-weight: 700; color: #f59e0b; }
+.run-question-banner-timer { font-size: 11px; font-weight: 700; color: #f59e0b; background: rgba(245,158,11,0.15); border-radius: 10px; padding: 2px 8px; }
+.run-question-banner-text { font-size: 12px; color: var(--text-primary); line-height: 1.5; }
+.run-question-banner-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.run-question-option { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 5px 12px; font-size: 11px; color: var(--text-secondary); cursor: pointer; transition: all 0.15s; }
+.run-question-option:hover { border-color: #f59e0b; color: #f59e0b; }
+.run-question-option.selected { background: rgba(245,158,11,0.15); border-color: #f59e0b; color: #f59e0b; font-weight: 600; }
+.run-question-input { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; font-size: 12px; color: var(--text-primary); outline: none; width: 100%; box-sizing: border-box; }
+.run-question-input:focus { border-color: #f59e0b; }
+.run-question-submit { align-self: flex-start; background: #f59e0b; color: #000; border: none; border-radius: 6px; padding: 6px 14px; font-size: 11px; font-weight: 700; cursor: pointer; }
+.run-question-submit:hover { background: #fbbf24; }
+/* Stuck task banner */
+.run-stuck-banner { margin: 0 12px 8px; background: rgba(245,158,11,0.06); border: 1px solid rgba(245,158,11,0.3); border-radius: 8px; padding: 10px 14px; display: flex; align-items: center; gap: 10px; font-size: 11px; color: #f59e0b; }
+.run-stuck-banner span { flex: 1; }
+.run-stuck-reset-btn { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.4); border-radius: 6px; padding: 4px 10px; font-size: 11px; color: #f59e0b; cursor: pointer; white-space: nowrap; }
+.run-stuck-reset-btn:hover { background: rgba(245,158,11,0.25); }
+.run-progress-footer { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
+@keyframes celebrate { 0% { transform: scale(0.8); opacity: 0; } 60% { transform: scale(1.05); } 100% { transform: scale(1); opacity: 1; } }
+.run-complete-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(34,197,94,0.12); border: 1px solid rgba(34,197,94,0.3); border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 700; color: #22c55e; animation: celebrate 0.4s ease-out; }
+.run-failed-badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 20px; padding: 4px 12px; font-size: 12px; font-weight: 700; color: #ef4444; }
 /* Activity badge */
 .activity-badge {
   display: flex; align-items: center; gap: 5px;
@@ -1348,6 +1428,25 @@ circle.traffic-light-active[fill="#f59e0b"] {
 .pcb-summary-tasks { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; }
 .pcb-summary-task { font-size: 11px; color: var(--text-secondary); display: flex; gap: 6px; align-items: flex-start; }
 .pcb-error { color: #f87171; }
+/* ── Plan delivered badge ── */
+.plan-delivered-badge { display: inline-flex; align-items: center; gap: 4px; background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.25); border-radius: 10px; padding: 1px 8px; font-size: 9px; font-weight: 700; color: #22c55e; font-family: 'SF Mono', monospace; }
+/* ── Active planning session cards ── */
+.plan-active-session-card { background: rgba(139,92,246,0.08); border: 1px solid rgba(139,92,246,0.3); border-radius: 8px; padding: 10px 12px; cursor: pointer; margin-bottom: 6px; }
+.plan-active-session-card:hover { border-color: rgba(139,92,246,0.5); }
+.plan-active-session-header { display: flex; align-items: center; gap: 6px; margin-bottom: 3px; }
+.plan-active-session-name { font-size: 12px; font-weight: 600; color: var(--text-primary); }
+.plan-active-session-meta { font-size: 10px; color: var(--text-muted); }
+/* ── Process switcher pills ── */
+.plan-process-switcher { display: flex; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); flex-shrink: 0; flex-wrap: wrap; background: var(--bg-secondary); }
+.plan-process-pill { padding: 3px 10px; border-radius: 12px; font-size: 11px; cursor: pointer; border: 1px solid rgba(139,92,246,0.35); background: rgba(139,92,246,0.08); color: #a78bfa; white-space: nowrap; transition: all 0.1s; }
+.plan-process-pill:hover { border-color: rgba(139,92,246,0.6); background: rgba(139,92,246,0.15); }
+/* ── Advanced run options ── */
+.run-advanced-options { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.run-advanced-toggle { padding: 8px 12px; font-size: 11px; color: var(--text-muted); cursor: pointer; list-style: none; display: block; }
+.run-advanced-toggle::-webkit-details-marker { display: none; }
+.run-advanced-body { padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); }
+.run-advanced-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-secondary); cursor: pointer; }
+.run-advanced-row input[type=number], .run-advanced-row select { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 11px; color: var(--text-primary); }
 `;
 
 function injectStyles() {
@@ -1366,8 +1465,85 @@ interface ProjectSidebarProps {
   onSelect: (id: string) => void;
 }
 
-function ProjectSidebar({ projects, selectedId, onSelect }: ProjectSidebarProps) {
+function RegisterProjectDialog({ onClose, onRegistered }: { onClose: () => void; onRegistered: (id: string) => void }) {
+  const [dirPath, setDirPath] = useState('');
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Auto-derive project name from path
+  function deriveName(p: string) {
+    return p.trim().split('/').filter(Boolean).pop() ?? '';
+  }
+
+  async function handleSubmit() {
+    const p = dirPath.trim();
+    if (!p) { setError('Enter a directory path.'); return; }
+    const projectName = name.trim() || deriveName(p);
+    const id = projectName.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now().toString(36);
+    setLoading(true);
+    setError('');
+    try {
+      const r = await fetch('/api/projects/register', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ id, name: projectName, path: p }),
+      });
+      const data = await r.json() as { ok?: boolean; error?: string };
+      if (data.ok) { onRegistered(id); onClose(); }
+      else setError(data.error ?? 'Registration failed');
+    } catch { setError('Network error'); }
+    setLoading(false);
+  }
+
   return (
+    <div className="register-overlay" onClick={onClose}>
+      <div className="register-dialog" onClick={(e) => e.stopPropagation()}>
+        <div className="register-dialog-title">Register project</div>
+        <div className="register-dialog-sub">Point cloudy at a local directory that has (or will have) a <code>.cloudy/</code> folder.</div>
+        <label className="register-dialog-label">Directory path</label>
+        <input
+          className="register-dialog-input"
+          value={dirPath}
+          onChange={(e) => {
+            const v = (e.target as HTMLInputElement).value;
+            setDirPath(v);
+            if (!name) setName(deriveName(v));
+          }}
+          placeholder="/Users/you/dev/my-project"
+          autoFocus
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); if (e.key === 'Escape') onClose(); }}
+        />
+        <label className="register-dialog-label" style={{ marginTop: 10 }}>Project name <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(auto-detected)</span></label>
+        <input
+          className="register-dialog-input"
+          value={name}
+          onChange={(e) => setName((e.target as HTMLInputElement).value)}
+          placeholder={deriveName(dirPath) || 'my-project'}
+          onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); if (e.key === 'Escape') onClose(); }}
+        />
+        {error && <div className="register-dialog-error">{error}</div>}
+        <div className="register-dialog-actions">
+          <button className="daemon-btn" onClick={onClose}>Cancel</button>
+          <button className="daemon-btn primary" onClick={handleSubmit} disabled={loading}>
+            {loading ? 'Registering…' : '+ Register'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProjectSidebar({ projects, selectedId, onSelect }: ProjectSidebarProps) {
+  const [showRegister, setShowRegister] = useState(false);
+  return (
+    <>
+    {showRegister && (
+      <RegisterProjectDialog
+        onClose={() => setShowRegister(false)}
+        onRegistered={(id) => { onSelect(id); }}
+      />
+    )}
     <div className="daemon-sidebar">
       {projects.map((proj) => {
         return (
@@ -1391,20 +1567,16 @@ function ProjectSidebar({ projects, selectedId, onSelect }: ProjectSidebarProps)
             <div className="daemon-sidebar-project-meta">
               {/* Activity status */}
               <span className="daemon-sidebar-project-pill" style={{
-                background: proj.status === 'running' ? 'rgba(232,112,58,0.12)' :
-                            proj.status === 'completed' ? 'rgba(34,197,94,0.1)' :
-                            proj.status === 'error' ? 'rgba(239,68,68,0.1)' : 'var(--bg-card)',
-                color: proj.status === 'running' ? '#e8703a' :
-                       proj.status === 'completed' ? '#22c55e' :
-                       proj.status === 'error' ? '#ef4444' : 'var(--text-muted)',
-                border: `1px solid ${proj.status === 'running' ? 'rgba(232,112,58,0.25)' :
-                         proj.status === 'completed' ? 'rgba(34,197,94,0.2)' :
-                         proj.status === 'error' ? 'rgba(239,68,68,0.2)' : 'var(--border)'}`,
+                background: proj.activeProcess ? 'rgba(232,112,58,0.12)' :
+                            proj.status === 'error' || proj.status === 'failed' ? 'rgba(239,68,68,0.1)' : 'var(--bg-card)',
+                color: proj.activeProcess ? '#e8703a' :
+                       proj.status === 'error' || proj.status === 'failed' ? '#ef4444' : 'var(--text-muted)',
+                border: `1px solid ${proj.activeProcess ? 'rgba(232,112,58,0.25)' :
+                         proj.status === 'error' || proj.status === 'failed' ? 'rgba(239,68,68,0.2)' : 'var(--border)'}`,
               }}>
                 {proj.activeProcess === 'init'     ? '⚡ planning'  :
                proj.activeProcess === 'run'      ? '⚡ running'   :
                proj.activeProcess === 'pipeline' ? '⚡ pipeline'  :
-               proj.status === 'completed'       ? '✓ done'       :
                proj.status === 'failed'          ? '✗ error'      :
                                                    '○ idle'}
               </span>
@@ -1426,11 +1598,12 @@ function ProjectSidebar({ projects, selectedId, onSelect }: ProjectSidebarProps)
       })}
       <div
         className="daemon-sidebar-add"
-        title="cd into a project and run: cloudy daemon register"
+        onClick={() => setShowRegister(true)}
       >
-        ＋ register project
+        + register project
       </div>
     </div>
+    </>
   );
 }
 
@@ -1836,20 +2009,52 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
           {/* Header */}
           <div className="plan-chat-header">
             <button className="plan-chat-back" onClick={handleBackFromPlan}>← Specs</button>
-            <div className="plan-chat-title">
-              {isPlanning
-                ? <><span className="spinner" style={{ width: 12, height: 12, flexShrink: 0 }} />Planning…</>
-                : hasError ? '✗ Planning failed'
-                : hasSummary ? '✓ Plan ready'
-                : 'Planning'}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
+              <div className="plan-chat-title">
+                {isPlanning
+                  ? <><span className="spinner" style={{ width: 12, height: 12, flexShrink: 0 }} />Planning…</>
+                  : hasError ? '✗ Planning failed'
+                  : hasSummary ? '✓ Plan ready'
+                  : 'Planning'}
+              </div>
+              {/* Spec chips: prefer local state (pre-refresh), fall back to server process list */}
+              {(() => {
+                const activeInitProcs = (project.processes ?? []).filter(p => p.type === 'init');
+                const specChips = selectedSpecObjects.length > 0
+                  ? selectedSpecObjects.map(s => ({ key: s.path, label: s.title, hint: s.path }))
+                  : activeInitProcs.map(p => ({ key: p.id, label: p.specName ?? 'spec', hint: p.startedAt }));
+                return specChips.length > 0 ? (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                    {specChips.map((chip) => (
+                      <span key={chip.key} title={chip.hint} className="plan-spec-chip">📄 {chip.label}</span>
+                    ))}
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>· {planModel}</span>
+                  </div>
+                ) : null;
+              })()}
             </div>
             {isPlanning && (
-              <button className="plan-stop-btn" style={{ marginLeft: 'auto' }}
+              <button className="plan-stop-btn" style={{ marginLeft: 'auto', flexShrink: 0 }}
                 onClick={() => fetch(`/api/projects/${project.id}/stop`, { method: 'POST' }).catch(() => {})}>
                 ✕ Stop
               </button>
             )}
           </div>
+
+          {/* Process switcher — shows all active planning sessions (tabs for parallel planning) */}
+          {(project.processes ?? []).filter(p => p.type === 'init').length > 0 && (
+            <div className="plan-process-switcher">
+              {(project.processes ?? []).filter(p => p.type === 'init').map((proc, i) => (
+                <span key={proc.id} className="plan-process-pill active">
+                  <span className="spin" style={{ fontSize: 10 }}>⚡</span>
+                  {proc.specName ?? `Session ${i + 1}`}
+                  <span style={{ fontSize: 9, opacity: 0.7, marginLeft: 2 }}>
+                    {Math.floor((Date.now() - new Date(proc.startedAt).getTime()) / 1000)}s
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Chat body */}
           <div className="plan-chat-scroll">
@@ -1857,7 +2062,31 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
             {chatMsgs.length === 0 && isPlanning && (
               <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, gap: 12, color: 'var(--text-muted)', fontSize: 12 }}>
                 <span className="spinner" style={{ width: 28, height: 28, borderWidth: 3 }} />
-                <span>Claude is reading your spec…</span>
+                {(() => {
+                  const activeProcs = (project.processes ?? []).filter(p => p.type === 'init');
+                  const displaySpecs = selectedSpecObjects.length > 0
+                    ? selectedSpecObjects.map(s => ({ key: s.path, label: s.title, path: s.path }))
+                    : activeProcs.map(p => ({ key: p.id, label: p.specName ?? 'spec', path: p.startedAt }));
+                  return (
+                    <>
+                      <span>Claude is reading your spec{displaySpecs.length > 1 ? 's' : ''}…</span>
+                      {displaySpecs.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                          {displaySpecs.map((spec) => (
+                            <span key={spec.key} title={spec.path} style={{ fontSize: 12, color: '#a78bfa', fontWeight: 700 }}>
+                              📄 {spec.label}
+                            </span>
+                          ))}
+                          {displaySpecs[0]?.path && (
+                            <span style={{ fontSize: 10, color: 'var(--text-muted)', maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {displaySpecs[0].path}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
                 <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>This takes 2–5 minutes. No input needed.</span>
               </div>
             )}
@@ -1875,51 +2104,87 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
           </div>
         </div>
 
-        {/* ── Right panel: Saved plans (always visible) ── */}
+        {/* ── Right panel: Ready to Deliver plans (always visible) ── */}
         <div className="plan-right">
-          <div className="plan-right-header">
-            <IconPipeline size={12} color="currentColor" />
-            Saved Plans
-            {savedPlans.length > 0 && (
-              <span style={{ marginLeft: 'auto', background: 'rgba(167,139,250,0.15)', color: '#a78bfa', borderRadius: 8, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>
-                {savedPlans.length}
-              </span>
-            )}
-          </div>
-
-          <div className="plan-right-body">
-            {plansLoading && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {[0, 1].map((i) => (
-                  <div key={i} className="skeleton skeleton-block" style={{ height: 72, opacity: 1 - i * 0.3 }} />
-                ))}
-              </div>
-            )}
-            {!plansLoading && savedPlans.length === 0 && (
-              <div className="daemon-empty" style={{ padding: '24px 12px', fontSize: 11, textAlign: 'center' }}>
-                <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>No plans yet</div>
-                <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>Select specs on the left and plan them</div>
-              </div>
-            )}
-            {!plansLoading && savedPlans.map((plan) => (
-              <div key={plan.id} className="saved-plan-card">
-                <button
-                  className="saved-plan-delete"
-                  onClick={(e) => deletePlan(plan.id, e)}
-                  title="Delete plan"
-                >×</button>
-                <div className="saved-plan-name">{plan.name}</div>
-                {plan.goal && plan.goal !== plan.name && (
-                  <div className="saved-plan-goal" title={plan.goal}>{plan.goal}</div>
+          {(() => {
+            const readyPlans = savedPlans.filter(p => p.status !== 'completed');
+            const deliveredPlans = savedPlans.filter(p => p.status === 'completed');
+            return (<>
+              <div className="plan-right-header">
+                <IconPipeline size={12} color="currentColor" />
+                Ready to Deliver
+                {readyPlans.length > 0 && (
+                  <span style={{ marginLeft: 'auto', background: 'rgba(167,139,250,0.15)', color: '#a78bfa', borderRadius: 8, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>
+                    {readyPlans.length}
+                  </span>
                 )}
-                <div className="saved-plan-footer">
-                  <span className="saved-plan-badge">{plan.taskCount} tasks</span>
-                  <span className={`saved-plan-status ${plan.status}`}>{plan.status}</span>
-                  <span className="saved-plan-time">{relativeTime(plan.createdAt)}</span>
-                </div>
               </div>
-            ))}
-          </div>
+
+              <div className="plan-right-body">
+                {/* Active planning sessions */}
+                {(project.processes ?? []).filter(p => p.type === 'init').map(proc => (
+                  <div key={proc.id} className="plan-active-session-card">
+                    <div className="plan-active-session-header">
+                      <span style={{ fontSize: 12, animation: 'spin 1s linear infinite', display: 'inline-block' }}>⚡</span>
+                      <span className="plan-active-session-name">{proc.specName ?? 'Planning…'}</span>
+                    </div>
+                    <div className="plan-active-session-meta">
+                      Planning · {proc.startedAt ? `${Math.floor((Date.now() - new Date(proc.startedAt).getTime()) / 1000)}s ago` : ''}
+                    </div>
+                  </div>
+                ))}
+                {plansLoading && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {[0, 1].map((i) => (
+                      <div key={i} className="skeleton skeleton-block" style={{ height: 72, opacity: 1 - i * 0.3 }} />
+                    ))}
+                  </div>
+                )}
+                {!plansLoading && readyPlans.length === 0 && deliveredPlans.length === 0 && (
+                  <div className="daemon-empty" style={{ padding: '24px 12px', fontSize: 11, textAlign: 'center' }}>
+                    <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>No plans yet</div>
+                    <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>Select specs on the left and plan them</div>
+                  </div>
+                )}
+                {!plansLoading && readyPlans.map((plan) => (
+                  <div key={plan.id} className="saved-plan-card">
+                    <button className="saved-plan-delete" onClick={(e) => deletePlan(plan.id, e)} title="Delete plan">×</button>
+                    <div className="saved-plan-name">{plan.name}</div>
+                    {plan.goal && plan.goal !== plan.name && (
+                      <div className="saved-plan-goal" title={plan.goal}>{plan.goal}</div>
+                    )}
+                    <div className="saved-plan-footer">
+                      <span className="saved-plan-badge">{plan.taskCount} tasks</span>
+                      <span className={`saved-plan-status ${plan.status}`}>{plan.status}</span>
+                      <span className="saved-plan-time">{relativeTime(plan.createdAt)}</span>
+                    </div>
+                  </div>
+                ))}
+                {!plansLoading && deliveredPlans.length > 0 && (
+                  <details className="plan-delivered-section" style={{ marginTop: readyPlans.length > 0 ? 8 : 0 }}>
+                    <summary style={{ cursor: 'pointer', fontSize: 10, color: 'var(--text-muted)', padding: '4px 8px', userSelect: 'none' }}>
+                      ✓ Delivered ({deliveredPlans.length})
+                    </summary>
+                    {deliveredPlans.map((plan) => (
+                      <div key={plan.id} className="saved-plan-card" style={{ opacity: 0.7 }}>
+                        <button className="saved-plan-delete" onClick={(e) => deletePlan(plan.id, e)} title="Delete plan">×</button>
+                        <div className="saved-plan-name">{plan.name}</div>
+                        {plan.deliveredAt && (
+                          <span className="plan-delivered-badge">
+                            ✓ delivered {plan.specSha ? `· #${plan.specSha}` : ''}
+                          </span>
+                        )}
+                        <div className="saved-plan-footer">
+                          <span className="saved-plan-badge">{plan.taskCount} tasks</span>
+                          <span className="saved-plan-time">{relativeTime(plan.createdAt)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </details>
+                )}
+              </div>
+            </>);
+          })()}
         </div>
       </div>
     );
@@ -2055,42 +2320,82 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
         )}
       </div>
 
-      {/* Right panel: Saved plans */}
+      {/* Right panel: Ready to Deliver plans */}
       <div className="plan-right">
-        <div className="plan-right-header">
-          <IconPipeline size={12} color="currentColor" />
-          Saved Plans
-          {savedPlans.length > 0 && (
-            <span style={{ marginLeft: 'auto', background: 'rgba(167,139,250,0.15)', color: '#a78bfa', borderRadius: 8, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>
-              {savedPlans.length}
-            </span>
-          )}
-        </div>
-        <div className="plan-right-body">
-          {plansLoading && [0,1].map((i) => (
-            <div key={i} className="skeleton skeleton-block" style={{ height: 72, opacity: 1 - i * 0.3 }} />
-          ))}
-          {!plansLoading && savedPlans.length === 0 && (
-            <div className="daemon-empty" style={{ padding: '24px 12px', fontSize: 11, textAlign: 'center' }}>
-              <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>No plans yet</div>
-              <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>Select specs on the left and plan them</div>
-            </div>
-          )}
-          {!plansLoading && savedPlans.map((plan) => (
-            <div key={plan.id} className="saved-plan-card">
-              <button className="saved-plan-delete" onClick={(e) => deletePlan(plan.id, e)} title="Delete plan">×</button>
-              <div className="saved-plan-name">{plan.name}</div>
-              {plan.goal && plan.goal !== plan.name && (
-                <div className="saved-plan-goal" title={plan.goal}>{plan.goal}</div>
+        {(() => {
+          const readyPlans = savedPlans.filter(p => p.status !== 'completed');
+          const deliveredPlans = savedPlans.filter(p => p.status === 'completed');
+          return (<>
+            <div className="plan-right-header">
+              <IconPipeline size={12} color="currentColor" />
+              Ready to Deliver
+              {readyPlans.length > 0 && (
+                <span style={{ marginLeft: 'auto', background: 'rgba(167,139,250,0.15)', color: '#a78bfa', borderRadius: 8, padding: '1px 6px', fontSize: 10, fontWeight: 700 }}>
+                  {readyPlans.length}
+                </span>
               )}
-              <div className="saved-plan-footer">
-                <span className="saved-plan-badge">{plan.taskCount} tasks</span>
-                <span className={`saved-plan-status ${plan.status}`}>{plan.status}</span>
-                <span className="saved-plan-time">{relativeTime(plan.createdAt)}</span>
-              </div>
             </div>
-          ))}
-        </div>
+            <div className="plan-right-body">
+              {/* Active planning sessions */}
+              {(project.processes ?? []).filter(p => p.type === 'init').map(proc => (
+                <div key={proc.id} className="plan-active-session-card">
+                  <div className="plan-active-session-header">
+                    <span style={{ fontSize: 12, animation: 'spin 1s linear infinite', display: 'inline-block' }}>⚡</span>
+                    <span className="plan-active-session-name">{proc.specName ?? 'Planning…'}</span>
+                  </div>
+                  <div className="plan-active-session-meta">
+                    Planning · {proc.startedAt ? `${Math.floor((Date.now() - new Date(proc.startedAt).getTime()) / 1000)}s ago` : ''}
+                  </div>
+                </div>
+              ))}
+              {plansLoading && [0,1].map((i) => (
+                <div key={i} className="skeleton skeleton-block" style={{ height: 72, opacity: 1 - i * 0.3 }} />
+              ))}
+              {!plansLoading && readyPlans.length === 0 && deliveredPlans.length === 0 && (
+                <div className="daemon-empty" style={{ padding: '24px 12px', fontSize: 11, textAlign: 'center' }}>
+                  <div style={{ color: 'var(--text-muted)', marginBottom: 6 }}>No plans yet</div>
+                  <div style={{ color: 'var(--text-muted)', fontSize: 10 }}>Select specs on the left and plan them</div>
+                </div>
+              )}
+              {!plansLoading && readyPlans.map((plan) => (
+                <div key={plan.id} className="saved-plan-card">
+                  <button className="saved-plan-delete" onClick={(e) => deletePlan(plan.id, e)} title="Delete plan">×</button>
+                  <div className="saved-plan-name">{plan.name}</div>
+                  {plan.goal && plan.goal !== plan.name && (
+                    <div className="saved-plan-goal" title={plan.goal}>{plan.goal}</div>
+                  )}
+                  <div className="saved-plan-footer">
+                    <span className="saved-plan-badge">{plan.taskCount} tasks</span>
+                    <span className={`saved-plan-status ${plan.status}`}>{plan.status}</span>
+                    <span className="saved-plan-time">{relativeTime(plan.createdAt)}</span>
+                  </div>
+                </div>
+              ))}
+              {!plansLoading && deliveredPlans.length > 0 && (
+                <details className="plan-delivered-section" style={{ marginTop: readyPlans.length > 0 ? 8 : 0 }}>
+                  <summary style={{ cursor: 'pointer', fontSize: 10, color: 'var(--text-muted)', padding: '4px 8px', userSelect: 'none' }}>
+                    ✓ Delivered ({deliveredPlans.length})
+                  </summary>
+                  {deliveredPlans.map((plan) => (
+                    <div key={plan.id} className="saved-plan-card" style={{ opacity: 0.7 }}>
+                      <button className="saved-plan-delete" onClick={(e) => deletePlan(plan.id, e)} title="Delete plan">×</button>
+                      <div className="saved-plan-name">{plan.name}</div>
+                      {plan.deliveredAt && (
+                        <span className="plan-delivered-badge">
+                          ✓ delivered {plan.specSha ? `· #${plan.specSha}` : ''}
+                        </span>
+                      )}
+                      <div className="saved-plan-footer">
+                        <span className="saved-plan-badge">{plan.taskCount} tasks</span>
+                        <span className="saved-plan-time">{relativeTime(plan.createdAt)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </details>
+              )}
+            </div>
+          </>);
+        })()}
       </div>
     </div>
   );
@@ -2194,7 +2499,14 @@ interface PlanChainStep {
 interface RunTask {
   id: string;
   title: string;
+  description?: string;
+  acceptanceCriteria?: string[];
   status: string;
+  retries?: number;
+  durationMs?: number;
+  resultSummary?: string;
+  filesWritten?: string[];
+  sessionId?: string;
 }
 
 function taskStatusIcon(status: string): string {
@@ -2208,9 +2520,41 @@ function taskStatusIcon(status: string): string {
   }
 }
 
+interface RunQuestion {
+  text: string;
+  questionType: string;
+  options?: string[];
+  index: number;
+  total: number;
+  timeoutSec: number;
+  arrivedAt: number; // Date.now()
+}
+
+function playBeep() {
+  try {
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.6);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.6);
+  } catch { /* audio blocked */ }
+}
+
 function RunTab({ project }: RunTabProps) {
   const [executionModel, setExecutionModel] = useState('sonnet');
-  const [reviewModel, setReviewModel] = useState('sonnet');
+  const [taskReviewModel, setTaskReviewModel] = useState('haiku');
+  const [runReviewModel, setRunReviewModel] = useState('sonnet');
+  const [parallel, setParallel] = useState(false);
+  const [maxParallel, setMaxParallel] = useState(3);
+  const [noValidate, setNoValidate] = useState(false);
+  const [maxRetries, setMaxRetries] = useState(3);
+  const [effort, setEffort] = useState('');
   const [savedPlans, setSavedPlans] = useState<SavedPlan[]>([]);
   const [chainSteps, setChainSteps] = useState<PlanChainStep[]>([]);
   const [chainName, setChainName] = useState('');
@@ -2220,9 +2564,79 @@ function RunTab({ project }: RunTabProps) {
   const [runTasks, setRunTasks] = useState<RunTask[]>([]);
   const [costUsd, setCostUsd] = useState(0);
   const [viewMode, setViewMode] = useState<'config' | 'progress'>('config');
+  const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const prevIsRunning = useRef(false);
+  // Live output lines from the currently-running task (last 20 lines)
+  const [taskOutputLines, setTaskOutputLines] = useState<string[]>([]);
+  const activeTaskIdRef = useRef<string | null>(null);
+  // Active question waiting for response
+  const [activeQuestion, setActiveQuestion] = useState<RunQuestion | null>(null);
+  const [questionAnswer, setQuestionAnswer] = useState('');
+  // Question timer countdown
+  const [questionSecsLeft, setQuestionSecsLeft] = useState(0);
 
   const isRunning = project.activeProcess === 'run' || project.status === 'running';
+
+  // SSE subscription for live output + questions during run
+  useEffect(() => {
+    const es = new EventSource('/api/live');
+    es.onmessage = (e) => {
+      let ev: { type: string; projectId?: string; line?: string; questionType?: string; question?: string; options?: string[]; index?: number; total?: number; timeoutSec?: number } | null = null;
+      try { ev = JSON.parse(e.data); } catch { return; }
+      if (!ev || ev.projectId !== project.id) return;
+      if (ev.type === 'run_output_daemon' && ev.line) {
+        // Strip ANSI, skip spinner-only lines
+        // eslint-disable-next-line no-control-regex
+        const clean = ev.line.replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><~]/g, '').trim();
+        if (clean) {
+          setTaskOutputLines((prev) => {
+            const next = [...prev, clean];
+            return next.length > 20 ? next.slice(-20) : next;
+          });
+        }
+      } else if (ev.type === 'plan_question') {
+        const q: RunQuestion = {
+          text: ev.question ?? '',
+          questionType: ev.questionType ?? 'text',
+          options: ev.options,
+          index: ev.index ?? 1,
+          total: ev.total ?? 1,
+          timeoutSec: ev.timeoutSec ?? 60,
+          arrivedAt: Date.now(),
+        };
+        setActiveQuestion(q);
+        setQuestionSecsLeft(q.timeoutSec);
+        setQuestionAnswer(q.options?.[0] ?? '');
+        playBeep();
+      } else if (ev.type === 'run_output_daemon' || ev.type === 'run_completed_daemon' || ev.type === 'run_failed_daemon') {
+        if (ev.type !== 'run_output_daemon') setActiveQuestion(null);
+      }
+    };
+    return () => es.close();
+  }, [project.id]);
+
+  // Reset output buffer when active task changes
+  useEffect(() => {
+    const inProgressTask = runTasks.find((t) => t.status === 'in_progress');
+    const tid = inProgressTask?.id ?? null;
+    if (tid !== activeTaskIdRef.current) {
+      activeTaskIdRef.current = tid;
+      setTaskOutputLines([]);
+    }
+  }, [runTasks]);
+
+  // Question timer countdown
+  useEffect(() => {
+    if (!activeQuestion) return;
+    setQuestionSecsLeft(activeQuestion.timeoutSec);
+    const t = setInterval(() => {
+      setQuestionSecsLeft((s) => {
+        if (s <= 1) { clearInterval(t); setActiveQuestion(null); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [activeQuestion?.arrivedAt]);
 
   useEffect(() => {
     fetch(`/api/projects/${project.id}/plans`)
@@ -2243,6 +2657,17 @@ function RunTab({ project }: RunTabProps) {
     } catch { /* ignore */ }
   }
 
+  // Hydrate on mount: always load the current run state so a refresh restores the view
+  useEffect(() => {
+    fetchRunState().then(() => {
+      // After loading, show progress view if there are tasks (running or completed/failed)
+      setRunTasks((tasks) => {
+        if (tasks.length > 0) setViewMode('progress');
+        return tasks;
+      });
+    });
+  }, [project.id]);
+
   // Poll state while running
   useEffect(() => {
     if (!isRunning) return;
@@ -2261,15 +2686,15 @@ function RunTab({ project }: RunTabProps) {
   }, [isRunning]);
 
   async function handleRetryTask(taskId: string) {
-    if (isRunning) return;
+    if (effectivelyRunning) return;
     setViewMode('progress');
-    await apiPost(`/api/projects/${project.id}/retry`, { taskId, executionModel, reviewModel }).catch(() => {});
+    await apiPost(`/api/projects/${project.id}/retry`, { taskId, executionModel, taskReviewModel, runReviewModel }).catch(() => {});
   }
 
   async function handleRetryFailed() {
-    if (isRunning) return;
+    if (effectivelyRunning) return;
     setViewMode('progress');
-    await apiPost(`/api/projects/${project.id}/retry`, { executionModel, reviewModel }).catch(() => {});
+    await apiPost(`/api/projects/${project.id}/retry`, { executionModel, taskReviewModel, runReviewModel }).catch(() => {});
   }
 
   const chainPlanIds = new Set(chainSteps.map((s) => s.planId));
@@ -2344,12 +2769,26 @@ function RunTab({ project }: RunTabProps) {
     setChainSteps((prev) => prev.filter((s) => s.id !== stepId));
   }
 
+  async function handleQuestionSubmit() {
+    if (!activeQuestion || !questionAnswer.trim()) return;
+    await apiPost(`/api/projects/${project.id}/plan-input`, { answer: questionAnswer.trim() }).catch(() => {});
+    setActiveQuestion(null);
+    setQuestionAnswer('');
+  }
+
   async function handleRunChain() {
     if (chainSteps.length === 0 || isRunning) return;
+    setViewMode('progress');
     await apiPost(`/api/projects/${project.id}/run`, {
       planIds: chainSteps.map((s) => s.planId),
       executionModel,
-      reviewModel,
+      taskReviewModel,
+      runReviewModel,
+      parallel: parallel || undefined,
+      maxParallel: parallel ? maxParallel : undefined,
+      noValidate: noValidate || undefined,
+      maxRetries: maxRetries !== 3 ? maxRetries : undefined,
+      effort: effort || undefined,
     }).catch(() => {});
   }
 
@@ -2358,69 +2797,239 @@ function RunTab({ project }: RunTabProps) {
   const failedTasks = runTasks.filter((t) => t.status === 'failed');
   const doneTasks = runTasks.filter((t) => t.status === 'completed' || t.status === 'skipped');
   const progressPct = runTasks.length > 0 ? (doneTasks.length / runTasks.length) * 100 : 0;
-  const runTrafficStatus = isRunning ? 'running' : failedTasks.length > 0 ? 'error' : runTasks.length > 0 ? 'completed' : 'idle';
+  // A task has active work if daemon says running OR tasks report in_progress/pending
+  const hasActiveTasks = runTasks.some((t) => t.status === 'in_progress' || t.status === 'pending');
+  const effectivelyRunning = isRunning || hasActiveTasks;
+  const runTrafficStatus = effectivelyRunning ? 'running' : failedTasks.length > 0 ? 'error' : runTasks.length > 0 ? 'completed' : 'idle';
+
+  // Live elapsed timer
+  const [elapsed, setElapsed] = React.useState(0);
+  const runStartRef = React.useRef<number | null>(null);
+  React.useEffect(() => {
+    if (isRunning) {
+      if (!runStartRef.current) runStartRef.current = Date.now();
+      const t = setInterval(() => setElapsed(Math.floor((Date.now() - (runStartRef.current ?? Date.now())) / 1000)), 500);
+      return () => clearInterval(t);
+    } else {
+      runStartRef.current = null;
+    }
+  }, [isRunning]);
+  function fmtElapsed(s: number) {
+    if (s < 60) return `${s}s`;
+    return `${Math.floor(s / 60)}m ${s % 60}s`;
+  }
+
+  // SVG ring constants
+  const RING_R = 40, RING_C = 2 * Math.PI * RING_R; // ~251.3
+
+  // Stuck = process ended but tasks still show in_progress
+  const isStuck = !isRunning && hasActiveTasks;
 
   // Progress view: shown while running or after a run has results
   if (viewMode === 'progress' && (isRunning || runTasks.length > 0)) {
+    const ringClass = !effectivelyRunning && failedTasks.length > 0 ? 'failed' : !effectivelyRunning && progressPct === 100 ? 'complete' : '';
+    const barClass = !effectivelyRunning && failedTasks.length > 0 ? 'failed' : !effectivelyRunning && progressPct === 100 ? 'complete' : 'running';
+    const inProgressTask = runTasks.find((t) => t.status === 'in_progress');
+
     return (
       <div className="run-progress-view">
-        {/* Header */}
-        <div className="run-progress-header">
-          <IconTrafficLight status={runTrafficStatus} />
-          <div>
-            <div className="run-progress-title">
-              {isRunning ? 'Running…' : failedTasks.length > 0 ? 'Run failed' : 'Run complete'}
+        {/* Hero section: ring + info */}
+        <div className="run-progress-hero">
+          <div className="run-progress-ring-wrap">
+            <svg width="100" height="100" viewBox="0 0 100 100">
+              <circle className="run-progress-ring-bg" cx="50" cy="50" r={RING_R} />
+              <circle
+                className={`run-progress-ring-fill${ringClass ? ` ${ringClass}` : ''}`}
+                cx="50" cy="50" r={RING_R}
+                strokeDasharray={RING_C}
+                strokeDashoffset={RING_C * (1 - progressPct / 100)}
+              />
+            </svg>
+            <div className="run-progress-ring-pct">{Math.round(progressPct)}%</div>
+          </div>
+          <div className="run-progress-info">
+            <div className="run-progress-headline">
+              {effectivelyRunning ? (
+                <>⚡ Running</>
+              ) : failedTasks.length > 0 ? (
+                <span className="run-failed-badge">✗ Run failed</span>
+              ) : (
+                <span className="run-complete-badge">✓ Complete</span>
+              )}
             </div>
-            <div className="run-progress-sub">
-              {doneTasks.length}/{runTasks.length} tasks
-              {costUsd > 0 ? ` · $${costUsd.toFixed(3)}` : ''}
+            <div className="run-progress-subline">
+              {doneTasks.length} of {runTasks.length} tasks done
+              {costUsd > 0 && ` · $${costUsd.toFixed(3)}`}
+              {effectivelyRunning && elapsed > 0 && ` · ${fmtElapsed(elapsed)}`}
+            </div>
+            {inProgressTask && (
+              <div style={{ fontSize: 11, color: '#a78bfa', marginTop: 4, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                ⚡ {inProgressTask.title}
+              </div>
+            )}
+            <div className="run-progress-bar-wrap" style={{ marginTop: 10 }}>
+              <div className={`run-progress-bar ${barClass}`} style={{ width: `${progressPct}%` }} />
             </div>
           </div>
         </div>
 
-        {/* Progress bar */}
-        <div className="run-progress-bar-wrap">
-          <div className="run-progress-bar" style={{ width: `${progressPct}%` }} />
-        </div>
+        {/* Question banner — shown whenever a question is waiting regardless of expansion */}
+        {activeQuestion && (
+          <div className="run-question-banner">
+            <div className="run-question-banner-header">
+              <span className="run-question-banner-icon">❓</span>
+              <span className="run-question-banner-title">Question {activeQuestion.index}/{activeQuestion.total} — needs your answer</span>
+              <span className="run-question-banner-timer">{questionSecsLeft}s</span>
+            </div>
+            <div className="run-question-banner-text">{activeQuestion.text}</div>
+            {activeQuestion.options ? (
+              <div className="run-question-banner-options">
+                {activeQuestion.options.map((opt) => (
+                  <button
+                    key={opt}
+                    className={`run-question-option${questionAnswer === opt ? ' selected' : ''}`}
+                    onClick={() => setQuestionAnswer(opt)}
+                  >{opt}</button>
+                ))}
+              </div>
+            ) : (
+              <input
+                className="run-question-input"
+                value={questionAnswer}
+                onChange={(e) => setQuestionAnswer((e.target as HTMLInputElement).value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleQuestionSubmit(); }}
+                placeholder="Type your answer…"
+                autoFocus
+              />
+            )}
+            <button className="run-question-submit" onClick={handleQuestionSubmit}>Send answer ↵</button>
+          </div>
+        )}
+
+        {/* Stuck task banner */}
+        {isStuck && (
+          <div className="run-stuck-banner">
+            <span>⚠ Process ended with tasks still in progress — server will auto-reset on next connect.</span>
+            <button className="run-stuck-reset-btn" onClick={async () => {
+              await apiPost(`/api/projects/${project.id}/retry`, { executionModel, taskReviewModel, runReviewModel }).catch(() => {});
+              setViewMode('progress');
+            }}>↺ Retry now</button>
+          </div>
+        )}
 
         {/* Task list */}
         <div className="run-task-list">
-          {runTasks.map((task) => (
-            <div key={task.id} className={`run-task-item run-task-${task.status}`}>
-              <span className="run-task-icon">{taskStatusIcon(task.status)}</span>
-              <span className="run-task-title">{task.title}</span>
-              {task.status === 'failed' && !isRunning && (
-                <button className="run-task-retry-btn" onClick={() => handleRetryTask(task.id)}>↺ retry</button>
-              )}
-            </div>
-          ))}
-          {runTasks.length === 0 && isRunning && (
-            <div style={{ color: 'var(--text-muted)', fontSize: 11, padding: '20px 8px', textAlign: 'center' }}>
-              Starting tasks…
+          {runTasks.map((task) => {
+            const iconMap: Record<string, string> = { completed: '✓', failed: '✗', in_progress: '⚡', skipped: '⊘', pending: '○', retrying: '↩' };
+            const statusLabel: Record<string, string> = { completed: 'done', failed: 'failed', in_progress: 'running', skipped: 'skipped', pending: 'waiting', retrying: 'retrying' };
+            const isExpanded = expandedTasks.has(task.id);
+            const isActiveTask = task.status === 'in_progress';
+            const hasDetail = task.description || task.resultSummary || (task.filesWritten?.length ?? 0) > 0 || (task.acceptanceCriteria?.length ?? 0) > 0 || isActiveTask;
+            const toggleExpand = () => setExpandedTasks((prev) => {
+              const next = new Set(prev);
+              if (next.has(task.id)) next.delete(task.id); else next.add(task.id);
+              return next;
+            });
+            return (
+              <div key={task.id} className={`run-task-item run-task-${task.status}`} style={{ flexDirection: 'column', alignItems: 'stretch', padding: 0, cursor: hasDetail ? 'pointer' : 'default' }} onClick={hasDetail ? toggleExpand : undefined}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px' }}>
+                  <div className={`run-task-icon-wrap status-${task.status}`}>
+                    {task.status === 'in_progress' ? <span className="spin">⚡</span> : iconMap[task.status] ?? '○'}
+                  </div>
+                  <span className="run-task-title">{task.title}</span>
+                  {task.durationMs && task.durationMs > 0 && (
+                    <span style={{ fontSize: 10, color: 'var(--text-muted)', flexShrink: 0 }}>{task.durationMs > 60000 ? `${Math.floor(task.durationMs/60000)}m` : `${Math.round(task.durationMs/1000)}s`}</span>
+                  )}
+                  {(task.retries ?? 0) > 0 && (
+                    <span style={{ fontSize: 9, color: '#f59e0b', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: 4, padding: '1px 5px', flexShrink: 0 }}>↺{task.retries}</span>
+                  )}
+                  <span className="run-task-status-label">{statusLabel[task.status] ?? task.status}</span>
+                  {task.status === 'failed' && !effectivelyRunning && (
+                    <button className="run-task-retry-btn" onClick={(e) => { e.stopPropagation(); handleRetryTask(task.id); }}>↺</button>
+                  )}
+                  {hasDetail && <span className={`run-task-expand-btn${isExpanded ? ' open' : ''}`}>▶</span>}
+                </div>
+                {isExpanded && hasDetail && (
+                  <div className="run-task-detail" onClick={(e) => e.stopPropagation()}>
+                    {/* Live output for the active task */}
+                    {isActiveTask && taskOutputLines.length > 0 && (
+                      <div className="run-task-detail-section">
+                        <div className="run-task-detail-label">Live output</div>
+                        <div className="run-task-live-output">
+                          {taskOutputLines.map((line, i) => (
+                            <div key={i} className="run-task-live-line">{line}</div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {isActiveTask && taskOutputLines.length === 0 && (
+                      <div className="run-task-detail-section">
+                        <div className="run-task-detail-label">Live output</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: 11, fontStyle: 'italic' }}>Waiting for output…</div>
+                      </div>
+                    )}
+                    {task.description && (
+                      <div className="run-task-detail-section">
+                        <div className="run-task-detail-label">Description</div>
+                        <div className="run-task-detail-text">{task.description}</div>
+                      </div>
+                    )}
+                    {task.resultSummary && (
+                      <div className="run-task-detail-section">
+                        <div className="run-task-detail-label">Result</div>
+                        <div className="run-task-detail-text">{task.resultSummary}</div>
+                      </div>
+                    )}
+                    {(task.acceptanceCriteria?.length ?? 0) > 0 && (
+                      <div className="run-task-detail-section">
+                        <div className="run-task-detail-label">Acceptance Criteria</div>
+                        <ul className="run-task-detail-criteria">
+                          {task.acceptanceCriteria!.map((c, i) => <li key={i}>{c}</li>)}
+                        </ul>
+                      </div>
+                    )}
+                    {(task.filesWritten?.length ?? 0) > 0 && (
+                      <div className="run-task-detail-section">
+                        <div className="run-task-detail-label">Files written</div>
+                        <div className="run-task-detail-files">
+                          {task.filesWritten!.map((f) => <span key={f} className="run-task-detail-file">{f.replace(/^.*\/([^/]+)$/, '$1')}</span>)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          {runTasks.length === 0 && effectivelyRunning && (
+            <div style={{ color: 'var(--text-muted)', fontSize: 11, padding: '40px 8px', textAlign: 'center' }}>
+              <div className="spinner" style={{ width: 20, height: 20, margin: '0 auto 8px' }} />
+              Spinning up tasks…
             </div>
           )}
         </div>
 
         {/* Footer */}
         <div className="run-progress-footer">
-          {isRunning && (
+          {effectivelyRunning && (
             <button
               className="daemon-btn"
               onClick={() => fetch(`/api/projects/${project.id}/stop`, { method: 'POST' }).catch(() => {})}
               style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.4)' }}
             >✕ Stop</button>
           )}
-          {!isRunning && failedTasks.length > 0 && (
+          {!effectivelyRunning && failedTasks.length > 0 && (
             <>
-              <ModelPicker value={executionModel} onChange={setExecutionModel} label="Exec" />
-              <ModelPicker value={reviewModel} onChange={setReviewModel} label="Review" />
+              <ModelPicker value={executionModel} onChange={setExecutionModel} label="Execution" />
+              <ModelPicker value={taskReviewModel} onChange={setTaskReviewModel} label="Task Review" />
+              <ModelPicker value={runReviewModel} onChange={setRunReviewModel} label="Run Review" />
               <button className="daemon-btn primary" onClick={handleRetryFailed}>
                 ↺ Retry failed ({failedTasks.length})
               </button>
             </>
           )}
-          {!isRunning && (
-            <button className="daemon-btn" onClick={() => { setRunTasks([]); setViewMode('config'); }} style={{ fontSize: 11 }}>
+          {!effectivelyRunning && (
+            <button className="daemon-btn" onClick={() => { setRunTasks([]); setElapsed(0); setViewMode('config'); }} style={{ fontSize: 11 }}>
               ← New chain
             </button>
           )}
@@ -2432,36 +3041,39 @@ function RunTab({ project }: RunTabProps) {
   // Config view: chain builder (default)
   return (
     <div className="run-split">
-      {/* ── Left panel: Ready Plans ── */}
+      {/* ── Left panel: Ready to Deliver ── */}
       <div className="run-left">
-        <div className="run-left-header">Ready Plans</div>
+        <div className="run-left-header">Ready to Deliver</div>
         <div className="run-left-body">
-          {savedPlans.length === 0 && (
-            <div style={{ padding: '16px 8px', color: 'var(--text-muted)', fontSize: 11, textAlign: 'center' }}>
-              No saved plans.<br />Create them in the Plan tab.
-            </div>
-          )}
-          {savedPlans.map((plan) => {
-            const inChain = chainPlanIds.has(plan.id);
-            return (
-              <div
-                key={plan.id}
-                className={`run-plan-card${inChain ? ' in-chain' : ''}`}
-                draggable
-                onDragStart={(e) => handlePlanDragStart(e, plan)}
-                title={inChain ? 'Already in chain' : 'Drag to chain'}
-              >
-                <span className="run-plan-drag-handle">⠿</span>
-                <div className="run-plan-info">
-                  <div className="run-plan-name">
-                    {inChain && <span style={{ color: '#22c55e', marginRight: 4 }}>✓</span>}
-                    {plan.name}
-                  </div>
-                  <div className="run-plan-tasks">{plan.taskCount} tasks · {relativeTime(plan.createdAt)}</div>
-                </div>
+          {(() => {
+            const readyPlans = savedPlans.filter(p => p.status !== 'completed');
+            if (readyPlans.length === 0) return (
+              <div style={{ padding: '16px 8px', color: 'var(--text-muted)', fontSize: 11, textAlign: 'center' }}>
+                No ready plans.<br />Create them in the Plan tab.
               </div>
             );
-          })}
+            return readyPlans.map((plan) => {
+              const inChain = chainPlanIds.has(plan.id);
+              return (
+                <div
+                  key={plan.id}
+                  className={`run-plan-card${inChain ? ' in-chain' : ''}`}
+                  draggable
+                  onDragStart={(e) => handlePlanDragStart(e, plan)}
+                  title={inChain ? 'Already in chain' : 'Drag to chain'}
+                >
+                  <span className="run-plan-drag-handle">⠿</span>
+                  <div className="run-plan-info">
+                    <div className="run-plan-name">
+                      {inChain && <span style={{ color: '#22c55e', marginRight: 4 }}>✓</span>}
+                      {plan.name}
+                    </div>
+                    <div className="run-plan-tasks">{plan.taskCount} tasks · {relativeTime(plan.createdAt)}</div>
+                  </div>
+                </div>
+              );
+            });
+          })()}
         </div>
       </div>
 
@@ -2559,19 +3171,53 @@ function RunTab({ project }: RunTabProps) {
         </div>
 
         {/* Footer with model pickers + run button */}
-        <div className="chain-footer">
-          <ModelPicker value={executionModel} onChange={setExecutionModel} label="Exec" />
-          <ModelPicker value={reviewModel} onChange={setReviewModel} label="Review" />
-          <button
-            className="daemon-btn primary"
-            disabled={chainSteps.length === 0}
-            onClick={handleRunChain}
-          >
-            {`▶ Run Chain (${chainSteps.length})`}
-          </button>
-          {chainSteps.length > 0 && (
-            <button className="daemon-btn" onClick={() => setChainSteps([])} style={{ fontSize: 11 }}>Clear</button>
-          )}
+        <div className="chain-footer" style={{ flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <ModelPicker value={executionModel} onChange={setExecutionModel} label="Execution" />
+            <ModelPicker value={taskReviewModel} onChange={setTaskReviewModel} label="Task Review" />
+            <ModelPicker value={runReviewModel} onChange={setRunReviewModel} label="Run Review" />
+            <button
+              className="daemon-btn primary"
+              disabled={chainSteps.length === 0}
+              onClick={handleRunChain}
+            >
+              {`▶ Run Chain (${chainSteps.length})`}
+            </button>
+            {chainSteps.length > 0 && (
+              <button className="daemon-btn" onClick={() => setChainSteps([])} style={{ fontSize: 11 }}>Clear</button>
+            )}
+          </div>
+          {/* Advanced options */}
+          <details className="run-advanced-options">
+            <summary className="run-advanced-toggle">Advanced options</summary>
+            <div className="run-advanced-body">
+              <label className="run-advanced-row">
+                <input type="checkbox" checked={parallel} onChange={e => setParallel((e.target as HTMLInputElement).checked)} />
+                <span>Parallel task execution</span>
+                {parallel && (
+                  <input type="number" min={1} max={8} value={maxParallel} onChange={e => setMaxParallel(Number((e.target as HTMLInputElement).value))} style={{ width: 48 }} />
+                )}
+              </label>
+              <label className="run-advanced-row">
+                <input type="checkbox" checked={noValidate} onChange={e => setNoValidate((e.target as HTMLInputElement).checked)} />
+                <span>Skip validation</span>
+              </label>
+              <label className="run-advanced-row">
+                <span>Max retries</span>
+                <input type="number" min={1} max={5} value={maxRetries} onChange={e => setMaxRetries(Number((e.target as HTMLInputElement).value))} style={{ width: 48 }} />
+              </label>
+              <label className="run-advanced-row">
+                <span>Thinking effort</span>
+                <select value={effort} onChange={e => setEffort((e.target as HTMLSelectElement).value)}>
+                  <option value="">default</option>
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                  <option value="high">high (extended)</option>
+                  <option value="max">max (opus only)</option>
+                </select>
+              </label>
+            </div>
+          </details>
         </div>
       </div>
     </div>
@@ -3088,13 +3734,22 @@ function ChatTab({ project, onSwitchTab, initialSessionId, onSessionSelect }: Ch
   const [lockedMsg, setLockedMsg] = useState(false);
   const [ccStats, setCcStats] = useState<CCSessionStats | null>(null);
   const [cumulativeStats, setCumulativeStats] = useState<CCSessionStats | null>(null);
-  const [effort, setEffort] = useState<'low' | 'medium' | 'high'>('high');
-  const [maxBudgetUsd, setMaxBudgetUsd] = useState<number>(0); // 0 = unlimited
+  const [effort, setEffort] = useState<'low' | 'medium' | 'high'>(() => {
+    const saved = localStorage.getItem('chat-effort');
+    return (saved === 'low' || saved === 'medium' || saved === 'high') ? saved : 'medium';
+  });
+  const [maxBudgetUsd, setMaxBudgetUsd] = useState<number>(() => {
+    return parseFloat(localStorage.getItem('chat-budget') ?? '0') || 0;
+  });
   const [slashMenu, setSlashMenu] = useState<{ open: boolean; items: SlashCommand[]; idx: number }>({ open: false, items: [], idx: 0 });
   const [msgFilter, setMsgFilter] = useState<'all' | 'mine' | 'claude' | 'tools'>('all');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Persist effort + budget to localStorage
+  useEffect(() => { localStorage.setItem('chat-effort', effort); }, [effort]);
+  useEffect(() => { localStorage.setItem('chat-budget', String(maxBudgetUsd)); }, [maxBudgetUsd]);
 
   const model = activeSession?.model ?? 'sonnet';
 
@@ -4508,18 +5163,31 @@ function parseRunName(name: string): RunEntry {
   // Format examples:
   // 2026-03-08-0926-the-only-suite-phase-5-cloudy-spec
   // pipeline-2026-03-08-0140-p1-cloudy-phase2-spec
-  const isPipeline = name.startsWith('pipeline-');
-  const clean = isPipeline ? name.slice('pipeline-'.length) : name;
-  // date: first 15 chars YYYY-MM-DD-HHMM
-  const dateMatch = clean.match(/^(\d{4}-\d{2}-\d{2}-\d{4})/);
+  // Scope-2026-03-08-1946-dashboard-inbox
+  // Run-2026-03-08-2019
+  const lname = name.toLowerCase();
+  const isPipeline = lname.startsWith('pipeline-');
+  const isScope = lname.startsWith('scope-');
+
+  // Search for date pattern anywhere in the name (handles prefixed names like "Scope-", "Run-")
+  const dateMatch = name.match(/(\d{4}-\d{2}-\d{2})-(\d{4})/);
   let date = '';
-  let spec = clean;
+  let spec = '';
   if (dateMatch) {
-    const d = dateMatch[1]; // e.g. 2026-03-08-0926
-    const year = d.slice(0,4), month = d.slice(5,7), day = d.slice(8,10), time = d.slice(11);
-    const hours = time.slice(0,2), mins = time.slice(2);
-    date = `${year}-${month}-${day} ${hours}:${mins}`;
-    spec = clean.slice(dateMatch[1].length + 1).replace(/-/g, ' ');
+    const [full, datePart, timePart] = dateMatch;
+    const hours = timePart.slice(0, 2), mins = timePart.slice(2);
+    date = `${datePart} ${hours}:${mins}`;
+    const afterIdx = name.indexOf(full) + full.length;
+    const afterDate = name.slice(afterIdx).replace(/^[-_]/, '');
+    spec = afterDate.replace(/-/g, ' ').trim();
+    // Fallback: strip known prefixes (pipeline-, scope-, run-) and the date portion
+    if (!spec) {
+      const withoutPrefix = name.replace(/^(pipeline-|scope-|run-)/i, '');
+      spec = withoutPrefix.replace(full, '').replace(/^[-_]/, '').replace(/-/g, ' ').trim() || (isScope ? 'planning run' : 'build run');
+    }
+  } else {
+    // No date at all — just prettify the name, stripping known prefixes
+    spec = name.replace(/^(pipeline-|scope-|run-)/i, '').replace(/-/g, ' ').trim() || name;
   }
   return { name, date, spec, isPipeline };
 }
@@ -4558,18 +5226,18 @@ function HistoryTab({ project }: { project: ProjectStatusSnapshot }) {
     }
   }
 
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
   const entries = runs.map(parseRunName);
 
   // Group by date
   const groups: Record<string, RunEntry[]> = {};
   for (const e of entries) {
-    const day = e.date.slice(0, 10) || 'Unknown';
+    const day = e.date.slice(0, 10) || today; // undated runs go under today
     if (!groups[day]) groups[day] = [];
     groups[day].push(e);
   }
-
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
 
   function dayLabel(d: string) {
     if (d === today) return 'Today';
@@ -4607,13 +5275,14 @@ function HistoryTab({ project }: { project: ProjectStatusSnapshot }) {
               <div key={entry.name} className="history-run-card">
                 <div className="history-run-header" onClick={() => toggleExpand(entry.name)}>
                   <div className="history-run-icon">
-                    {entry.isPipeline ? <IconPipeline size={16} color="#a78bfa" /> : <IconRocket size={16} color="#e8703a" />}
+                    {entry.isPipeline ? <IconPipeline size={16} color="#a78bfa" /> : entry.name.toLowerCase().startsWith('scope-') ? <span style={{ fontSize: 14 }}>📐</span> : <IconRocket size={16} color="#e8703a" />}
                   </div>
                   <div className="history-run-info">
                     <div className="history-run-name">{entry.spec || entry.name}</div>
                     <div className="history-run-meta">
                       {entry.isPipeline && <span className="history-run-badge pipeline">chain</span>}
-                      <span>{entry.date.slice(11)}</span>
+                      {entry.name.toLowerCase().startsWith('scope-') && <span className="history-run-badge" style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}>plan</span>}
+                      {entry.date.slice(11) && <span>{entry.date.slice(11)}</span>}
                     </div>
                   </div>
                   <span className="history-run-toggle">{isOpen ? '▾' : '▸'}</span>
