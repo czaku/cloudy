@@ -552,6 +552,9 @@ export class Orchestrator {
       } else {
         checkpointSha = await createCheckpoint(taskCwd, task.id);
         queue.setCheckpoint(task.id, checkpointSha);
+        // Persist checkpoint SHA immediately so it survives across runs
+        plan.tasks = queue.getAllTasks();
+        await saveState(this.cwd, this.state);
       }
     }
 
