@@ -55,6 +55,7 @@ export const runCommand = new Command('run')
 
   .option('--heartbeat-interval <seconds>', 'Write status.json to run dir every N seconds during execution', parseInt)
   .option('--non-interactive', 'Skip all prompts and disable dashboard — set models via flags')
+  .option('--agent-output', 'Emit structured plain-text lines (no ANSI, no emoji) — auto-enabled with --non-interactive')
   .action(
     async (opts: {
       model?: string;
@@ -83,8 +84,16 @@ export const runCommand = new Command('run')
       runReviewModel?: string;
       heartbeatInterval?: number;
       nonInteractive?: boolean;
+      agentOutput?: boolean;
     }) => {
       const isNonInteractive = opts.nonInteractive || !process.stdout.isTTY;
+      const isAgentOutput = opts.agentOutput || isNonInteractive;
+
+      /** Emit a structured plain-text line for AI agent consumption. */
+      function agentLog(tag: string, ...parts: string[]) {
+        const ts = new Date().toISOString();
+        console.log(`[${ts}] [${tag}] ${parts.join(' ')}`);
+      }
       if (isNonInteractive) {
         opts.dashboard = false;
       }
@@ -382,8 +391,12 @@ export const runCommand = new Command('run')
               const retryLabel = event.attempt > 1
                 ? c(dim, `  ·  retry ${event.attempt}/${event.maxAttempts}`)
                 : '';
+              if (isAgentOutput) {
+                agentLog('TASK:STARTED', event.taskId, `"${event.title}"`, event.attempt > 1 ? `retry=${event.attempt}/${event.maxAttempts}` : '');
+              } else {
               console.log(`\n${c(yellow, '⚡')}  ${c(yellowBright + bold, event.taskId)}  ${c(bold, event.title)}${retryLabel}`);
               console.log(`    ${c(dim, `📁 ${event.contextFileCount} file${event.contextFileCount !== 1 ? 's' : ''} in context`)}`);
+              }
               if (opts.verbose) {
                 clearHeartbeat();
                 taskFormatter = createStreamFormatter((s) => process.stdout.write(s));
@@ -413,54 +426,92 @@ export const runCommand = new Command('run')
 
             case 'task_completed':
               clearHeartbeat();
-              console.log(`${c(green, '✅')}  ${c(greenBright, event.taskId)}  ${event.title}  ${c(dim, formatDuration(event.durationMs))}`);
+              if (isAgentOutput) {
+                agentLog('TASK:DONE', event.taskId, `"${event.title}"`, `duration=${formatDuration(event.durationMs)}`);
+              } else {
+                console.log(`${c(green, '✅')}  ${c(greenBright, event.taskId)}  ${event.title}  ${c(dim, formatDuration(event.durationMs))}`);
+              }
               break;
 
             case 'task_failed':
               clearHeartbeat();
-              if (event.willRetry) {
-                console.log(`${c(red, '❌')}  ${c(red, event.taskId)}  ${event.title}  ${c(dim, `attempt ${event.attempt}/${event.maxAttempts}`)}`);
+              if (isAgentOutput) {
+                if (event.willRetry) {
+                  agentLog('TASK:FAILED', event.taskId, `"${event.title}"`, `attempt=${event.attempt}/${event.maxAttempts}`, 'will_retry=true');
+                } else {
+                  agentLog('TASK:FAILED', event.taskId, `"${event.title}"`, 'gave_up=true', `error=${event.error.split('\n')[0]}`);
+                }
               } else {
-                console.log(`${c(red, '❌')}  ${c(red, event.taskId)}  ${c(bold, event.title)}  ${c(dim, 'gave up')}`);
-                console.log(`    ${c(red + dim, event.error.split('\n')[0])}`);
+                if (event.willRetry) {
+                  console.log(`${c(red, '❌')}  ${c(red, event.taskId)}  ${event.title}  ${c(dim, `attempt ${event.attempt}/${event.maxAttempts}`)}`);
+                } else {
+                  console.log(`${c(red, '❌')}  ${c(red, event.taskId)}  ${c(bold, event.title)}  ${c(dim, 'gave up')}`);
+                  console.log(`    ${c(red + dim, event.error.split('\n')[0])}`);
+                }
               }
               break;
 
             case 'task_retrying':
-              console.log(`    ${c(yellow, '🔄')}  ${c(yellow, `retrying in ${event.delaySec}s`)}`);
+              if (isAgentOutput) {
+                agentLog('TASK:RETRYING', event.taskId ?? '', `delay=${event.delaySec}s`);
+              } else {
+                console.log(`    ${c(yellow, '🔄')}  ${c(yellow, `retrying in ${event.delaySec}s`)}`);
+              }
               break;
 
             case 'validation_started':
-              console.log(`\n    ${c(cyan, '🔍 checking acceptance criteria')}`);
+              if (isAgentOutput) {
+                agentLog('VALIDATE:STARTED', event.taskId ?? '');
+              } else {
+                console.log(`\n    ${c(cyan, '🔍 checking acceptance criteria')}`);
+              }
               break;
 
             case 'validation_result': {
               const { report } = event;
-              if (report.passed) {
-                console.log(`    ${c(green, '✨ criteria met')}`);
-              } else {
-                console.log(`    ${c(red, '⚠️  criteria not met')}`);
+              if (isAgentOutput) {
+                agentLog('VALIDATE:RESULT', event.taskId ?? '', `passed=${report.passed}`);
                 for (const r of report.results) {
                   if (!r.passed) {
-                    console.log(`       ${c(dim, `[${r.strategy}]  ${r.output.split('\n')[0]}`)}`);
+                    agentLog('VALIDATE:FAIL_REASON', `strategy=${r.strategy}`, r.output.split('\n')[0]);
                   }
                 }
-              }
-              if (event.criteriaResults && event.criteriaResults.length > 0) {
-                for (const cr of event.criteriaResults) {
-                  const icon = cr.passed ? c(green, '✓') : c(red, '✗');
-                  console.log(`       ${icon} ${c(dim, cr.criterion.length > 80 ? cr.criterion.slice(0, 77) + '...' : cr.criterion)}`);
+                if (event.criteriaResults) {
+                  for (const cr of event.criteriaResults) {
+                    agentLog('VALIDATE:CRITERION', `passed=${cr.passed}`, cr.criterion.slice(0, 120));
+                  }
+                }
+              } else {
+                if (report.passed) {
+                  console.log(`    ${c(green, '✨ criteria met')}`);
+                } else {
+                  console.log(`    ${c(red, '⚠️  criteria not met')}`);
+                  for (const r of report.results) {
+                    if (!r.passed) {
+                      console.log(`       ${c(dim, `[${r.strategy}]  ${r.output.split('\n')[0]}`)}`);
+                    }
+                  }
+                }
+                if (event.criteriaResults && event.criteriaResults.length > 0) {
+                  for (const cr of event.criteriaResults) {
+                    const icon = cr.passed ? c(green, '✓') : c(red, '✗');
+                    console.log(`       ${icon} ${c(dim, cr.criterion.length > 80 ? cr.criterion.slice(0, 77) + '...' : cr.criterion)}`);
+                  }
                 }
               }
               break;
             }
 
             case 'progress': {
-              const width = 28;
-              const filled = Math.round((event.completed / event.total) * width);
-              const empty = width - filled;
-              const bar = c(green, '█'.repeat(filled)) + c(dim, '░'.repeat(empty));
-              console.log(`\n   ${bar}  ${c(bold, `${event.completed} / ${event.total}`)}  ${c(dim, `${event.percentage}%`)}\n`);
+              if (isAgentOutput) {
+                agentLog('PROGRESS', `${event.completed}/${event.total}`, `${event.percentage}%`);
+              } else {
+                const width = 28;
+                const filled = Math.round((event.completed / event.total) * width);
+                const empty = width - filled;
+                const bar = c(green, '█'.repeat(filled)) + c(dim, '░'.repeat(empty));
+                console.log(`\n   ${bar}  ${c(bold, `${event.completed} / ${event.total}`)}  ${c(dim, `${event.percentage}%`)}\n`);
+              }
               break;
             }
 
@@ -468,26 +519,43 @@ export const runCommand = new Command('run')
               break;
 
             case 'run_completed': {
-              console.log('\n' + formatCostSummary(event.summary));
-              const cost = event.summary.totalEstimatedUsd > 0
-                ? `  ${c(dim, `~$${event.summary.totalEstimatedUsd.toFixed(4)}`)}`
-                : '';
-              console.log(`\n${c(green, '✅')}  ${c(green + bold, 'all done!')}${cost}`);
+              if (isAgentOutput) {
+                const cost = event.summary.totalEstimatedUsd > 0 ? `cost=$${event.summary.totalEstimatedUsd.toFixed(4)}` : '';
+                agentLog('RUN:DONE', cost);
+              } else {
+                console.log('\n' + formatCostSummary(event.summary));
+                const cost = event.summary.totalEstimatedUsd > 0
+                  ? `  ${c(dim, `~$${event.summary.totalEstimatedUsd.toFixed(4)}`)}`
+                  : '';
+                console.log(`\n${c(green, '✅')}  ${c(green + bold, 'all done!')}${cost}`);
+              }
               break;
             }
 
             case 'run_failed':
-              console.error(`\n${c(red, '❌')}  ${c(red + bold, 'run failed:')}  ${c(red, event.error)}`);
+              if (isAgentOutput) {
+                agentLog('RUN:FAILED', event.error.split('\n')[0]);
+              } else {
+                console.error(`\n${c(red, '❌')}  ${c(red + bold, 'run failed:')}  ${c(red, event.error)}`);
+              }
               break;
 
             case 'run_status':
               if (event.status === 'stopped') {
-                console.log(`\n${c(yellow, '⏸️')}  ${c(yellow, 'halted by user')}`);
+                if (isAgentOutput) {
+                  agentLog('RUN:STOPPED', 'halted');
+                } else {
+                  console.log(`\n${c(yellow, '⏸️')}  ${c(yellow, 'halted by user')}`);
+                }
               }
               break;
 
             case 'review_started':
-              console.log(`\n${c(cyan, '🔎')}  ${c(cyan + bold, 'holistic review')}  ${c(dim, `model: ${event.model}`)}`);
+              if (isAgentOutput) {
+                agentLog('REVIEW:STARTED', `model=${event.model}`);
+              } else {
+                console.log(`\n${c(cyan, '🔎')}  ${c(cyan + bold, 'holistic review')}  ${c(dim, `model: ${event.model}`)}`);
+              }
               break;
 
             case 'review_output':
@@ -499,31 +567,47 @@ export const runCommand = new Command('run')
             case 'review_completed': {
               lastReviewResult = event.result;
               const { result } = event;
-              const verdictColor = result.verdict === 'PASS'
-                ? green
-                : result.verdict === 'FAIL'
-                  ? red
-                  : yellow;
-              const verdictIcon = result.verdict === 'PASS' ? '✅' : result.verdict === 'FAIL' ? '❌' : '⚠️';
-              console.log(`\n${c(verdictColor, verdictIcon)}  ${c(verdictColor + bold, `Review: ${result.verdict}`)}`);
-              console.log(`    ${c(dim, result.summary)}`);
-              if (result.issues.length > 0) {
+              if (isAgentOutput) {
+                agentLog('REVIEW:RESULT', `verdict=${result.verdict}`, `cost=$${result.costUsd.toFixed(4)}`);
+                agentLog('REVIEW:SUMMARY', result.summary);
                 for (const issue of result.issues) {
-                  const ic = issue.severity === 'critical' ? red : issue.severity === 'major' ? yellow : dim;
-                  console.log(`    ${c(ic, `[${issue.severity}] ${issue.description}`)}${issue.location ? c(dim, `  (${issue.location})`) : ''}`);
+                  const loc = issue.location ? ` location=${issue.location}` : '';
+                  agentLog('REVIEW:ISSUE', `severity=${issue.severity}${loc}`, issue.description);
                 }
-              }
-              if (result.conventionViolations.length > 0) {
                 for (const v of result.conventionViolations) {
-                  console.log(`    ${c(yellow, `⚠ ${v}`)}`);
+                  agentLog('REVIEW:CONVENTION', v);
                 }
+              } else {
+                const verdictColor = result.verdict === 'PASS'
+                  ? green
+                  : result.verdict === 'FAIL'
+                    ? red
+                    : yellow;
+                const verdictIcon = result.verdict === 'PASS' ? '✅' : result.verdict === 'FAIL' ? '❌' : '⚠️';
+                console.log(`\n${c(verdictColor, verdictIcon)}  ${c(verdictColor + bold, `Review: ${result.verdict}`)}`);
+                console.log(`    ${c(dim, result.summary)}`);
+                if (result.issues.length > 0) {
+                  for (const issue of result.issues) {
+                    const ic = issue.severity === 'critical' ? red : issue.severity === 'major' ? yellow : dim;
+                    console.log(`    ${c(ic, `[${issue.severity}] ${issue.description}`)}${issue.location ? c(dim, `  (${issue.location})`) : ''}`);
+                  }
+                }
+                if (result.conventionViolations.length > 0) {
+                  for (const v of result.conventionViolations) {
+                    console.log(`    ${c(yellow, `⚠ ${v}`)}`);
+                  }
+                }
+                console.log(`    ${c(dim, `cost: ~$${result.costUsd.toFixed(4)}  ·  ${Math.round(result.durationMs / 1000)}s`)}`);
               }
-              console.log(`    ${c(dim, `cost: ~$${result.costUsd.toFixed(4)}  ·  ${Math.round(result.durationMs / 1000)}s`)}`);
               break;
             }
 
             case 'review_failed':
-              console.log(`\n${c(red, '❌')}  ${c(red, 'Review failed:')}  ${c(dim, event.error)}`);
+              if (isAgentOutput) {
+                agentLog('REVIEW:FAILED', event.error.split('\n')[0]);
+              } else {
+                console.log(`\n${c(red, '❌')}  ${c(red, 'Review failed:')}  ${c(dim, event.error)}`);
+              }
               break;
 
             case 'review_model_requested':
@@ -683,9 +767,13 @@ export const runCommand = new Command('run')
           : config.autoModelRouting ? 'auto' : config.models.execution;
         const parallelLabel = config.parallel ? `parallel ×${config.maxParallel}` : 'sequential';
 
-        console.log(`\n${c(cyan + bold, '☁️  cloudy')}  ${c(dim, '·')}  ${c(bold, `${pending.length} task${pending.length !== 1 ? 's' : ''}`)}`);
-        console.log(`    ${c(dim, `🤖 exec:${executionModel}  ·  validate:${config.models.validation}  ·  ${parallelLabel}`)}`);
-        console.log('');
+        if (isAgentOutput) {
+          agentLog('RUN:STARTED', `tasks=${pending.length}`, `exec=${executionModel}`, `validate=${config.models.validation}`, parallelLabel);
+        } else {
+          console.log(`\n${c(cyan + bold, '☁️  cloudy')}  ${c(dim, '·')}  ${c(bold, `${pending.length} task${pending.length !== 1 ? 's' : ''}`)}`);
+          console.log(`    ${c(dim, `🤖 exec:${executionModel}  ·  validate:${config.models.validation}  ·  ${parallelLabel}`)}`);
+          console.log('');
+        }
 
         isRunning = true;
         broadcast?.({ type: 'run_status', status: 'running' });
