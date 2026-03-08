@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import { Command } from 'commander';
@@ -337,9 +338,11 @@ const serveCommand = new Command('_serve')
 
     const { startDaemonServer, startStatusBroadcast } = await import('../../daemon/server.js');
 
-    // Find the dist/dashboard directory relative to this script
-    const scriptDir = path.dirname(process.argv[1]);
-    const bundleDir = path.join(scriptDir, '..', 'dashboard');
+    // Find the dist/dashboard directory relative to this compiled file
+    // process.argv[1] may be a symlink (e.g. nvm bin/cloudy → lib/node_modules/cloudy/dist/bin/cloudy.js)
+    // Use import.meta.url to get the real path of this module
+    const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+    const bundleDir = path.join(scriptDir, '..', '..', '..', 'dashboard');
 
     await startDaemonServer(port, bundleDir);
     startStatusBroadcast(5000);

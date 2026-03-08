@@ -1609,18 +1609,37 @@ function RegisterProjectDialog({ onClose, onRegistered }: { onClose: () => void;
         <div className="register-dialog-title">Register project</div>
         <div className="register-dialog-sub">Point cloudy at a local directory that has (or will have) a <code>.cloudy/</code> folder.</div>
         <label className="register-dialog-label">Directory path</label>
-        <input
-          className="register-dialog-input"
-          value={dirPath}
-          onChange={(e) => {
-            const v = (e.target as HTMLInputElement).value;
-            setDirPath(v);
-            if (!name) setName(deriveName(v));
-          }}
-          placeholder="/Users/you/dev/my-project"
-          autoFocus
-          onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); if (e.key === 'Escape') onClose(); }}
-        />
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input
+            className="register-dialog-input"
+            style={{ flex: 1 }}
+            value={dirPath}
+            onChange={(e) => {
+              const v = (e.target as HTMLInputElement).value;
+              setDirPath(v);
+              if (!name) setName(deriveName(v));
+            }}
+            placeholder="/Users/you/dev/my-project"
+            autoFocus
+            onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit(); if (e.key === 'Escape') onClose(); }}
+          />
+          <button
+            className="daemon-btn"
+            style={{ whiteSpace: 'nowrap', flexShrink: 0 }}
+            onClick={async () => {
+              try {
+                const r = await fetch('/api/pick-directory');
+                const data = await r.json() as { path?: string; error?: string };
+                if (data.path) {
+                  setDirPath(data.path);
+                  if (!name) setName(deriveName(data.path));
+                }
+              } catch { /* cancelled or unsupported */ }
+            }}
+          >
+            Browse…
+          </button>
+        </div>
         <label className="register-dialog-label" style={{ marginTop: 10 }}>Project name <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>(auto-detected)</span></label>
         <input
           className="register-dialog-input"

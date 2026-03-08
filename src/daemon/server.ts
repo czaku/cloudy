@@ -1,6 +1,7 @@
 import http from 'node:http';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import { execFile } from 'node:child_process';
 import os from 'node:os';
 import crypto from 'node:crypto';
 import type { Dirent } from 'node:fs';
@@ -1486,6 +1487,22 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   }
 
   // ── Root dashboard ──────────────────────────────────────────────
+  if (pathname === '/api/pick-directory' && method === 'GET') {
+    const picked = await new Promise<string | null>((resolve) => {
+      if (process.platform === 'darwin') {
+        execFile('osascript', ['-e', 'POSIX path of (choose folder with prompt "Select project directory")'],
+          (err, stdout) => resolve(err ? null : stdout.trim().replace(/\/$/, '')));
+      } else if (process.platform === 'linux') {
+        execFile('zenity', ['--file-selection', '--directory', '--title=Select project directory'],
+          (err, stdout) => resolve(err ? null : stdout.trim().replace(/\/$/, '')));
+      } else {
+        resolve(null);
+      }
+    });
+    if (picked) return sendJson(res, 200, { path: picked });
+    return sendJson(res, 200, { error: 'cancelled' });
+  }
+
   if (pathname === '/' || pathname === '/index.html') {
     const html = getDashboardHtml('/bundle.js');
     res.writeHead(200, { 'Content-Type': 'text/html' });
