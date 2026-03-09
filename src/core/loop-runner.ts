@@ -148,12 +148,26 @@ function buildLoopPrompt(
  *     Two consecutive stale iterations → bail.
  *  5. Repeat up to maxIterations.
  */
+/** Extract unique error signatures from command output for stale detection.
+ * Uses first-line of each error block rather than raw line count to avoid
+ * false "stuck" signals when fixing one error reveals cascading downstream errors.
+ */
+function extractErrorSignatures(output: string): Set<string> {
+  return new Set(
+    output.split('\n')
+      .filter((l) => /^\s*(error[: ]|Error[: ]|FAILED|✗|✘|\[error\]|BUILD FAILED)/i.test(l))
+      .map((l) => l.trim().slice(0, 120)),
+  );
+}
+
 export async function runLoop(opts: LoopRunnerOptions): Promise<LoopResult> {
   const { goal, untilCommand, maxIterations, model, cwd, onProgress } = opts;
 
   let staleCount = 0;
   // Snapshot the diff at loop start so we can track incremental progress
   let prevDiff = await getGitDiff(cwd).catch(() => '');
+  // Track unique error signatures to detect real progress vs. cosmetic diff changes
+  let prevErrorSigs = new Set<string>();
   // Accumulate LEARNINGS across iterations so each iteration builds on prior discoveries
   const accumulatedLearnings: string[] = [];
 
@@ -211,7 +225,14 @@ export async function runLoop(opts: LoopRunnerOptions): Promise<LoopResult> {
     const newDiff = await getGitDiff(cwd).catch(() => '');
     const madeChanges = newDiff.trim() !== prevDiff.trim();
 
-    if (!madeChanges) {
+    // Also check if unique error signatures decreased — fixing one error can reveal
+    // cascading downstream errors (making line count go up), but unique signatures
+    // still decrease. This avoids premature bail-out on cascading error reveals.
+    const errorSigs = extractErrorSignatures(failureOutput);
+    const errorProgress = prevErrorSigs.size > 0 && errorSigs.size < prevErrorSigs.size;
+    prevErrorSigs = errorSigs;
+
+    if (!madeChanges && !errorProgress) {
       staleCount++;
       onProgress?.({ type: 'no_progress', iteration: i, staleCount });
       if (staleCount >= 2) {
@@ -225,7 +246,7 @@ export async function runLoop(opts: LoopRunnerOptions): Promise<LoopResult> {
       }
     } else {
       staleCount = 0;
-      prevDiff = newDiff;
+      if (madeChanges) prevDiff = newDiff;
     }
   }
 

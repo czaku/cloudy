@@ -796,6 +796,55 @@ export const runCommand = new Command('run')
           }
         }
 
+        // #10 — main/master branch guard
+        try {
+          const branchResult = await execa('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, reject: false });
+          const currentBranch = branchResult.stdout.trim();
+          if (currentBranch === 'main' || currentBranch === 'master') {
+            if (isNonInteractive) {
+              console.error(c(yellow, `⚠  Running on ${currentBranch} branch in non-interactive mode — proceeding`));
+            } else {
+              const proceed = await p.confirm({ message: `You are on ${currentBranch}. Cloudy will make commits directly to ${currentBranch}. Continue?` });
+              if (p.isCancel(proceed) || !proceed) {
+                console.log(c(dim, 'Cancelled. Create a feature branch and try again.'));
+                return;
+              }
+            }
+          }
+        } catch { /* non-fatal — git may not be available */ }
+
+        // #6 — Plan pre-flight review (interactive mode only — can't act on concerns in non-interactive)
+        if (!isNonInteractive && !opts.retry && !opts.retryFailed) {
+          try {
+            const { buildPlanPreflightPrompt } = await import('../../planner/prompts.js');
+            const { runClaude } = await import('../../executor/claude-runner.js');
+            const preflightPrompt = buildPlanPreflightPrompt(
+              freshState.plan.goal,
+              freshState.plan.tasks.filter((t) => t.status === 'pending').map((t) => ({
+                id: t.id, title: t.title, description: t.description, dependencies: t.dependencies,
+              })),
+            );
+            const preflightResult = await runClaude({ prompt: preflightPrompt, model: 'haiku', cwd, timeout: 30_000 });
+            if (preflightResult.success) {
+              try {
+                const jsonMatch = preflightResult.output.match(/\{[\s\S]*\}/);
+                const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) as { concerns: string[]; safe_to_proceed: boolean } : null;
+                if (parsed && !parsed.safe_to_proceed && parsed.concerns.length > 0) {
+                  console.log(c(yellow, '\n⚠  Plan pre-flight concerns:'));
+                  for (const concern of parsed.concerns) {
+                    console.log(c(yellow, `   • ${concern}`));
+                  }
+                  const proceed = await p.confirm({ message: 'Proceed despite concerns?' });
+                  if (p.isCancel(proceed) || !proceed) {
+                    console.log(c(dim, 'Run cancelled. Fix plan and try again.'));
+                    return;
+                  }
+                }
+              } catch { /* malformed JSON — skip silently */ }
+            }
+          } catch { /* non-fatal — preflight failure never blocks execution */ }
+        }
+
         const pending = freshState.plan.tasks.filter((t) => t.status === 'pending');
         const engine = config.engine ?? 'claude-code';
         const executionModel = config.autoModelRouting ? 'auto' : config.models.execution;

@@ -156,6 +156,11 @@ export function buildValidationPrompt(
 
   return `You are reviewing code changes for the task: "${taskTitle}"
 
+IMPORTANT: Do not trust the implementation's apparent completeness at face value.
+Read the actual diff and file sections below. Compare each acceptance criterion
+line-by-line against what you can see in the code — not against what you would
+expect to see. If evidence is absent, the criterion is not met.
+
 # Acceptance Criteria
 ${acceptanceCriteria.map((c) => `- ${c}`).join('\n')}
 ${responsibilitiesSection}${priorSection}${artifactSection}${commandSection}
@@ -253,6 +258,7 @@ Respond with ONLY valid JSON:
 {
   "passed": true/false,
   "summary": "One sentence verdict",
+  "strengths": ["2-3 things the implementation does well — be specific"],
   "issues": [
     {
       "severity": "critical" | "important",
@@ -262,6 +268,43 @@ Respond with ONLY valid JSON:
   ]
 }
 
+Before listing issues, identify 2–3 concrete strengths. This calibrates the review.
 Set "passed" to false only if there are critical issues. Important issues should be listed but do not fail the review unless there are 3 or more.
 `;
+}
+
+/**
+ * Plan pre-flight review — cheap haiku call before execution starts.
+ * Warns about critical plan problems without blocking autonomous runs.
+ * (#6 from superpowers improvements)
+ */
+export function buildPlanPreflightPrompt(goal: string, tasks: Array<{ id: string; title: string; description: string; dependencies: string[] }>): string {
+  const taskList = tasks.map((t) =>
+    `- ${t.id}: ${t.title}${t.dependencies.length ? ` (depends: ${t.dependencies.join(', ')})` : ''}\n  ${t.description}`
+  ).join('\n');
+
+  return `You are doing a quick pre-flight review of an implementation plan before execution starts.
+
+# Goal
+${goal}
+
+# Tasks
+${taskList}
+
+# What to check
+- Tasks that reference tools, APIs, frameworks, or files that almost certainly don't exist in a typical project
+- Acceptance criteria that are impossible to verify (e.g. "works correctly" with no measurable definition)
+- Missing tasks that are obviously required as prerequisites (e.g. a migration task with no schema task before it)
+- Do NOT flag: implementation choices, ordering preferences, or anything that is a matter of opinion
+
+This is a warn-only review. The run will proceed regardless — you are flagging problems so the user is aware, not blocking execution.
+
+Respond with ONLY valid JSON:
+
+{
+  "concerns": ["Each concern in one sentence — be specific about which task and why"],
+  "safe_to_proceed": true/false
+}
+
+Set "safe_to_proceed" to false only if you see a critical blocker (e.g. task-3 depends on task-5 which doesn't exist). For style or preference issues, set true and leave concerns empty.`;
 }

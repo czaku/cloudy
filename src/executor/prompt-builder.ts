@@ -11,6 +11,7 @@ export interface ExecutionPromptOptions {
   conventionsContent?: string;     // CLAUDE.md / AGENTS.md from project root
   rollingContextSummary?: string;  // AI-generated summary of what previous tasks in this run built
   decisionLog?: import('../core/types.js').DecisionLogEntry[];  // resolved planning decisions
+  architecturalContext?: string;   // derived from dependency graph — where this task fits
 }
 
 /**
@@ -32,6 +33,7 @@ export function buildExecutionPrompt(
   let conventionsContent: string | undefined;
   let rollingContextSummary: string | undefined;
   let decisionLog: import('../core/types.js').DecisionLogEntry[] | undefined;
+  let architecturalContext: string | undefined;
 
   if ('task' in taskOrOpts && 'plan' in taskOrOpts) {
     const opts = taskOrOpts as ExecutionPromptOptions;
@@ -44,6 +46,7 @@ export function buildExecutionPrompt(
     conventionsContent = opts.conventionsContent;
     rollingContextSummary = opts.rollingContextSummary;
     decisionLog = opts.decisionLog;
+    architecturalContext = opts.architecturalContext;
   } else {
     task = taskOrOpts as Task;
     plan = planArg!;
@@ -97,6 +100,13 @@ export function buildExecutionPrompt(
     parts.push('');
   }
 
+  // #5 — Architectural scene-setting: where this task fits in the dependency graph
+  if (architecturalContext?.trim()) {
+    parts.push('## Context');
+    parts.push(architecturalContext.trim());
+    parts.push('');
+  }
+
   parts.push(`# Your Task: ${task.title}\n${task.description}\n`);
 
   if (task.acceptanceCriteria.length > 0) {
@@ -129,6 +139,14 @@ export function buildExecutionPrompt(
     parts.push(contextSection);
   }
 
+  // #3 — Ask-questions-first gate (always use non-interactive note since cloudy runs autonomously)
+  parts.push('## Before You Begin');
+  parts.push('If anything in this task is unclear — the approach, which existing files to modify,');
+  parts.push('how this integrates with already-completed tasks — document your assumption and reasoning');
+  parts.push('in your summary. Since you are running autonomously, make the most reasonable assumption');
+  parts.push('rather than blocking. Do not ask questions — proceed with a documented assumption.');
+  parts.push('');
+
   parts.push('# Instructions');
   parts.push(
     'Implement this task completely. Write all necessary code, create files as needed.',
@@ -136,15 +154,39 @@ export function buildExecutionPrompt(
   parts.push('Do NOT explain what you will do - just do it. Write the actual code.');
   parts.push('Follow all conventions in the Project Conventions section above exactly.');
   parts.push('');
+
+  // #9 — Anti-pattern catalog (includes mobile-specific patterns)
+  parts.push('## Anti-Patterns — Do Not Do These');
+  parts.push('- "I\'ll verify later" — verify now, before summarising');
+  parts.push('- "The tests should pass" — run them and show the actual pass/fail count');
+  parts.push('- "I\'ll add that cleanup in a follow-up" — scope = exactly what\'s in the AC');
+  parts.push('- "This approach is close enough" — implement exactly what was specified');
+  parts.push('- "The simulator build passes so it should be fine on device" — simulator ≠ device; if there are device-specific concerns, flag them explicitly');
+  parts.push('- "I\'ll test on the simulator later" — if a build or lint check is available, run it now');
+  parts.push('');
+
   parts.push('## Verification Gate (mandatory before claiming done)');
   parts.push('Before summarizing completion, run at least one verification command that proves the work is correct:');
-  parts.push('- TypeScript changes: `tsc --noEmit` (or project equivalent) — show actual error count');
-  parts.push('- New tests added: run the test command — show actual pass/fail count, not "should pass"');
+  parts.push('- TypeScript/JS: `tsc --noEmit` or `bun run typecheck` — show actual error count');
+  parts.push('- Tests added: run the test command — show actual pass/fail count, not "should pass"');
   parts.push('- New endpoints/functions: call them with realistic input — show actual output');
-  parts.push('- Python changes: `python -m py_compile` on changed files');
+  parts.push('- Python: `python -m py_compile` on changed files');
+  parts.push('- Swift/iOS: `xcodebuild build -scheme <scheme> -destination "generic/platform=iOS Simulator"` or use `simemu build` if available');
+  parts.push('- Kotlin/Android: `./gradlew assembleDebug` or `./gradlew compileDebugKotlin`');
   parts.push('Do NOT summarise completion based on how the code looks. Run a command that proves it works.');
   parts.push('');
-  parts.push('When done, briefly summarize what you implemented (files created/modified, key decisions) and include the verification output.');
+
+  // #1 — Self-review checklist (runs after verification, before summary)
+  parts.push('## Before Reporting: Self-Review');
+  parts.push('After verification, review your work before summarising:');
+  parts.push('- Completeness: Did you implement every acceptance criterion? Any edge cases missed?');
+  parts.push('- YAGNI: Did you add anything not in the spec? If yes, remove it before continuing.');
+  parts.push('- Quality: Are names clear? Is the logic easy to follow?');
+  parts.push('- Tests: If you wrote tests, do they test real behaviour (not just mock wiring)?');
+  parts.push('Fix any issues found, then summarise.');
+  parts.push('');
+
+  parts.push('When done, briefly summarize what you implemented (files created/modified, key decisions, any assumptions made) and include the verification output.');
   parts.push('');
   parts.push(
     'If you discover any project-specific facts (libraries, file locations, patterns, conventions) that future tasks should know, end your response with:',
@@ -196,6 +238,10 @@ export function buildRetryPrompt(
       ? `\n# Files Created in Previous Attempt\nYour previous attempt created these files. Check whether they are in the correct location — if any are misplaced or duplicated, delete or move them as part of this retry:\n${priorFilesCreated.map((f) => `- ${f}`).join('\n')}\n`
       : '';
 
+  const escalationNote = task.retries >= 2
+    ? `\nThis is attempt ${task.retries + 1}. ${task.retries} prior fix${task.retries > 1 ? 'es' : ''} failed. Before trying again, question whether your overall approach is correct — not just the last fix. Consider a fundamentally different strategy.\n`
+    : '';
+
   return `${base}
 
 # RETRY — Previous Attempt Failed
@@ -204,5 +250,12 @@ The previous attempt had these errors that MUST be fixed:
 
 ${validationErrors}
 ${contextSection}${priorFilesSection}
+## Before Attempting Any Fix
+1. Read the error output above completely — the exact message often contains the solution
+2. Identify WHICH line/function triggers the failure (trace backward from the error)
+3. State your root cause hypothesis explicitly before writing code
+4. Make the SMALLEST possible change to test that hypothesis
+Do NOT shotgun-fix multiple things at once. Fix one root cause, then verify.
+${escalationNote}
 Address each error precisely. Do not rewrite working parts — only fix what failed.`;
 }

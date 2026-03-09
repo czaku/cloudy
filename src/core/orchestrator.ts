@@ -312,6 +312,15 @@ export class Orchestrator {
       // Auto-recovery: if reviewer flagged tasks for re-run, reset and re-execute them
       // If verdict is FAIL but rerunTaskIds is empty (truncated/malformed review), fall back
       // to re-running all failed tasks
+      // #8 — PASS_WITH_NOTES: log notes prominently; run a second pass if doublePass is configured
+      if (reviewResult && reviewResult.verdict === 'PASS_WITH_NOTES') {
+        await log.info('Holistic review passed with notes — implementation complete but has minor concerns');
+        if ((this.config.review as any)?.doublePass) {
+          await log.info('Running second holistic review pass (review.doublePass enabled)');
+          await this.runHolisticReview();
+        }
+      }
+
       if (reviewResult && reviewResult.verdict === 'FAIL') {
         let ids = reviewResult.rerunTaskIds;
         if (ids.length === 0) {
@@ -566,11 +575,47 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
     const budgetMode = this.config.contextBudgetMode ?? 'warn';
 
     // Load conventions (CLAUDE.md / AGENTS.md), learnings, and dependency handoffs
-    const conventionsContent = await readConventions(taskCwd);
+    let conventionsContent = await readConventions(taskCwd);
+
+    // #12 — session-start.sh extension point: inject dynamic project context
+    // Project authors can place .cloudy/session-start.sh (or .ts) to prime each task
+    // with environment-specific info: git log, open issues, simulator state, etc.
+    try {
+      const sessionStartSh = path.join(this.cwd, '.cloudy', 'session-start.sh');
+      const sessionStartTs = path.join(this.cwd, '.cloudy', 'session-start.ts');
+      const { execa: execaLocal } = await import('execa');
+      let sessionOut = '';
+      try {
+        await fs.access(sessionStartSh);
+        const r = await execaLocal('bash', [sessionStartSh], { cwd: this.cwd, timeout: 10_000, reject: false });
+        sessionOut = r.stdout?.trim() ?? '';
+      } catch {
+        try {
+          await fs.access(sessionStartTs);
+          const r = await execaLocal('npx', ['tsx', sessionStartTs], { cwd: this.cwd, timeout: 15_000, reject: false });
+          sessionOut = r.stdout?.trim() ?? '';
+        } catch { /* no session-start script present */ }
+      }
+      if (sessionOut) conventionsContent = (conventionsContent ?? '') + '\n\n' + sessionOut;
+    } catch { /* non-fatal */ }
+
     const learningsContent = await readLearnings(this.cwd) ?? undefined;
     const handoffSummaries = task.dependencies.length > 0
       ? await readHandoffs(task.dependencies, this.cwd)
       : undefined;
+
+    // #5 — Architectural scene-setting: derive where this task fits in the dependency graph
+    const plan = this.state.plan!;
+    const depTitles = task.dependencies
+      .map((id) => plan.tasks.find((t) => t.id === id)?.title)
+      .filter(Boolean) as string[];
+    const dependentTitles = plan.tasks
+      .filter((t) => t.dependencies.includes(task.id))
+      .map((t) => t.title);
+    const architecturalContext = [
+      depTitles.length ? `Depends on: ${depTitles.join(', ')}` : '',
+      dependentTitles.length ? `Required by (downstream tasks that import from this): ${dependentTitles.join(', ')}` : '',
+    ].filter(Boolean).join('\n') || undefined;
 
     // Resolve initial context files with token budget
     let contextFiles = await resolveContextFiles(currentPatterns, taskCwd, budget, budgetMode);
@@ -714,7 +759,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       const prompt =
         lastValidationErrors && attempt > 1
           ? buildRetryPrompt(task, plan, completedTitles, lastValidationErrors, contextFiles, learningsContent, handoffSummaries, conventionsContent, lastErrorFileContext, lastPriorFilesCreated)
-          : buildExecutionPrompt({ task, plan, completedTaskTitles: completedTitles, contextFiles, learningsContent, handoffSummaries, conventionsContent, rollingContextSummary: this.rollingContextSummary || undefined, decisionLog: plan.decisionLog });
+          : buildExecutionPrompt({ task, plan, completedTaskTitles: completedTitles, contextFiles, learningsContent, handoffSummaries, conventionsContent, rollingContextSummary: this.rollingContextSummary || undefined, decisionLog: plan.decisionLog, architecturalContext });
 
       // Run Claude with timeout
       const abortController = new AbortController();
