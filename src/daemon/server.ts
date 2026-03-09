@@ -1669,8 +1669,10 @@ async function handleFedRequest(req: http.IncomingMessage, res: http.ServerRespo
 
   // GET /fed/info
   if (pathname === '/fed/info') {
+    const cfg = await readDaemonConfig();
     sendFedJson(res, 200, {
       machine: os.hostname(),
+      identity: cfg.identitySlug ?? os.hostname(),
       version: '0.1.0',
       port,
       fedPort: port + 334,
