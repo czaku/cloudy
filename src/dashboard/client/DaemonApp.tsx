@@ -5630,6 +5630,12 @@ export function DaemonApp() {
   const [activeTab, setActiveTab] = useState<ActiveTab>(initial.tab);
   const [urlSessionId, setUrlSessionId] = useState<string | null>(initial.sessionId);
 
+  // Refs for use inside stable SSE closures
+  const activeTabRef = useRef<ActiveTab>(initial.tab);
+  const selectedIdRef = useRef<string | null>(initial.id);
+  useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
+  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+
   // Sync hash → state on back/forward
   useEffect(() => {
     function onHashChange() {
@@ -5702,7 +5708,14 @@ export function DaemonApp() {
           return;
         }
 
-        if (event.type === 'project_status') {
+        if (event.type === 'run_started') {
+          // If currently on Dashboard (idle), jump to Run tab so the user sees the run
+          if (activeTabRef.current === 'dashboard') {
+            setActiveTab('run');
+            const id = selectedIdRef.current;
+            if (id) window.location.hash = `#/${id}/run`;
+          }
+        } else if (event.type === 'project_status') {
           setProjects((event.projects as ProjectStatusSnapshot[]) ?? []);
           setProjectsLoaded(true);
         } else if (event.type === 'plan_saved') {
