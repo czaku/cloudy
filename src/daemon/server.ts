@@ -1207,13 +1207,16 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
     // POST /api/projects/:id/plan-input
     if (method === 'POST' && subpath === '/plan-input') {
-      const proc = getRunningProcess(projectId, 'init');
-      if (!proc || !proc.child.stdin) {
-        sendJson(res, 404, { error: 'No active planning process' });
-        return;
-      }
       try {
-        const body = await parseBody(req) as { answer?: string; action?: string; feedback?: string };
+        const body = await parseBody(req) as { answer?: string; action?: string; feedback?: string; processId?: string };
+        // Route to the specific process if processId provided, else fall back to first init proc
+        const proc = body.processId
+          ? [...activeProcesses.values()].find((p) => p.id === body.processId && p.projectId === projectId)
+          : getRunningProcess(projectId, 'init');
+        if (!proc || !proc.child.stdin) {
+          sendJson(res, 404, { error: 'No active planning process' });
+          return;
+        }
         const line = (body.answer ?? body.action ?? '') + '\n';
         proc.child.stdin.write(line);
         sendJson(res, 200, { ok: true });
@@ -1290,13 +1293,13 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
     // POST /api/projects/:id/stop
     if (method === 'POST' && subpath === '/stop') {
-      const proc = getProjectProcesses(projectId)[0]; // stop the first/any process
-      if (!proc) {
+      const procs = getProjectProcesses(projectId);
+      if (procs.length === 0) {
         sendJson(res, 404, { error: 'No active process' });
         return;
       }
-      proc.child.kill('SIGTERM');
-      sendJson(res, 200, { ok: true });
+      for (const p of procs) p.child.kill('SIGTERM');
+      sendJson(res, 200, { ok: true, stopped: procs.length });
       return;
     }
 

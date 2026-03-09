@@ -2687,6 +2687,7 @@ interface RunQuestion {
   total: number;
   timeoutSec: number;
   arrivedAt: number; // Date.now()
+  processId?: string; // for routing answer to correct parallel init process
 }
 
 function playBeep() {
@@ -2763,6 +2764,7 @@ function RunTab({ project }: RunTabProps) {
           total: ev.total ?? 1,
           timeoutSec: ev.timeoutSec ?? 60,
           arrivedAt: Date.now(),
+          processId: ev.processId as string | undefined,
         };
         setActiveQuestion(q);
         setQuestionSecsLeft(q.timeoutSec);
@@ -2933,7 +2935,9 @@ function RunTab({ project }: RunTabProps) {
 
   async function handleQuestionSubmit() {
     if (!activeQuestion || !questionAnswer.trim()) return;
-    await apiPost(`/api/projects/${project.id}/plan-input`, { answer: questionAnswer.trim() }).catch(() => {});
+    const payload: Record<string, string> = { answer: questionAnswer.trim() };
+    if (activeQuestion.processId) payload.processId = activeQuestion.processId;
+    await apiPost(`/api/projects/${project.id}/plan-input`, payload).catch(() => {});
     setActiveQuestion(null);
     setQuestionAnswer('');
   }
