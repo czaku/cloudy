@@ -1,5 +1,5 @@
 import http from 'node:http';
-import Bonjour from 'bonjour-service';
+import { Bonjour } from 'bonjour-service';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -1575,6 +1575,27 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
   return new Promise((resolve, reject) => {
     server.on('error', reject);
     server.listen(port, '0.0.0.0', () => {
+      // ── mDNS advertisement ────────────────────────────────────────────
+      const fedPort = port + 334;
+      const bonjour = new Bonjour();
+      const mdnsService = bonjour.publish({
+        name: `cloudy-${os.hostname()}`,
+        type: 'cloudy',
+        port: fedPort,
+        txt: {
+          machine: os.hostname(),
+          port: String(fedPort),
+          version: '0.1.0',
+        },
+      });
+
+      const mdnsCleanup = () => {
+        mdnsService.stop?.();
+        bonjour.destroy();
+      };
+      process.on('SIGTERM', mdnsCleanup);
+      process.on('SIGINT', mdnsCleanup);
+
       resolve(server);
     });
   });
