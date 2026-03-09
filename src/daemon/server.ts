@@ -1,4 +1,5 @@
 import http from 'node:http';
+import Bonjour from 'bonjour-service';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';

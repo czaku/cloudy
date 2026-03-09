@@ -2964,7 +2964,7 @@ function RunTab({ project }: RunTabProps) {
   const doneTasks = runTasks.filter((t) => t.status === 'completed' || t.status === 'skipped');
   const progressPct = runTasks.length > 0 ? (doneTasks.length / runTasks.length) * 100 : 0;
   // A task has active work if daemon says running OR tasks report in_progress/pending
-  const hasActiveTasks = runTasks.some((t) => t.status === 'in_progress' || t.status === 'pending');
+  const hasActiveTasks = runTasks.some((t) => t.status === 'in_progress'); // pending = never started, not stuck
   const effectivelyRunning = isRunning || hasActiveTasks;
   const runTrafficStatus = effectivelyRunning ? 'running' : failedTasks.length > 0 ? 'error' : runTasks.length > 0 ? 'completed' : 'idle';
 
