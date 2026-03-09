@@ -398,6 +398,16 @@ function parseBody(req: http.IncomingMessage, maxBytes = 1_048_576 /* 1 MB */): 
   });
 }
 
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function sendJson(res: http.ServerResponse, status: number, data: unknown): void {
   const payload = JSON.stringify(data);
   res.writeHead(status, {
@@ -883,6 +893,15 @@ async function streamChatMessageResume(
   const finalMessage = { role: 'assistant' as const, content: assistantContent || '(no response)', ts: new Date().toISOString() };
   broadcastSse({ type: 'chat_done', sessionId: compositeId, message: finalMessage });
 }
+
+// ── Federation peer registry ──────────────────────────────────────────
+
+interface PeerInfo {
+  machine: string;
+  fedUrl: string;
+}
+
+const peers = new Map<string, PeerInfo>(); // keyed by machine hostname
 
 // ── HTTP request handler ──────────────────────────────────────────────
 
@@ -1558,6 +1577,30 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
 
+  // ── GET /api/federation/peers ────────────────────────────────────────
+  if (pathname === '/api/federation/peers' && method === 'GET') {
+    const timeout = 2000;
+    const results = await Promise.all(
+      Array.from(peers.values()).map(async ({ machine, fedUrl }) => {
+        try {
+          const [infoRes, runsRes] = await Promise.all([
+            fetchWithTimeout(`${fedUrl}/fed/info`, timeout),
+            fetchWithTimeout(`${fedUrl}/fed/runs`, timeout),
+          ]);
+          if (!infoRes.ok || !runsRes.ok) {
+            return { machine, fedUrl, online: false, projects: [] };
+          }
+          const runs = await runsRes.json() as unknown[];
+          return { machine, fedUrl, online: true, projects: runs };
+        } catch {
+          return { machine, fedUrl, online: false, projects: [] };
+        }
+      }),
+    );
+    sendJson(res, 200, results);
+    return;
+  }
+
   send404(res);
 }
 
@@ -1698,7 +1741,23 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
         },
       });
 
+      // ── mDNS peer discovery ───────────────────────────────────────────
+      const selfHostname = os.hostname();
+      const browser = bonjour.find({ type: 'cloudy' }, (service) => {
+        const machine: string = (service.txt as Record<string, string>)?.machine ?? service.name;
+        if (machine === selfHostname) return; // skip self
+        const host = service.addresses?.[0] ?? service.host ?? 'localhost';
+        const svcPort: number = service.port;
+        const fedUrl = `http://${host}:${svcPort}`;
+        peers.set(machine, { machine, fedUrl });
+      });
+      browser.on('down', (service) => {
+        const machine: string = (service.txt as Record<string, string>)?.machine ?? service.name;
+        peers.delete(machine);
+      });
+
       const mdnsCleanup = () => {
+        browser.stop?.();
         mdnsService.stop?.();
         bonjour.destroy();
         fedServer.close();
