@@ -899,7 +899,7 @@ async function streamChatMessageResume(
 const DAEMON_CONFIG_FILE = path.join(os.homedir(), '.cloudy', 'daemon.json');
 
 interface DaemonConfig {
-  identitySlug?: string;
+  identity?: string;
 }
 
 async function readDaemonConfig(): Promise<DaemonConfig> {
@@ -1672,7 +1672,7 @@ async function handleFedRequest(req: http.IncomingMessage, res: http.ServerRespo
     const cfg = await readDaemonConfig();
     sendFedJson(res, 200, {
       machine: os.hostname(),
-      identity: cfg.identitySlug ?? os.hostname(),
+      identity: cfg.identity ?? os.hostname(),
       version: '0.1.0',
       port,
       fedPort: port + 334,
@@ -1753,7 +1753,7 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
     server.on('error', reject);
     server.listen(port, '0.0.0.0', async () => {
       const daemonConfig = await readDaemonConfig();
-      const identity = daemonConfig.identitySlug ?? '';
+      const identity = daemonConfig.identity ?? '';
 
       // ── mDNS advertisement ────────────────────────────────────────────
       const bonjour = new Bonjour();

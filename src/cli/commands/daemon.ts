@@ -356,7 +356,7 @@ const IDENTITY_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,48}[a-z0-9]$|^[a-z0-9]$/;
 const DAEMON_CONFIG_FILE = path.join(os.homedir(), '.cloudy', 'daemon.json');
 
 interface DaemonConfig {
-  identitySlug?: string;
+  identity?: string;
 }
 
 async function readDaemonConfig(): Promise<DaemonConfig> {
@@ -380,8 +380,8 @@ const identityCommand = new Command('identity')
     if (slug === undefined) {
       // Read mode
       const cfg = await readDaemonConfig();
-      if (cfg.identitySlug) {
-        console.log(cfg.identitySlug);
+      if (cfg.identity) {
+        console.log(cfg.identity);
       } else {
         console.log(c(dim, `(not set — using hostname: ${os.hostname()})`));
       }
@@ -395,7 +395,7 @@ const identityCommand = new Command('identity')
     }
 
     const cfg = await readDaemonConfig();
-    cfg.identitySlug = slug;
+    cfg.identity = slug;
     await writeDaemonConfig(cfg);
 
     console.log(c(green, `✅  Identity slug set to "${slug}"`));
