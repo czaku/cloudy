@@ -1037,12 +1037,23 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       try {
         const runsDir = path.join(meta.path, CLAWDASH_DIR, RUNS_DIR);
         const entries = await fs.readdir(runsDir, { withFileTypes: true }).catch(() => [] as Dirent[]);
-        const runNames = entries
-          .filter((e) => e.isDirectory())
-          .map((e) => e.name)
-          .sort()
-          .reverse()
-          .slice(0, 20);
+        const dirs = entries.filter((e) => e.isDirectory()).map((e) => e.name);
+        // Sort by embedded date (YYYY-MM-DD-HHMM) if present, otherwise by mtime desc
+        const withMtime = await Promise.all(dirs.map(async (name) => {
+          const m = name.match(/(\d{4}-\d{2}-\d{2}-\d{4})/);
+          const dateKey = m ? m[1] : null;
+          if (dateKey) return { name, key: dateKey };
+          try {
+            const s = await fs.stat(path.join(runsDir, name));
+            return { name, key: s.mtimeMs.toString().padStart(20, '0') };
+          } catch {
+            return { name, key: '0' };
+          }
+        }));
+        const runNames = withMtime
+          .sort((a, b) => b.key.localeCompare(a.key))
+          .map((x) => x.name)
+          .slice(0, 50);
         sendJson(res, 200, runNames);
       } catch {
         sendJson(res, 200, []);
@@ -1054,14 +1065,47 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     if (method === 'GET' && subpath.startsWith('/run-log/')) {
       if (!meta) { send404(res); return; }
       const runName = decodeURIComponent(subpath.slice('/run-log/'.length));
-      const logFile = path.join(meta.path, CLAWDASH_DIR, RUNS_DIR, runName, 'logs', 'cloudy.log');
+      const runDir = path.join(meta.path, CLAWDASH_DIR, RUNS_DIR, runName);
+      // Try: logs/cloudy.log → synthesize from state.json → 404
+      const logFile = path.join(runDir, 'logs', 'cloudy.log');
+      const stateFile = path.join(runDir, 'state.json');
       try {
         const content = await fs.readFile(logFile, 'utf-8');
         res.writeHead(200, { 'Content-Type': 'text/plain' });
-        res.end(content.slice(-8000)); // last 8KB
+        res.end(content.slice(-8000));
       } catch {
-        res.writeHead(404);
-        res.end('Log not found');
+        try {
+          const raw = await fs.readFile(stateFile, 'utf-8');
+          const state = JSON.parse(raw) as { plan?: { tasks?: Array<{ id: string; title: string; status: string }> }; costSummary?: { totalEstimatedUsd?: number }; completedAt?: string };
+          const tasks = state.plan?.tasks ?? [];
+          const lines: string[] = [`Run: ${runName}`];
+          if (state.completedAt) lines.push(`Completed: ${new Date(state.completedAt).toLocaleString()}`);
+          if (state.costSummary?.totalEstimatedUsd) lines.push(`Cost: $${state.costSummary.totalEstimatedUsd.toFixed(4)}`);
+          lines.push('');
+          for (const t of tasks) {
+            const icon = t.status === 'completed' ? '✓' : t.status === 'failed' ? '✗' : t.status === 'in_progress' ? '●' : '○';
+            lines.push(`${icon} [${t.id}] ${t.title}  (${t.status})`);
+          }
+          res.writeHead(200, { 'Content-Type': 'text/plain' });
+          res.end(lines.join('\n'));
+        } catch {
+          res.writeHead(404);
+          res.end('Log not found');
+        }
+      }
+      return;
+    }
+
+    // GET /api/projects/:id/run-state/:runName — structured state for history cards
+    if (method === 'GET' && subpath.startsWith('/run-state/')) {
+      if (!meta) { send404(res); return; }
+      const runName = decodeURIComponent(subpath.slice('/run-state/'.length));
+      const stateFile = path.join(meta.path, CLAWDASH_DIR, RUNS_DIR, runName, 'state.json');
+      try {
+        const raw = await fs.readFile(stateFile, 'utf-8');
+        sendJson(res, 200, JSON.parse(raw));
+      } catch {
+        send404(res);
       }
       return;
     }

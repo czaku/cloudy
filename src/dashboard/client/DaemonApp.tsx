@@ -2721,6 +2721,7 @@ function RunTab({ project }: RunTabProps) {
   const [dropOnEmpty, setDropOnEmpty] = useState(false);
   const [draggingStepId, setDraggingStepId] = useState<string | null>(null);
   const [runTasks, setRunTasks] = useState<RunTask[]>([]);
+  const [stateLoaded, setStateLoaded] = useState(false);
   const [costUsd, setCostUsd] = useState(0);
   const [viewMode, setViewMode] = useState<'config' | 'progress'>('config');
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
@@ -2818,12 +2819,14 @@ function RunTab({ project }: RunTabProps) {
 
   // Hydrate on mount: always load the current run state so a refresh restores the view
   useEffect(() => {
+    setStateLoaded(false);
     fetchRunState().then(() => {
       // After loading, show progress view if there are tasks (running or completed/failed)
       setRunTasks((tasks) => {
         if (tasks.length > 0) setViewMode('progress');
         return tasks;
       });
+      setStateLoaded(true);
     });
   }, [project.id]);
 
@@ -2981,8 +2984,8 @@ function RunTab({ project }: RunTabProps) {
   // SVG ring constants
   const RING_R = 40, RING_C = 2 * Math.PI * RING_R; // ~251.3
 
-  // Stuck = process ended but tasks still show in_progress
-  const isStuck = !isRunning && hasActiveTasks;
+  // Stuck = process ended but tasks still show in_progress (only after state has loaded)
+  const isStuck = stateLoaded && !isRunning && hasActiveTasks;
 
   // Progress view: shown while running or after a run has results
   if (viewMode === 'progress' && (isRunning || runTasks.length > 0)) {
@@ -5427,17 +5430,30 @@ function parseRunName(name: string): RunEntry {
   return { name, date, spec, isPipeline };
 }
 
+interface RunStateTask { id: string; title: string; status: string; }
+interface RunStateSummary { completedAt?: string; costSummary?: { totalEstimatedUsd?: number }; plan?: { tasks?: RunStateTask[] }; }
+
 function HistoryTab({ project }: { project: ProjectStatusSnapshot }) {
   const [runs, setRuns] = useState<string[]>([]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [logs, setLogs] = useState<Record<string, string>>({});
+  const [states, setStates] = useState<Record<string, RunStateSummary>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
     fetch(`/api/projects/${project.id}/runs`)
       .then((r) => r.json())
-      .then((d: string[]) => setRuns(d))
+      .then((d: string[]) => {
+        setRuns(d);
+        // Eagerly fetch state.json for each run (for inline task counts)
+        for (const name of d) {
+          fetch(`/api/projects/${project.id}/run-state/${encodeURIComponent(name)}`)
+            .then((r) => r.ok ? r.json() : null)
+            .then((s: RunStateSummary | null) => { if (s) setStates((prev) => ({ ...prev, [name]: s })); })
+            .catch(() => {});
+        }
+      })
       .catch(() => setRuns([]))
       .finally(() => setLoading(false));
   }, [project.id]);
@@ -5450,7 +5466,6 @@ function HistoryTab({ project }: { project: ProjectStatusSnapshot }) {
       return next;
     });
     if (!logs[name]) {
-      // Try to load the log
       const res = await fetch(`/api/projects/${project.id}/run-log/${encodeURIComponent(name)}`).catch(() => null);
       if (res?.ok) {
         const text = await res.text();
@@ -5469,7 +5484,7 @@ function HistoryTab({ project }: { project: ProjectStatusSnapshot }) {
   // Group by date
   const groups: Record<string, RunEntry[]> = {};
   for (const e of entries) {
-    const day = e.date.slice(0, 10) || today; // undated runs go under today
+    const day = e.date.slice(0, 10) || today;
     if (!groups[day]) groups[day] = [];
     groups[day].push(e);
   }
@@ -5501,31 +5516,58 @@ function HistoryTab({ project }: { project: ProjectStatusSnapshot }) {
         </div>
       )}
 
-      {Object.entries(groups).map(([day, dayRuns]) => (
+      {Object.entries(groups).sort(([a], [b]) => b.localeCompare(a)).map(([day, dayRuns]) => (
         <div key={day} className="history-group">
           <div className="history-group-label">{dayLabel(day)}</div>
           {dayRuns.map((entry) => {
             const isOpen = expanded.has(entry.name);
+            const st = states[entry.name];
+            const tasks = st?.plan?.tasks ?? [];
+            const done = tasks.filter((t) => t.status === 'completed').length;
+            const failed = tasks.filter((t) => t.status === 'failed').length;
+            const total = tasks.length;
+            const cost = st?.costSummary?.totalEstimatedUsd;
+            const isScope = entry.name.toLowerCase().startsWith('scope-');
             return (
               <div key={entry.name} className="history-run-card">
                 <div className="history-run-header" onClick={() => toggleExpand(entry.name)}>
                   <div className="history-run-icon">
-                    {entry.isPipeline ? <IconPipeline size={16} color="#a78bfa" /> : entry.name.toLowerCase().startsWith('scope-') ? <span style={{ fontSize: 14 }}>📐</span> : <IconRocket size={16} color="#e8703a" />}
+                    {entry.isPipeline ? <IconPipeline size={16} color="#a78bfa" /> : isScope ? <span style={{ fontSize: 14 }}>📐</span> : <IconRocket size={16} color="#e8703a" />}
                   </div>
                   <div className="history-run-info">
                     <div className="history-run-name">{entry.spec || entry.name}</div>
                     <div className="history-run-meta">
                       {entry.isPipeline && <span className="history-run-badge pipeline">chain</span>}
-                      {entry.name.toLowerCase().startsWith('scope-') && <span className="history-run-badge" style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}>plan</span>}
+                      {isScope && <span className="history-run-badge" style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}>plan</span>}
+                      {total > 0 && (
+                        <span style={{ color: failed > 0 ? '#ef4444' : done === total ? '#10b981' : 'var(--text-muted)' }}>
+                          {done === total && failed === 0 ? `✓ ${done}/${total}` : failed > 0 ? `✗ ${failed} failed` : `${done}/${total}`}
+                        </span>
+                      )}
+                      {cost != null && <span>${cost.toFixed(2)}</span>}
                       {entry.date.slice(11) && <span>{entry.date.slice(11)}</span>}
                     </div>
                   </div>
                   <span className="history-run-toggle">{isOpen ? '▾' : '▸'}</span>
                 </div>
                 {isOpen && (
-                  <div className="history-run-log">
-                    {logs[entry.name] ?? <span className="spinner" style={{ width: 12, height: 12 }} />}
-                  </div>
+                  <>
+                    {tasks.length > 0 && (
+                      <div style={{ padding: '8px 14px', borderTop: '1px solid var(--border)', background: 'var(--bg-secondary)', display: 'flex', flexDirection: 'column', gap: 3 }}>
+                        {tasks.map((t) => (
+                          <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+                            <span style={{ color: t.status === 'completed' ? '#10b981' : t.status === 'failed' ? '#ef4444' : 'var(--text-muted)', flexShrink: 0 }}>
+                              {t.status === 'completed' ? '✓' : t.status === 'failed' ? '✗' : t.status === 'in_progress' ? '●' : '○'}
+                            </span>
+                            <span style={{ color: t.status === 'failed' ? '#ef4444' : t.status === 'completed' ? 'var(--text-secondary)' : 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.title}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <div className="history-run-log">
+                      {logs[entry.name] ?? <span className="spinner" style={{ width: 12, height: 12 }} />}
+                    </div>
+                  </>
                 )}
               </div>
             );
