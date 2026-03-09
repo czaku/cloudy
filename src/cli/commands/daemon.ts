@@ -350,6 +350,58 @@ const serveCommand = new Command('_serve')
     console.log(`[cloudy daemon] listening on port ${port}`);
   });
 
+// ── daemon identity ───────────────────────────────────────────────────
+
+const IDENTITY_SLUG_RE = /^[a-z0-9][a-z0-9-]{0,48}[a-z0-9]$|^[a-z0-9]$/;
+const DAEMON_CONFIG_FILE = path.join(os.homedir(), '.cloudy', 'daemon.json');
+
+interface DaemonConfig {
+  identitySlug?: string;
+}
+
+async function readDaemonConfig(): Promise<DaemonConfig> {
+  try {
+    const raw = await fs.readFile(DAEMON_CONFIG_FILE, 'utf-8');
+    return JSON.parse(raw) as DaemonConfig;
+  } catch {
+    return {};
+  }
+}
+
+async function writeDaemonConfig(cfg: DaemonConfig): Promise<void> {
+  await ensureDir(path.dirname(DAEMON_CONFIG_FILE));
+  await fs.writeFile(DAEMON_CONFIG_FILE, JSON.stringify(cfg, null, 2) + '\n', 'utf-8');
+}
+
+const identityCommand = new Command('identity')
+  .description('Get or set the identity slug advertised to federation peers')
+  .argument('[slug]', 'Identity slug to set (lowercase, hyphens allowed)')
+  .action(async (slug: string | undefined) => {
+    if (slug === undefined) {
+      // Read mode
+      const cfg = await readDaemonConfig();
+      if (cfg.identitySlug) {
+        console.log(cfg.identitySlug);
+      } else {
+        console.log(c(dim, `(not set — using hostname: ${os.hostname()})`));
+      }
+      return;
+    }
+
+    // Write mode — validate first
+    if (!IDENTITY_SLUG_RE.test(slug)) {
+      console.error(c(red, `✖  Invalid slug "${slug}". Must match: ^[a-z0-9][a-z0-9-]{0,48}[a-z0-9]$|^[a-z0-9]$`));
+      process.exit(1);
+    }
+
+    const cfg = await readDaemonConfig();
+    cfg.identitySlug = slug;
+    await writeDaemonConfig(cfg);
+
+    console.log(c(green, `✅  Identity slug set to "${slug}"`));
+    console.log(c(dim, '   Restart the daemon for the change to take effect: cloudy daemon stop && cloudy daemon start'));
+  });
+
 // ── Main daemon command ────────────────────────────────────────────────
 
 export const daemonCommand = new Command('daemon')
@@ -362,6 +414,7 @@ daemonCommand.addCommand(registerCommand);
 daemonCommand.addCommand(scanCommand);
 daemonCommand.addCommand(openCommand);
 daemonCommand.addCommand(serveCommand);
+daemonCommand.addCommand(identityCommand);
 
 // ── Auto-register helper (used by run/init) ───────────────────────────
 
