@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { Bonjour } from 'bonjour-service';
+import { startFedServer, startMdnsAdvertising, startMdnsBrowsing, type Peer } from '@vykeai/fed';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -918,12 +918,7 @@ async function writeDaemonConfig(config: DaemonConfig): Promise<void> {
 
 // ── Federation peer registry ──────────────────────────────────────────
 
-interface PeerInfo {
-  machine: string;
-  fedUrl: string;
-}
-
-const peers = new Map<string, PeerInfo>(); // keyed by machine hostname
+const peers = new Map<string, Peer>(); // keyed by machine hostname
 
 // ── HTTP request handler ──────────────────────────────────────────────
 
@@ -1623,7 +1618,120 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     return;
   }
 
+  // ── GET /embed/run/current/:projectId ───────────────────────────────
+  const embedCurrentMatch = pathname.match(/^\/embed\/run\/current\/([^/]+)$/);
+  if (embedCurrentMatch && method === 'GET') {
+    const projectId = decodeURIComponent(embedCurrentMatch[1]);
+    const meta = await findProject(projectId).catch(() => undefined);
+    if (!meta) {
+      res.writeHead(404, { 'Content-Type': 'text/html' });
+      res.end(getEmbedNoRunHtml('Project not found'));
+      return;
+    }
+    const currentFile = path.join(meta.path, CLAWDASH_DIR, 'current');
+    const currentRun = await fs.readFile(currentFile, 'utf-8').then((s) => s.trim()).catch(() => '');
+    if (!currentRun) {
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(getEmbedNoRunHtml('No active run'));
+      return;
+    }
+    res.writeHead(302, { Location: `/embed/run/${encodeURIComponent(currentRun)}` });
+    res.end();
+    return;
+  }
+
+  // ── GET /embed/run/:runId ────────────────────────────────────────────
+  const embedRunMatch = pathname.match(/^\/embed\/run\/([^/]+)$/);
+  if (embedRunMatch && method === 'GET') {
+    const runId = decodeURIComponent(embedRunMatch[1]);
+    // Find the project that owns this runId
+    const projects = await listProjects().catch(() => [] as ProjectMeta[]);
+    let stateJson: unknown = null;
+    let projectName = '';
+    for (const meta of projects) {
+      const stateFile = path.join(meta.path, CLAWDASH_DIR, RUNS_DIR, runId, 'state.json');
+      const s = await readJson<unknown>(stateFile).catch(() => null);
+      if (s) { stateJson = s; projectName = meta.name; break; }
+    }
+    if (!stateJson) {
+      res.writeHead(404, { 'Content-Type': 'text/html' });
+      res.end(getEmbedNoRunHtml('Run not found'));
+      return;
+    }
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.end(getEmbedRunHtml(runId, projectName, stateJson));
+    return;
+  }
+
   send404(res);
+}
+
+// ── Embed HTML helpers ────────────────────────────────────────────────
+
+function getEmbedNoRunHtml(message: string): string {
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
+body{background:#080810;color:#6b7280;font-family:'SF Mono',monospace;font-size:13px;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;}
+</style></head><body><span>${message}</span></body></html>`;
+}
+
+function getEmbedRunHtml(runId: string, projectName: string, state: unknown): string {
+  const s = state as { plan?: { goal?: string; tasks?: Array<{ id: string; status: string; title?: string; error?: string }> }; completedAt?: string; startedAt?: string };
+  const tasks = s?.plan?.tasks ?? [];
+  const goal = s?.plan?.goal ?? '';
+
+  const anyInProgress = tasks.some((t) => t.status === 'in_progress');
+  const anyFailed = tasks.some((t) => t.status === 'failed');
+  const allDone = tasks.length > 0 && tasks.every((t) => t.status === 'completed' || t.status === 'skipped');
+
+  let runStatus: string;
+  let statusColor: string;
+  if (anyInProgress) { runStatus = 'running'; statusColor = '#6366f1'; }
+  else if (anyFailed) { runStatus = 'failed'; statusColor = '#ef4444'; }
+  else if (allDone) { runStatus = 'done'; statusColor = '#22c55e'; }
+  else if (s?.startedAt) { runStatus = 'running'; statusColor = '#6366f1'; }
+  else { runStatus = 'planning'; statusColor = '#f59e0b'; }
+
+  function dotFor(status: string): string {
+    if (status === 'completed' || status === 'skipped') return '<span style="color:#22c55e">●</span>';
+    if (status === 'failed') return '<span style="color:#ef4444">●</span>';
+    if (status === 'in_progress') return '<span style="color:#f59e0b">◌</span>';
+    return '<span style="color:#3b82f6">○</span>';
+  }
+
+  const taskRows = tasks.map((t) => {
+    const errPart = t.error ? ` <span style="color:#ef4444;font-size:11px">${escHtml(t.error.slice(0, 60))}</span>` : '';
+    return `<tr><td style="padding:2px 8px 2px 0;white-space:nowrap">${dotFor(t.status)}</td><td style="padding:2px 8px 2px 0;color:#9ca3af;white-space:nowrap">${escHtml(t.id)}</td><td style="padding:2px 8px 2px 0;color:#d1d5db">${escHtml(t.title ?? '')}</td><td style="padding:2px 0;color:#6b7280;font-size:11px">${escHtml(t.status)}${errPart}</td></tr>`;
+  }).join('');
+
+  const shortRun = runId.slice(0, 12);
+
+  return `<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8">
+<meta http-equiv="refresh" content="2">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#080810;color:#e5e7eb;font-family:'SF Mono','Cascadia Code',monospace;font-size:12px;padding:10px}
+.header{display:flex;align-items:center;gap:8px;padding:6px 0 8px;border-bottom:1px solid #1f2937;margin-bottom:8px}
+.badge{background:#1f2937;border:1px solid #374151;border-radius:4px;padding:2px 7px;font-size:11px;color:${statusColor}}
+.proj{color:#6366f1;font-weight:bold}
+.run{color:#6b7280;font-size:11px}
+.goal{color:#9ca3af;font-size:11px;margin-bottom:8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+table{width:100%;border-collapse:collapse}
+</style>
+</head><body>
+<div class="header">
+  <span class="proj">${escHtml(projectName)}</span>
+  <span class="run">${escHtml(shortRun)}</span>
+  <span class="badge">${escHtml(runStatus)}</span>
+</div>
+${goal ? `<div class="goal">${escHtml(goal)}</div>` : ''}
+<table>${taskRows}</table>
+</body></html>`;
+}
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // ── Federation HTTP handler ───────────────────────────────────────────
@@ -1735,61 +1843,47 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
 
   const fedPort = port + 334;
 
-  // ── Federation read-only server ───────────────────────────────────────
-  const fedServer = http.createServer(async (req, res) => {
-    try {
-      await handleFedRequest(req, res, port);
-    } catch (err) {
-      sendFedJson(res, 500, { error: String(err) });
-    }
-  });
-
-  await new Promise<void>((resolve, reject) => {
-    fedServer.on('error', reject);
-    fedServer.listen(fedPort, '0.0.0.0', resolve);
-  });
-
   return new Promise((resolve, reject) => {
     server.on('error', reject);
     server.listen(port, '0.0.0.0', async () => {
       const daemonConfig = await readDaemonConfig();
       const identity = daemonConfig.identity ?? '';
 
-      // ── mDNS advertisement ────────────────────────────────────────────
-      const bonjour = new Bonjour();
-      const mdnsService = bonjour.publish({
-        name: `cloudy-${os.hostname()}`,
-        type: 'cloudy',
+      // ── Federation server (via @vykeai/fed) ───────────────────────────
+      const fedServer = await startFedServer({
+        identity,
         port: fedPort,
-        txt: {
-          machine: os.hostname(),
-          port: String(fedPort),
-          version: '0.1.0',
-          identity,
+        version: '0.1.0',
+        service: 'cloudy',
+        getRuns: async () => {
+          const projects = await listProjects().catch(() => [] as ProjectMeta[]);
+          return Promise.all(
+            projects.map(async (meta: ProjectMeta) => {
+              const state = await getMostRecentRunState(meta.path);
+              return {
+                projectId: meta.id,
+                name: meta.name,
+                path: meta.path,
+                latestRun: state,
+              };
+            }),
+          );
         },
       });
 
+      // ── mDNS advertisement ────────────────────────────────────────────
+      startMdnsAdvertising({ identity, port: fedPort, service: 'cloudy', version: '0.1.0' });
+
       // ── mDNS peer discovery ───────────────────────────────────────────
-      const selfHostname = os.hostname();
-      const browser = bonjour.find({ type: 'cloudy' }, (service) => {
-        const machine: string = (service.txt as Record<string, string>)?.machine ?? service.name;
-        if (machine === selfHostname) return; // skip self
-        const peerIdentity: string = (service.txt as Record<string, string>)?.identity ?? '';
-        if (peerIdentity !== identity) return;
-        const host = service.addresses?.[0] ?? service.host ?? 'localhost';
-        const svcPort: number = service.port;
-        const fedUrl = `http://${host}:${svcPort}`;
-        peers.set(machine, { machine, fedUrl });
-      });
-      browser.on('down', (service) => {
-        const machine: string = (service.txt as Record<string, string>)?.machine ?? service.name;
-        peers.delete(machine);
-      });
+      const stopBrowsing = startMdnsBrowsing(
+        'cloudy',
+        (peer: Peer) => { peers.set(peer.machine, peer); },
+        (name: string) => { peers.delete(name); },
+        identity,
+      );
 
       const mdnsCleanup = () => {
-        browser.stop?.();
-        mdnsService.stop?.();
-        bonjour.destroy();
+        stopBrowsing();
         fedServer.close();
       };
       process.on('SIGTERM', mdnsCleanup);
