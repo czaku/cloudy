@@ -894,6 +894,28 @@ async function streamChatMessageResume(
   broadcastSse({ type: 'chat_done', sessionId: compositeId, message: finalMessage });
 }
 
+// ── Identity / daemon config ──────────────────────────────────────────
+
+const DAEMON_CONFIG_FILE = path.join(os.homedir(), '.cloudy', 'daemon.json');
+
+interface DaemonConfig {
+  identitySlug?: string;
+}
+
+async function readDaemonConfig(): Promise<DaemonConfig> {
+  try {
+    const raw = await fs.readFile(DAEMON_CONFIG_FILE, 'utf8');
+    return JSON.parse(raw) as DaemonConfig;
+  } catch {
+    return {};
+  }
+}
+
+async function writeDaemonConfig(config: DaemonConfig): Promise<void> {
+  await fs.mkdir(path.dirname(DAEMON_CONFIG_FILE), { recursive: true });
+  await fs.writeFile(DAEMON_CONFIG_FILE, JSON.stringify(config, null, 2) + '\n', 'utf8');
+}
+
 // ── Federation peer registry ──────────────────────────────────────────
 
 interface PeerInfo {
