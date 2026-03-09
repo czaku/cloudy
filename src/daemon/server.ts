@@ -1561,6 +1561,100 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
   send404(res);
 }
 
+// ── Federation HTTP handler ───────────────────────────────────────────
+
+function sendFedJson(res: http.ServerResponse, status: number, data: unknown): void {
+  const payload = JSON.stringify(data);
+  res.writeHead(status, {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*',
+  });
+  res.end(payload);
+}
+
+async function getMostRecentRunState(projectPath: string): Promise<unknown | null> {
+  const runsDir = path.join(projectPath, CLAWDASH_DIR, RUNS_DIR);
+  try {
+    const entries = await fs.readdir(runsDir, { withFileTypes: true });
+    const dirs = entries.filter((e: Dirent) => e.isDirectory()).map((e: Dirent) => e.name);
+    if (dirs.length === 0) return null;
+    // Sort lexicographically descending (run dirs are typically timestamp-based)
+    dirs.sort((a, b) => b.localeCompare(a));
+    for (const dir of dirs) {
+      const stateFile = path.join(runsDir, dir, 'state.json');
+      const state = await readJson<unknown>(stateFile);
+      if (state) return state;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function handleFedRequest(req: http.IncomingMessage, res: http.ServerResponse, port: number): Promise<void> {
+  const method = req.method ?? 'GET';
+  const url = new URL(req.url ?? '/', `http://localhost`);
+  const pathname = url.pathname;
+
+  // All non-GET methods → 405
+  if (method !== 'GET') {
+    sendFedJson(res, 405, { error: 'Method not allowed' });
+    return;
+  }
+
+  // GET /fed/info
+  if (pathname === '/fed/info') {
+    sendFedJson(res, 200, {
+      machine: os.hostname(),
+      version: '0.1.0',
+      port,
+      fedPort: port + 334,
+      platform: process.platform,
+      uptime: process.uptime(),
+    });
+    return;
+  }
+
+  // GET /fed/runs
+  if (pathname === '/fed/runs') {
+    const projects = await listProjects().catch(() => [] as ProjectMeta[]);
+    const results = await Promise.all(
+      projects.map(async (meta: ProjectMeta) => {
+        const state = await getMostRecentRunState(meta.path);
+        return {
+          projectId: meta.id,
+          name: meta.name,
+          path: meta.path,
+          latestRun: state,
+        };
+      }),
+    );
+    sendFedJson(res, 200, results);
+    return;
+  }
+
+  // GET /fed/runs/:projectId
+  const runsMatch = pathname.match(/^\/fed\/runs\/([^/]+)$/);
+  if (runsMatch) {
+    const projectId = decodeURIComponent(runsMatch[1]);
+    const projects = await listProjects().catch(() => [] as ProjectMeta[]);
+    const meta = projects.find((p: ProjectMeta) => p.id === projectId);
+    if (!meta) {
+      sendFedJson(res, 404, { error: 'Project not found' });
+      return;
+    }
+    const state = await getMostRecentRunState(meta.path);
+    if (!state) {
+      sendFedJson(res, 404, { error: 'No runs found for project' });
+      return;
+    }
+    sendFedJson(res, 200, state);
+    return;
+  }
+
+  sendFedJson(res, 404, { error: 'Not found' });
+}
+
 // ── Start server ──────────────────────────────────────────────────────
 
 export async function startDaemonServer(port: number, bundleDir: string): Promise<http.Server> {
@@ -1572,11 +1666,26 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
     }
   });
 
+  const fedPort = port + 334;
+
+  // ── Federation read-only server ───────────────────────────────────────
+  const fedServer = http.createServer(async (req, res) => {
+    try {
+      await handleFedRequest(req, res, port);
+    } catch (err) {
+      sendFedJson(res, 500, { error: String(err) });
+    }
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    fedServer.on('error', reject);
+    fedServer.listen(fedPort, '0.0.0.0', resolve);
+  });
+
   return new Promise((resolve, reject) => {
     server.on('error', reject);
     server.listen(port, '0.0.0.0', () => {
       // ── mDNS advertisement ────────────────────────────────────────────
-      const fedPort = port + 334;
       const bonjour = new Bonjour();
       const mdnsService = bonjour.publish({
         name: `cloudy-${os.hostname()}`,
@@ -1592,6 +1701,7 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
       const mdnsCleanup = () => {
         mdnsService.stop?.();
         bonjour.destroy();
+        fedServer.close();
       };
       process.on('SIGTERM', mdnsCleanup);
       process.on('SIGINT', mdnsCleanup);
