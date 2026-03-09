@@ -108,8 +108,7 @@ function formatPlanNote(plan: Plan): string {
   return lines.join('\n');
 }
 
-export const initCommand = new Command('scope')
-  .alias('init')
+export const initCommand = new Command('plan')
   .description('Decompose a goal into tasks using Claude')
   .argument('[goal]', 'The project goal to decompose into tasks')
   .option('--model <model>', 'Model for all phases')
@@ -144,7 +143,7 @@ export const initCommand = new Command('scope')
       process.exit(1);
     }
 
-    p.intro(`${c(cyan + bold, '☁️  cloudy scope')}  ${c(bold, projectName)}  ${c(dim, cwd)}`);
+    p.intro(`${c(cyan + bold, '☁️  cloudy plan')}  ${c(bold, projectName)}  ${c(dim, cwd)}`);
 
     const config = await loadConfig(cwd);
 
@@ -196,9 +195,9 @@ export const initCommand = new Command('scope')
               `  ✦ Write a dedicated spec file for the feature you want to build:\n` +
               `      ## Title\n` +
               `      Goal, background, steps, acceptance criteria.\n` +
-              `      Aim for 2–10KB. Run cloudy init once per feature.\n\n` +
+              `      Aim for 2–10KB. Run cloudy plan once per feature.\n\n` +
               `  ✦ Or split this file and pass the relevant section only:\n` +
-              `      cloudy init --spec ./specs/feature-x.md`
+              `      cloudy plan --spec ./specs/feature-x.md`
             );
             process.exit(1);
           }
@@ -220,7 +219,7 @@ export const initCommand = new Command('scope')
       if (specContent.length > MAX_COMBINED_BYTES) {
         p.log.error(
           `Combined spec is ${Math.round(specContent.length / 1024)}KB — exceeds the ${Math.round(MAX_COMBINED_BYTES / 1024)}KB combined limit.\n\n` +
-          `  Split into separate cloudy init runs, one feature at a time.`
+          `  Split into separate cloudy plan runs, one feature at a time.`
         );
         process.exit(1);
       }

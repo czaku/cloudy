@@ -35,7 +35,7 @@ Cloudy breaks a project goal into a dependency-ordered task graph, then works th
 npm install -g github:vykeai/cloudy
 
 # Plan a goal
-cloudy init "add user authentication with JWT"
+cloudy plan "add user authentication with JWT"
 
 # Run it
 cloudy run --verbose
@@ -91,10 +91,10 @@ npm link
 
 ```bash
 # 1. Plan — decompose a goal into tasks
-cloudy init "add user authentication with JWT"
+cloudy plan "add user authentication with JWT"
 
 # 2. Preview the task graph
-cloudy plan --graph
+cloudy tasks --graph
 
 # 3. Execute
 cloudy run --verbose
@@ -103,28 +103,28 @@ cloudy run --verbose
 Point at a spec file:
 
 ```bash
-cloudy init --spec ./PRD.md && cloudy run --verbose
+cloudy plan --spec ./PRD.md && cloudy run --verbose
 ```
 
 ---
 
-## 🧠 Init — Plan Your Goal
+## 🧠 Plan — Decompose Your Goal
 
 ```bash
 # From a plain-English goal
-cloudy init "build a payment integration"
+cloudy plan "build a payment integration"
 
 # From a spec or PRD
-cloudy init --spec ./PRD.md
+cloudy plan --spec ./PRD.md
 
 # Combine multiple specs into one plan
-cloudy init --spec ./phase38-spec.md --spec ./phase38b-spec.md
+cloudy plan --spec ./phase1.md --spec ./phase2.md
 
 # Skip interactive review
-cloudy init --spec ./PRD.md --no-review
+cloudy plan --spec ./PRD.md --no-review
 
 # Control the planning model
-cloudy init --spec ./PRD.md --planning-model sonnet
+cloudy plan --spec ./PRD.md --planning-model sonnet
 ```
 
 The planner uses Claude to decompose your goal into concrete, ordered tasks — each with a title, description, acceptance criteria, context file patterns, expected output artifacts, and a time estimate. If you don't pass `--no-review`, you can approve the plan or describe changes in plain English and iterate before running.
@@ -185,17 +185,17 @@ cloudy run --no-dashboard
 
 ---
 
-## 🌳 Plan — Visualise the Graph
+## 🌳 Tasks — View the Plan
 
 ```bash
-cloudy plan                  # full task list
-cloudy plan --graph          # ASCII dependency tree
-cloudy plan --mermaid        # Mermaid diagram
-cloudy plan --json           # raw JSON
-cloudy plan edit             # edit pending tasks via Claude
+cloudy tasks                 # full task list
+cloudy tasks --graph         # ASCII dependency tree
+cloudy tasks --mermaid       # Mermaid diagram
+cloudy tasks --json          # raw JSON
+cloudy tasks edit            # edit pending tasks via Claude
 ```
 
-`cloudy plan --graph`:
+`cloudy tasks --graph`:
 
 ```
 task-1  Set up database schema
@@ -284,13 +284,13 @@ cloudy daemon scan      # auto-discover projects under ~/dev and ~/projects
 cloudy daemon open      # open http://localhost:3117 in browser
 ```
 
-The dashboard has five tabs per project:
+The dashboard has six tabs per project:
 
 | Tab | What it does |
 |-----|-------------|
-| 📊 **Dashboard** | Project overview — chat count, message count, last activity |
+| 📊 **Dashboard** | Project overview — cost, last activity, status |
 | 💬 **Chat** | Chat with Claude · view Claude Code CLI session history |
-| 📋 **Plan** | Pick spec files → `cloudy scope` → Q&A → approve plan |
+| 📋 **Plan** | Pick spec files → `cloudy plan` → Q&A → approve plan |
 | ▶️ **Run** | Launch `cloudy run` · live output streaming |
 | 📜 **History** | Browse past runs, costs, task outcomes |
 | 🧠 **Memory** | View `CLAUDE.md` and `.claude/MEMORY.md` for the project |
@@ -298,8 +298,6 @@ The dashboard has five tabs per project:
 ### 💬 Chat tab
 
 The Chat tab shows both Cloudy sessions (started from the web) and Claude Code CLI sessions (from your terminal). CLI sessions are read-only while the CLI is active. Once you close the terminal, inactive CC sessions unlock — type to resume the exact conversation via `claude --resume`.
-
-If you re-open the CLI while the web is mid-reply, the daemon detects the file change and instantly re-locks the session in the browser.
 
 **Slash commands** (type `/` to autocomplete):
 
@@ -424,7 +422,7 @@ Cloudy parses this, adds the subtasks to the live queue, and runs them in order.
 Add a `wrapUpPrompt` to your plan to run a final prompt after all tasks complete:
 
 ```json
-// .cloudy/state.json  (or set via plan edit)
+// .cloudy/state.json  (or set via tasks edit)
 {
   "wrapUpPrompt": "Run make smoke. If it passes, write a one-paragraph summary of what was built to SUMMARY.md."
 }
@@ -435,10 +433,10 @@ Add a `wrapUpPrompt` to your plan to run a final prompt after all tasks complete
 ## 🛠️ Other Commands
 
 ```bash
-# ✅ Validate completed tasks (re-run acceptance checks)
-cloudy validate
-cloudy validate task-3
-cloudy validate --no-ai-review
+# ✅ Re-run acceptance checks on completed tasks
+cloudy check
+cloudy check task-3
+cloudy check --no-ai-review
 
 # ↩️ Roll back a task to its pre-execution git checkpoint
 cloudy rollback task-3
@@ -448,11 +446,15 @@ cloudy status
 cloudy status --watch
 cloudy status --cost
 
+# 📜 Run history
+cloudy history
+cloudy history --show run-2026-03-09-0727
+
 # 🔁 Convergence loop: run until a condition passes
-cloudy loop "make all tests pass" --until "npm test" --max-iterations 5
+cloudy watch "make all tests pass" --until "npm test" --max-iterations 5
 
 # 👁️ Preview what cloudy would do without executing
-cloudy dry-run
+cloudy preview
 
 # ⚙️ View/update config
 cloudy config
@@ -510,7 +512,7 @@ Every criterion should be falsifiable by running a command or making an API call
 
 ### 📋 Quick checklist
 
-Before running `cloudy init`:
+Before running `cloudy plan`:
 
 - [ ] Every integration type / enum value named in Steps has its own AC line
 - [ ] Every model field is verified in an API `GET` response criterion

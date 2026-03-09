@@ -91,7 +91,6 @@ async function printCostEstimate(
 // ─── command ────────────────────────────────────────────────────────────────
 
 export const dryRunCommand = new Command('preview')
-  .alias('dry-run')
   .description('Preview what would execute without running')
   .option('--model <model>', 'Model for all phases')
   .option('--execution-model <model>', 'Model for execution phase')

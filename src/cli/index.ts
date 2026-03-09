@@ -1,6 +1,5 @@
 import { Command } from 'commander';
-// Command vocabulary: scope, build, chain, tasks, preview, check, watch
-// Old names aliased for back-compat: init, run, pipeline, plan, dry-run, validate, loop
+// Commands: plan, run, tasks, status, history, pipeline, preview, check, watch, logs, rollback, reset, config, setup, dashboard, daemon
 import { initCommand } from './commands/init.js';
 import { runCommand } from './commands/run.js';
 import { statusCommand } from './commands/status.js';

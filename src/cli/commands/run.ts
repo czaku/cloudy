@@ -25,7 +25,6 @@ function formatDuration(ms: number): string {
 }
 
 export const runCommand = new Command('run')
-  .alias('build')
   .description('Execute the current plan')
   .option('--model <model>', 'Model for all phases')
   .option('--execution-model <model>', 'Model for execution phase')

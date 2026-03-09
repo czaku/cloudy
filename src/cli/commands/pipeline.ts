@@ -68,7 +68,6 @@ Keep each bullet to one line. Omit sections that are empty.`;
 }
 
 export const pipelineCommand = new Command('pipeline')
-  .alias('chain')
   .description('Run multiple specs sequentially as a pipeline')
   .option('--spec <file>', 'Spec file (repeatable, in order)', (v: string, prev: string[]) => [...prev, v], [] as string[])
   .option('--execution-model <model>', 'Execution model for all phases (haiku/sonnet/opus)')

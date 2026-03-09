@@ -30,7 +30,6 @@ function printPlanForEdit(tasks: Task[]): void {
 }
 
 export const planCommand = new Command('tasks')
-  .alias('plan')
   .description('View the current plan in detail')
   .option('--json', 'Output as JSON')
   .option('--graph', 'Show ASCII dependency graph')

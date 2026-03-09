@@ -6,7 +6,6 @@ import { initLogger } from '../../utils/logger.js';
 import { c, bold, dim, green, red, yellow } from '../../utils/colors.js';
 
 export const validateCommand = new Command('check')
-  .alias('validate')
   .description('Re-run acceptance criteria against already-completed work')
   .argument('[taskId]', 'Task ID to validate (default: all completed tasks)')
   .option('--no-ai-review', 'Skip AI review phase, run deterministic checks only (typecheck, lint, build, test)')

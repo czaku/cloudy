@@ -15,7 +15,6 @@ import {
 } from '../../utils/colors.js';
 
 export const loopCommand = new Command('watch')
-  .alias('loop')
   .description(
     'Run a convergence loop toward a goal (Ralph Loop style) — iterate with fresh context until --until passes',
   )

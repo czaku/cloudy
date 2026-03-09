@@ -84,7 +84,6 @@ async function loadRunSummary(runsDir: string, name: string): Promise<RunSummary
 }
 
 export const runsCommand = new Command('history')
-  .alias('runs')
   .description('List run history for this project')
   .option('--show <name>', 'Show full task breakdown for a specific run')
   .option('--json', 'Output as JSON')
