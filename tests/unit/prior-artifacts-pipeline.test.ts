@@ -11,6 +11,9 @@ vi.mock('../../src/validator/strategies/lint-check.js', () => ({
 }));
 vi.mock('../../src/validator/strategies/build-check.js', () => ({
   runBuildCheck: vi.fn(async () => ({ strategy: 'build', passed: true, output: '', durationMs: 10 })),
+  detectPlatformBuildNeeds: vi.fn(() => ({ ios: false, android: false })),
+  runIosBuildCheck: vi.fn(async () => null),
+  runAndroidBuildCheck: vi.fn(async () => null),
 }));
 vi.mock('../../src/validator/strategies/test-runner.js', () => ({
   runTestRunner: vi.fn(async () => ({ strategy: 'test', passed: true, output: '', durationMs: 10 })),
@@ -37,6 +40,9 @@ vi.mock('../../src/validator/strategies/ai-review.js', () => ({
   runAiReview: vi.fn(async () => ({
     strategy: 'ai-review', passed: true, output: '{"passed":true,"summary":"ok","criteriaResults":[]}', durationMs: 200,
   })),
+}));
+vi.mock('../../src/validator/strategies/ai-review-quality.js', () => ({
+  runAiQualityReview: vi.fn(async () => ({ strategy: 'ai-review-quality', passed: true, output: 'Code quality good', durationMs: 100 })),
 }));
 
 import { validateTask } from '../../src/validator/validator.js';

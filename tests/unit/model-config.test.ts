@@ -60,11 +60,10 @@ describe('mergeModelConfig', () => {
 
   it('--model sets all phases', () => {
     const result = mergeModelConfig(base, { model: 'opus' });
-    expect(result).toEqual({
-      planning: 'opus',
-      execution: 'opus',
-      validation: 'opus',
-    });
+    expect(result.planning).toBe('opus');
+    expect(result.execution).toBe('opus');
+    expect(result.validation).toBe('opus');
+    expect(result.qualityReview).toBe('opus');
   });
 
   it('per-phase flags override --model', () => {
@@ -84,6 +83,25 @@ describe('mergeModelConfig', () => {
     expect(result.planning).toBe('sonnet');
     expect(result.execution).toBe('sonnet');
     expect(result.validation).toBe('opus');
+  });
+
+  it('qualityReviewModel overrides qualityReview phase only', () => {
+    const result = mergeModelConfig(base, { qualityReviewModel: 'opus' });
+    expect(result.qualityReview).toBe('opus');
+    expect(result.planning).toBe('sonnet');
+    expect(result.execution).toBe('sonnet');
+    expect(result.validation).toBe('haiku');
+  });
+
+  it('--model sets qualityReview phase', () => {
+    const result = mergeModelConfig(base, { model: 'opus' });
+    expect(result.qualityReview).toBe('opus');
+  });
+
+  it('qualityReviewModel overrides --model for quality phase', () => {
+    const result = mergeModelConfig(base, { model: 'opus', qualityReviewModel: 'haiku' });
+    expect(result.qualityReview).toBe('haiku');
+    expect(result.planning).toBe('opus');
   });
 
   it('planningModel overrides planning phase only', () => {

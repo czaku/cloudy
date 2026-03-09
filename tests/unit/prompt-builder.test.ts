@@ -89,6 +89,17 @@ describe('buildExecutionPrompt', () => {
     const prompt = buildExecutionPrompt(task, makePlan(), []);
     expect(prompt).not.toContain('# Acceptance Criteria');
   });
+
+  it('includes verification gate section', () => {
+    const prompt = buildExecutionPrompt(makeTask(), makePlan(), []);
+    expect(prompt).toContain('Verification Gate');
+  });
+
+  it('verification gate instructs Claude to run a command before claiming done', () => {
+    const prompt = buildExecutionPrompt(makeTask(), makePlan(), []);
+    expect(prompt).toContain('verification');
+    expect(prompt).toMatch(/run.*command|command.*run/i);
+  });
 });
 
 describe('buildRetryPrompt', () => {

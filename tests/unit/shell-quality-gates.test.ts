@@ -12,12 +12,18 @@ vi.mock('../../src/validator/strategies/lint-check.js', () => ({
 }));
 vi.mock('../../src/validator/strategies/build-check.js', () => ({
   runBuildCheck: vi.fn().mockResolvedValue({ strategy: 'build', passed: true, output: '', durationMs: 10 }),
+  detectPlatformBuildNeeds: vi.fn(() => ({ ios: false, android: false })),
+  runIosBuildCheck: vi.fn(async () => null),
+  runAndroidBuildCheck: vi.fn(async () => null),
 }));
 vi.mock('../../src/validator/strategies/test-runner.js', () => ({
   runTestRunner: vi.fn().mockResolvedValue({ strategy: 'test', passed: true, output: '', durationMs: 10 }),
 }));
 vi.mock('../../src/validator/strategies/ai-review.js', () => ({
-  runAiReview: vi.fn().mockResolvedValue({ strategy: 'ai-review', passed: true, output: '', durationMs: 10 }),
+  runAiReview: vi.fn().mockResolvedValue({ strategy: 'ai-review', passed: true, output: JSON.stringify({ passed: true, summary: 'ok', criteriaResults: [] }), durationMs: 10 }),
+}));
+vi.mock('../../src/validator/strategies/ai-review-quality.js', () => ({
+  runAiQualityReview: vi.fn().mockResolvedValue({ strategy: 'ai-review-quality', passed: true, output: 'Code quality good', durationMs: 10 }),
 }));
 vi.mock('../../src/git/git.js', () => ({
   getGitDiff: vi.fn().mockResolvedValue(''),

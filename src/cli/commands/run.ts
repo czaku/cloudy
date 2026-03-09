@@ -17,11 +17,97 @@ import { c, bold, dim, red, green, yellow, cyan, greenBright, yellowBright, cyan
 import type { OrchestratorEvent } from '../../core/types.js';
 import { notifyRunComplete, notifyRunFailed } from '../../notifications/notify.js';
 import { acquireLock } from '../../utils/lock.js';
+import { execa } from 'execa';
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
   return `${Math.round(ms / 60000)}m`;
+}
+
+/**
+ * Present finishing options after a successful run: merge, PR, keep, or discard.
+ * Inspired by the superpowers finishing-a-development-branch skill.
+ */
+async function runFinishingWorkflow(cwd: string): Promise<void> {
+  try {
+    // Detect current branch
+    const branchResult = await execa('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, reject: false });
+    const currentBranch = branchResult.stdout.trim();
+    const isRunBranch = currentBranch.startsWith('cloudy/run-') || currentBranch.startsWith('cloudy/');
+
+    if (!isRunBranch) return; // Only prompt when on a cloudy-managed branch
+
+    // Detect base branch
+    let baseBranch = 'main';
+    for (const candidate of ['main', 'master', 'develop']) {
+      const check = await execa('git', ['rev-parse', '--verify', candidate], { cwd, reject: false });
+      if (check.exitCode === 0) { baseBranch = candidate; break; }
+    }
+
+    console.log(`\n${c(cyan + bold, '🏁 Implementation complete')}  ${c(dim, `branch: ${currentBranch}`)}`);
+    console.log(c(dim, `\nWhat would you like to do?\n`));
+    console.log(`  ${c(bold, '1')}  Merge into ${baseBranch} now`);
+    console.log(`  ${c(bold, '2')}  Push and create a Pull Request`);
+    console.log(`  ${c(bold, '3')}  Keep branch as-is (handle later)`);
+    console.log(`  ${c(bold, '4')}  Discard branch and all changes`);
+    console.log('');
+
+    const choice = await p.select({
+      message: 'Choose:',
+      options: [
+        { value: '1', label: `Merge into ${baseBranch}` },
+        { value: '2', label: 'Push + open PR' },
+        { value: '3', label: 'Keep branch as-is' },
+        { value: '4', label: 'Discard this work' },
+      ],
+    });
+
+    if (p.isCancel(choice)) return;
+
+    if (choice === '1') {
+      const uncommitted = await execa('git', ['status', '--porcelain'], { cwd, reject: false });
+      if (uncommitted.stdout.trim()) {
+        await execa('git', ['add', '-A'], { cwd });
+        await execa('git', ['commit', '-m', 'chore: wrap up cloudy run'], { cwd });
+      }
+      await execa('git', ['checkout', baseBranch], { cwd });
+      const mergeResult = await execa('git', ['merge', '--no-ff', currentBranch, '-m', `chore: merge ${currentBranch}`], { cwd, reject: false });
+      if (mergeResult.exitCode === 0) {
+        console.log(c(green, `\n✓  Merged ${currentBranch} into ${baseBranch}`));
+        await execa('git', ['branch', '-d', currentBranch], { cwd, reject: false });
+      } else {
+        console.error(c(red, '\n✗  Merge had conflicts. Resolve manually.'));
+        await execa('git', ['checkout', currentBranch], { cwd, reject: false });
+      }
+    } else if (choice === '2') {
+      const pushResult = await execa('git', ['push', '-u', 'origin', currentBranch], { cwd, reject: false });
+      if (pushResult.exitCode !== 0) {
+        console.error(c(red, `\n✗  Push failed:\n${pushResult.stderr}`));
+        return;
+      }
+      // Try gh cli first, fall back to printing the URL
+      const ghResult = await execa('gh', ['pr', 'create', '--fill'], { cwd, reject: false });
+      if (ghResult.exitCode === 0) {
+        console.log(c(green, `\n✓  PR created`));
+        console.log(ghResult.stdout.trim());
+      } else {
+        console.log(c(green, `\n✓  Branch pushed.`));
+        console.log(c(dim, 'Open a PR at your repository host.'));
+      }
+    } else if (choice === '3') {
+      console.log(c(dim, `\nBranch ${currentBranch} kept. Switch back when ready.`));
+    } else if (choice === '4') {
+      const confirm = await p.confirm({ message: `Discard all changes on ${currentBranch}? This cannot be undone.` });
+      if (!p.isCancel(confirm) && confirm) {
+        await execa('git', ['checkout', baseBranch], { cwd, reject: false });
+        await execa('git', ['branch', '-D', currentBranch], { cwd, reject: false });
+        console.log(c(yellow, `\n⚠  Branch ${currentBranch} deleted.`));
+      }
+    }
+  } catch {
+    // Non-fatal — finishing workflow failure shouldn't affect the run result
+  }
 }
 
 export const runCommand = new Command('run')
@@ -43,6 +129,7 @@ export const runCommand = new Command('run')
   .option('--max-retries <n>', 'Max retries per task', parseInt)
   .option('--verbose', 'Show live Claude output for each task as it runs')
   .option('--run-review-model <model>', 'Model for post-run holistic review (haiku/sonnet/opus)')
+  .option('--quality-review-model <model>', 'Model for Phase 2b code quality review (default: same as --task-review-model)')
 
   .option('--heartbeat-interval <seconds>', 'Write status.json to run dir every N seconds during execution', parseInt)
   .option('--non-interactive', 'Skip all interactive prompts — requires explicit model flags, exits when run completes')
@@ -53,6 +140,7 @@ export const runCommand = new Command('run')
       model?: string;
       executionModel?: string;
       taskReviewModel?: string;
+      qualityReviewModel?: string;
       modelAuto?: boolean;
       parallel?: boolean;
       maxParallel?: number;
@@ -198,6 +286,9 @@ export const runCommand = new Command('run')
           : undefined,
         taskReviewModel: opts.taskReviewModel
           ? parseModelFlag(opts.taskReviewModel)
+          : undefined,
+        qualityReviewModel: opts.qualityReviewModel
+          ? parseModelFlag(opts.qualityReviewModel)
           : undefined,
       });
 
@@ -776,6 +867,11 @@ export const runCommand = new Command('run')
             if (config.review.failBlocksRun && lastReviewResult?.verdict === 'FAIL') {
               console.error(c(red + bold, '\n✗  Review verdict: FAIL — exiting with code 1'));
               process.exit(1);
+            }
+
+            // Finishing workflow — present branch options when all tasks completed
+            if (!isNonInteractive && completedCount > 0) {
+              await runFinishingWorkflow(cwd);
             }
           }
         } catch (err) {

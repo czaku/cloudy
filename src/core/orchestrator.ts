@@ -1065,6 +1065,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
         task,
         config: this.config.validation,
         model: this.config.models.validation,
+        qualityModel: this.config.models.qualityReview ?? this.config.models.validation,
         cwd: taskCwd,
         checkpointSha,
         priorArtifacts: priorArtifacts.length > 0 ? priorArtifacts : undefined,

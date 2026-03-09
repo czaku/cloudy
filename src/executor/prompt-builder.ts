@@ -135,7 +135,16 @@ export function buildExecutionPrompt(
   );
   parts.push('Do NOT explain what you will do - just do it. Write the actual code.');
   parts.push('Follow all conventions in the Project Conventions section above exactly.');
-  parts.push('When done, briefly summarize what you implemented (files created/modified, key decisions).');
+  parts.push('');
+  parts.push('## Verification Gate (mandatory before claiming done)');
+  parts.push('Before summarizing completion, run at least one verification command that proves the work is correct:');
+  parts.push('- TypeScript changes: `tsc --noEmit` (or project equivalent) — show actual error count');
+  parts.push('- New tests added: run the test command — show actual pass/fail count, not "should pass"');
+  parts.push('- New endpoints/functions: call them with realistic input — show actual output');
+  parts.push('- Python changes: `python -m py_compile` on changed files');
+  parts.push('Do NOT summarise completion based on how the code looks. Run a command that proves it works.');
+  parts.push('');
+  parts.push('When done, briefly summarize what you implemented (files created/modified, key decisions) and include the verification output.');
   parts.push('');
   parts.push(
     'If you discover any project-specific facts (libraries, file locations, patterns, conventions) that future tasks should know, end your response with:',

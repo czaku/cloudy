@@ -10,12 +10,18 @@ vi.mock('../../src/validator/strategies/lint-check.js', () => ({
 }));
 vi.mock('../../src/validator/strategies/build-check.js', () => ({
   runBuildCheck: vi.fn(async () => ({ strategy: 'build', passed: true, output: 'Build succeeded', durationMs: 200 })),
+  detectPlatformBuildNeeds: vi.fn(() => ({ ios: false, android: false })),
+  runIosBuildCheck: vi.fn(async () => null),
+  runAndroidBuildCheck: vi.fn(async () => null),
 }));
 vi.mock('../../src/validator/strategies/test-runner.js', () => ({
   runTestRunner: vi.fn(async () => ({ strategy: 'test', passed: true, output: 'All tests passed', durationMs: 500 })),
 }));
 vi.mock('../../src/validator/strategies/ai-review.js', () => ({
-  runAiReview: vi.fn(async () => ({ strategy: 'ai-review', passed: true, output: 'Looks good', durationMs: 300 })),
+  runAiReview: vi.fn(async () => ({ strategy: 'ai-review', passed: true, output: JSON.stringify({ passed: true, summary: 'Looks good', criteriaResults: [] }), durationMs: 300 })),
+}));
+vi.mock('../../src/validator/strategies/ai-review-quality.js', () => ({
+  runAiQualityReview: vi.fn(async () => ({ strategy: 'ai-review-quality', passed: true, output: 'Code quality good', durationMs: 200 })),
 }));
 vi.mock('../../src/validator/strategies/artifact-check.js', () => ({
   runArtifactCheck: vi.fn(async () => ({ strategy: 'artifacts', passed: true, output: 'All artifacts present', durationMs: 10 })),
@@ -32,6 +38,7 @@ import { validateTask } from '../../src/validator/validator.js';
 import { runArtifactCheck } from '../../src/validator/strategies/artifact-check.js';
 import { runTypeCheck } from '../../src/validator/strategies/type-check.js';
 import { runAiReview } from '../../src/validator/strategies/ai-review.js';
+import { runAiQualityReview } from '../../src/validator/strategies/ai-review-quality.js';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -154,5 +161,59 @@ describe('validateTask — full pipeline integration', () => {
     });
     const report = await validateTask({ task: makeTask(), config: ALL_ON, model: 'haiku', cwd: '/tmp' });
     expect(report.passed).toBe(false);
+  });
+});
+
+describe('validateTask — two-stage AI review (Phase 2a → 2b)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(runAiReview).mockResolvedValue({
+      strategy: 'ai-review',
+      passed: true,
+      output: JSON.stringify({ passed: true, summary: 'ok', criteriaResults: [] }),
+      durationMs: 300,
+    });
+    vi.mocked(runAiQualityReview).mockResolvedValue({
+      strategy: 'ai-review-quality',
+      passed: true,
+      output: 'Code quality good',
+      durationMs: 200,
+    });
+  });
+
+  it('runs Phase 2b quality review after Phase 2a spec compliance passes', async () => {
+    await validateTask({ task: makeTask(), config: ALL_ON, model: 'haiku', cwd: '/tmp' });
+    expect(runAiReview).toHaveBeenCalledOnce();
+    expect(runAiQualityReview).toHaveBeenCalledOnce();
+  });
+
+  it('skips Phase 2b when Phase 2a spec compliance fails', async () => {
+    vi.mocked(runAiReview).mockResolvedValueOnce({
+      strategy: 'ai-review',
+      passed: false,
+      output: JSON.stringify({ passed: false, summary: 'criterion not met', criteriaResults: [] }),
+      durationMs: 300,
+    });
+    await validateTask({ task: makeTask(), config: ALL_ON, model: 'haiku', cwd: '/tmp' });
+    expect(runAiQualityReview).not.toHaveBeenCalled();
+  });
+
+  it('Phase 2b failure marks overall report as failed', async () => {
+    vi.mocked(runAiQualityReview).mockResolvedValueOnce({
+      strategy: 'ai-review-quality',
+      passed: false,
+      output: JSON.stringify({ passed: false, summary: 'critical issue found', issues: [{ severity: 'critical', location: 'src/foo.ts', description: 'SQL injection' }] }),
+      durationMs: 200,
+    });
+    const report = await validateTask({ task: makeTask(), config: ALL_ON, model: 'haiku', cwd: '/tmp' });
+    expect(report.passed).toBe(false);
+    const qualityResult = report.results.find((r) => r.strategy === 'ai-review-quality');
+    expect(qualityResult).toBeDefined();
+    expect(qualityResult?.passed).toBe(false);
+  });
+
+  it('skips Phase 2b when aiReview is disabled', async () => {
+    await validateTask({ task: makeTask(), config: { ...ALL_ON, aiReview: false }, model: 'haiku', cwd: '/tmp' });
+    expect(runAiQualityReview).not.toHaveBeenCalled();
   });
 });

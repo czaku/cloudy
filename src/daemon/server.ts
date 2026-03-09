@@ -20,6 +20,27 @@ import { readJson, ensureDir, writeJson } from '../utils/fs.js';
  * are stuck forever. This function reads the current state.json and marks
  * them as `failed`, then returns the count so callers can broadcast an SSE.
  */
+function runGit(args: string[], cwd: string): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    const child = spawn('git', args, { cwd, stdio: ['ignore', 'pipe', 'pipe'] });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d: Buffer) => { stdout += d.toString(); });
+    child.stderr.on('data', (d: Buffer) => { stderr += d.toString(); });
+    child.on('close', (code) => {
+      resolve({ exitCode: code ?? 1, stdout, stderr });
+    });
+  });
+}
+
+function runExecFile(cmd: string, args: string[], cwd: string): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  return new Promise((resolve) => {
+    execFile(cmd, args, { cwd }, (err, stdout, stderr) => {
+      resolve({ exitCode: err ? 1 : 0, stdout, stderr });
+    });
+  });
+}
+
 async function cleanupStuckTasks(projectPath: string): Promise<number> {
   try {
     const currentFile = path.join(projectPath, CLAWDASH_DIR, 'current');
@@ -1271,7 +1292,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         return;
       }
       try {
-        const body = await parseBody(req) as { executionModel?: string; taskReviewModel?: string; runReviewModel?: string; planIds?: string[]; parallel?: boolean; maxParallel?: number; noValidate?: boolean; maxRetries?: number; effort?: string };
+        const body = await parseBody(req) as { executionModel?: string; taskReviewModel?: string; runReviewModel?: string; qualityReviewModel?: string; planIds?: string[]; parallel?: boolean; maxParallel?: number; noValidate?: boolean; maxRetries?: number; effort?: string };
         const execModel = body.executionModel ?? 'sonnet';
         const taskReviewModel = body.taskReviewModel ?? 'haiku';
         const runReviewModel = body.runReviewModel ?? 'sonnet';
@@ -1282,6 +1303,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         if (body.noValidate) { extraArgs.push('--no-validate'); }
         if (body.maxRetries) { extraArgs.push('--max-retries', String(body.maxRetries)); }
         if (body.effort) { extraArgs.push('--effort', body.effort); }
+        if (body.qualityReviewModel) { extraArgs.push('--quality-review-model', body.qualityReviewModel); }
 
         // planIds is used client-side to identify which plan was queued;
         // execution always goes through cloudy build using the current state.json
@@ -1340,6 +1362,68 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       return;
     }
 
+    // POST /api/projects/:id/finish
+    if (method === 'POST' && subpath === '/finish') {
+      if (!meta) { send404(res); return; }
+      try {
+        const body = await parseBody(req) as { action: 'merge' | 'push-pr' | 'keep' | 'discard' };
+        const { action } = body;
+        const cwd = meta.path;
+
+        const branchResult = await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], cwd);
+        const currentBranch = branchResult.stdout.trim();
+
+        if (action === 'keep') {
+          sendJson(res, 200, { ok: true, message: `Branch ${currentBranch} kept.` });
+          return;
+        }
+
+        let baseBranch = 'main';
+        for (const candidate of ['main', 'master', 'develop']) {
+          const check = await runGit(['rev-parse', '--verify', candidate], cwd);
+          if (check.exitCode === 0) { baseBranch = candidate; break; }
+        }
+
+        if (action === 'merge') {
+          const status = await runGit(['status', '--porcelain'], cwd);
+          if (status.stdout.trim()) {
+            await runGit(['add', '-A'], cwd);
+            await runGit(['commit', '-m', 'chore: wrap up cloudy run'], cwd);
+          }
+          await runGit(['checkout', baseBranch], cwd);
+          const merge = await runGit(['merge', '--no-ff', currentBranch, '-m', `chore: merge ${currentBranch}`], cwd);
+          if (merge.exitCode === 0) {
+            await runGit(['branch', '-d', currentBranch], cwd);
+            sendJson(res, 200, { ok: true, message: `Merged ${currentBranch} into ${baseBranch}` });
+          } else {
+            await runGit(['checkout', currentBranch], cwd);
+            sendJson(res, 409, { error: 'Merge had conflicts. Resolve manually.' });
+          }
+        } else if (action === 'push-pr') {
+          const push = await runGit(['push', '-u', 'origin', currentBranch], cwd);
+          if (push.exitCode !== 0) {
+            sendJson(res, 500, { error: `Push failed: ${push.stderr}` });
+            return;
+          }
+          const gh = await runExecFile('gh', ['pr', 'create', '--fill'], cwd);
+          if (gh.exitCode === 0) {
+            sendJson(res, 200, { ok: true, message: 'PR created', url: gh.stdout.trim() });
+          } else {
+            sendJson(res, 200, { ok: true, message: 'Branch pushed. Open a PR at your repository host.' });
+          }
+        } else if (action === 'discard') {
+          await runGit(['checkout', baseBranch], cwd);
+          await runGit(['branch', '-D', currentBranch], cwd);
+          sendJson(res, 200, { ok: true, message: `Branch ${currentBranch} deleted.` });
+        } else {
+          sendJson(res, 400, { error: 'Invalid action' });
+        }
+      } catch (err) {
+        sendJson(res, 500, { error: String(err) });
+      }
+      return;
+    }
+
     // POST /api/projects/:id/retry
     if (method === 'POST' && subpath === '/retry') {
       if (!meta) { send404(res); return; }
@@ -1348,7 +1432,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         return;
       }
       try {
-        const body = await parseBody(req) as { taskId?: string; executionModel?: string; taskReviewModel?: string; runReviewModel?: string; parallel?: boolean; maxParallel?: number; noValidate?: boolean; maxRetries?: number; effort?: string };
+        const body = await parseBody(req) as { taskId?: string; executionModel?: string; taskReviewModel?: string; runReviewModel?: string; qualityReviewModel?: string; parallel?: boolean; maxParallel?: number; noValidate?: boolean; maxRetries?: number; effort?: string };
         const execModel = body.executionModel ?? 'sonnet';
         const taskReviewModel = body.taskReviewModel ?? 'haiku';
         const runReviewModel = body.runReviewModel ?? 'sonnet';
@@ -1360,6 +1444,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         if (body.noValidate) { extraArgs.push('--no-validate'); }
         if (body.maxRetries) { extraArgs.push('--max-retries', String(body.maxRetries)); }
         if (body.effort) { extraArgs.push('--effort', body.effort); }
+        if (body.qualityReviewModel) { extraArgs.push('--quality-review-model', body.qualityReviewModel); }
 
         spawnCloudyProcess(projectId, meta.path, 'run', [
           'run', '--non-interactive', '--agent-output',

@@ -23,8 +23,8 @@ const RUN_ONLY_FLAGS = ['--agent-output', '--non-interactive', '--dashboard-port
 const INIT_ONLY_FLAGS = ['--yes', '--no-review', '--spec'];
 
 interface SpawnCall {
-  type: 'init' | 'run' | 'pipeline';
-  commandName: string; // first element of args array (e.g. 'scope', 'build', 'pipeline')
+  type: 'init' | 'run' | 'chain';
+  commandName: string; // first element of args array (e.g. 'scope', 'build', 'chain')
   args: string[];
   sourceLines: string;
 }
@@ -39,10 +39,10 @@ async function parseSpawnCalls(): Promise<SpawnCall[]> {
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    const match = line.match(/spawnCloudyProcess\s*\([^,]+,\s*[^,]+,\s*'(init|run|pipeline)'\s*,\s*\[/);
+    const match = line.match(/spawnCloudyProcess\s*\([^,]+,\s*[^,]+,\s*'(init|run|chain)'\s*,\s*\[/);
     if (!match) continue;
 
-    const type = match[1] as 'init' | 'run' | 'pipeline';
+    const type = match[1] as 'init' | 'run' | 'chain';
 
     // Collect lines until we find the closing ], of the args array
     let collected = '';
@@ -82,11 +82,11 @@ describe('daemon spawnCloudyProcess — command/flag compatibility', () => {
     spawnCalls = await parseSpawnCalls();
   });
 
-  it('found at least one spawn call for each type (init, run, pipeline)', () => {
+  it('found at least one spawn call for each type (init, run, chain)', () => {
     const types = new Set(spawnCalls.map((c) => c.type));
     expect(types).toContain('init');
     expect(types).toContain('run');
-    expect(types).toContain('pipeline');
+    expect(types).toContain('chain');
   });
 
   it('init spawns use "scope" as the command name', () => {
@@ -105,11 +105,11 @@ describe('daemon spawnCloudyProcess — command/flag compatibility', () => {
     }
   });
 
-  it('pipeline spawns use "pipeline" as the command name', () => {
-    const pipelineCalls = spawnCalls.filter((c) => c.type === 'pipeline');
-    expect(pipelineCalls.length).toBeGreaterThanOrEqual(1);
-    for (const call of pipelineCalls) {
-      expect(call.commandName).toBe('pipeline');
+  it('chain spawns use "chain" as the command name', () => {
+    const chainCalls = spawnCalls.filter((c) => c.type === 'chain');
+    expect(chainCalls.length).toBeGreaterThanOrEqual(1);
+    for (const call of chainCalls) {
+      expect(call.commandName).toBe('chain');
     }
   });
 
@@ -127,16 +127,16 @@ describe('daemon spawnCloudyProcess — command/flag compatibility', () => {
     }
   });
 
-  it('pipeline spawns do NOT include --agent-output (pipeline command does not support it)', () => {
-    const pipelineCalls = spawnCalls.filter((c) => c.type === 'pipeline');
-    for (const call of pipelineCalls) {
+  it('chain spawns do NOT include --agent-output (chain command does not support it)', () => {
+    const chainCalls = spawnCalls.filter((c) => c.type === 'chain');
+    for (const call of chainCalls) {
       expect(call.args).not.toContain('--agent-output');
     }
   });
 
-  it('pipeline spawns do NOT include --non-interactive (pipeline command does not support it)', () => {
-    const pipelineCalls = spawnCalls.filter((c) => c.type === 'pipeline');
-    for (const call of pipelineCalls) {
+  it('chain spawns do NOT include --non-interactive (chain command does not support it)', () => {
+    const chainCalls = spawnCalls.filter((c) => c.type === 'chain');
+    for (const call of chainCalls) {
       expect(call.args).not.toContain('--non-interactive');
     }
   });

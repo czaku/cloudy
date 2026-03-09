@@ -7,6 +7,8 @@ export interface ModelConfig {
   planning: ClaudeModel;
   execution: ClaudeModel;
   validation: ClaudeModel;
+  /** Model for Phase 2b code quality review. Defaults to `validation` if not set. */
+  qualityReview?: ClaudeModel;
 }
 
 // ── Task types ───────────────────────────────────────────────────────
@@ -100,6 +102,7 @@ export type ValidationStrategyName =
   | 'build'
   | 'test'
   | 'ai-review'
+  | 'ai-review-quality'
   | 'command'
   | 'artifacts';
 

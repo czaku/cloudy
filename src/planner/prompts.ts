@@ -30,6 +30,8 @@ Break this goal into sequential implementation tasks. Each task should be:
 For each task, provide:
 - A short title
 - A concise description (2-3 sentences max) of what to implement and which files to touch. Do NOT reproduce the full spec detail — the executor has access to the full spec.
+- Implementation approach (optional, 1 sentence): if the task involves new logic or a non-obvious implementation choice, state the approach. Otherwise omit.
+- TDD note: if the task produces testable units (functions, endpoints, components), the description should remind the executor to write failing tests first, implement the minimal code to pass them, then commit. Do not add this for tasks that are purely config, migration, or scaffolding with nothing to unit test.
 - Specific acceptance criteria — each criterion MUST be one of:
     (a) A shell command that exits 0: e.g. "cd web && bunx tsc --noEmit exits 0"
     (b) A file that must exist with a specific export: e.g. "api/executor/quality_monitor.py exports QualityMonitor class"
@@ -180,6 +182,10 @@ Check for:
 - Are there obvious bugs (wrong types, missing awaits, unhandled errors)?
 - Are edge cases handled?
 
+SCOPE CHECK — this is critical:
+- Flag anything implemented that was NOT requested in the acceptance criteria. Extra flags, extra endpoints, extra fields, extra abstractions — all should be noted in "extras".
+- "No extras" means: if it wasn't in the AC, it shouldn't be in the diff. Over-building is a spec violation just like under-building.
+
 Respond with ONLY valid JSON:
 
 {
@@ -191,7 +197,71 @@ Respond with ONLY valid JSON:
       "met": true/false,
       "reason": "Why it is or isn't met — cite specific code or command output if failing"
     }
+  ],
+  "extras": ["Describe any implementation added beyond the acceptance criteria, or empty array if none"]
+}
+`;
+}
+
+/**
+ * Build a code quality review prompt. This is Phase 2b — runs only after spec compliance
+ * (Phase 2a) passes. It focuses purely on how the implementation is built, not what it does.
+ */
+export function buildQualityReviewPrompt(
+  taskTitle: string,
+  gitDiff: string,
+  changedFileSections?: Array<{ path: string; content: string; note?: string }>,
+): string {
+  const fileSection = changedFileSections && changedFileSections.length > 0
+    ? `\n# Changed Files (relevant sections)\n${changedFileSections.map(
+        (f) => `\n## ${f.path}${f.note ? ` — ${f.note}` : ''}\n\`\`\`\n${f.content}\n\`\`\``
+      ).join('\n')}\n`
+    : '';
+
+  return `You are doing a code quality review of the implementation for task: "${taskTitle}"
+
+The spec compliance check has already passed — this task built the right things. Your job is to assess how well it is built.
+
+# Git Diff
+\`\`\`
+${gitDiff}
+\`\`\`
+${fileSection}
+# What to check
+
+**Critical (block the task):**
+- Hardcoded values that should be constants or config
+- Missing error handling on I/O operations, network calls, or external services
+- Obvious logic bugs (off-by-one, wrong operator, unreachable code)
+- Security issues (SQL injection, XSS, unvalidated input, secrets in code)
+- Async/await misuse (missing await, fire-and-forget that should be awaited)
+
+**Important (flag but don't block unless severe):**
+- Duplicated logic that should be extracted (3+ repetitions)
+- Magic numbers or strings with no explanation
+- Functions doing more than one thing
+- Names that are actively misleading (not just un-ideal)
+
+**Do NOT flag:**
+- Style preferences (variable naming style, formatting, line length)
+- Missing comments or documentation
+- Things that work but could theoretically be written differently
+- Reasonable abstraction choices
+
+Respond with ONLY valid JSON:
+
+{
+  "passed": true/false,
+  "summary": "One sentence verdict",
+  "issues": [
+    {
+      "severity": "critical" | "important",
+      "location": "file.ts:line or 'general'",
+      "description": "What the issue is and why it matters"
+    }
   ]
 }
+
+Set "passed" to false only if there are critical issues. Important issues should be listed but do not fail the review unless there are 3 or more.
 `;
 }

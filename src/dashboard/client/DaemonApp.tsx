@@ -2710,6 +2710,7 @@ function RunTab({ project }: RunTabProps) {
   const [executionModel, setExecutionModel] = useState('sonnet');
   const [taskReviewModel, setTaskReviewModel] = useState('haiku');
   const [runReviewModel, setRunReviewModel] = useState('sonnet');
+  const [qualityReviewModel, setQualityReviewModel] = useState('');
   const [parallel, setParallel] = useState(false);
   const [maxParallel, setMaxParallel] = useState(3);
   const [noValidate, setNoValidate] = useState(false);
@@ -2841,24 +2842,53 @@ function RunTab({ project }: RunTabProps) {
     return () => clearInterval(interval);
   }, [isRunning, project.id]);
 
+  const [showFinishModal, setShowFinishModal] = useState(false);
+  const [finishMessage, setFinishMessage] = useState('');
+  const [finishLoading, setFinishLoading] = useState(false);
+  const pendingFinishCheck = useRef(false);
+
   // Fetch final state once when run finishes
   useEffect(() => {
     if (prevIsRunning.current && !isRunning) {
+      pendingFinishCheck.current = true;
       setTimeout(fetchRunState, 600);
     }
     prevIsRunning.current = isRunning;
   }, [isRunning]);
 
+  // After runTasks updates following a run completion, show finishing modal if no failures
+  useEffect(() => {
+    if (pendingFinishCheck.current && runTasks.length > 0) {
+      pendingFinishCheck.current = false;
+      const failed = runTasks.filter((t) => t.status === 'failed').length;
+      if (failed === 0) {
+        setShowFinishModal(true);
+      }
+    }
+  }, [runTasks]);
+
+  async function handleFinish(action: 'merge' | 'push-pr' | 'keep' | 'discard') {
+    setFinishLoading(true);
+    try {
+      const res = await apiPost(`/api/projects/${project.id}/finish`, { action });
+      const data = await res.json() as { ok?: boolean; message?: string; url?: string; error?: string };
+      setFinishMessage(data.error ?? data.message ?? (data.url ? `PR: ${data.url}` : 'Done'));
+    } catch (e) {
+      setFinishMessage(String(e));
+    }
+    setFinishLoading(false);
+  }
+
   async function handleRetryTask(taskId: string) {
     if (effectivelyRunning) return;
     setViewMode('progress');
-    await apiPost(`/api/projects/${project.id}/retry`, { taskId, executionModel, taskReviewModel, runReviewModel }).catch(() => {});
+    await apiPost(`/api/projects/${project.id}/retry`, { taskId, executionModel, taskReviewModel, runReviewModel, qualityReviewModel: qualityReviewModel || undefined }).catch(() => {});
   }
 
   async function handleRetryFailed() {
     if (effectivelyRunning) return;
     setViewMode('progress');
-    await apiPost(`/api/projects/${project.id}/retry`, { executionModel, taskReviewModel, runReviewModel }).catch(() => {});
+    await apiPost(`/api/projects/${project.id}/retry`, { executionModel, taskReviewModel, runReviewModel, qualityReviewModel: qualityReviewModel || undefined }).catch(() => {});
   }
 
   const chainPlanIds = new Set(chainSteps.map((s) => s.planId));
@@ -2955,6 +2985,7 @@ function RunTab({ project }: RunTabProps) {
       noValidate: noValidate || undefined,
       maxRetries: maxRetries !== 3 ? maxRetries : undefined,
       effort: effort || undefined,
+      qualityReviewModel: qualityReviewModel || undefined,
     }).catch(() => {});
   }
 
@@ -2999,6 +3030,27 @@ function RunTab({ project }: RunTabProps) {
 
     return (
       <div className="run-progress-view">
+        {/* Finishing workflow modal */}
+        {showFinishModal && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <div style={{ background: '#1e1e2e', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: 28, minWidth: 340, maxWidth: 440 }}>
+              <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>🏁 Implementation complete</div>
+              <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.5)', marginBottom: 20 }}>What would you like to do with this branch?</div>
+              {finishMessage ? (
+                <div style={{ fontSize: 13, padding: '10px 14px', background: 'rgba(255,255,255,0.05)', borderRadius: 8, marginBottom: 16 }}>{finishMessage}</div>
+              ) : null}
+              {!finishMessage && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <button className="daemon-btn primary" disabled={finishLoading} onClick={() => handleFinish('merge')}>Merge into base branch</button>
+                  <button className="daemon-btn" disabled={finishLoading} onClick={() => handleFinish('push-pr')}>Push + open Pull Request</button>
+                  <button className="daemon-btn" disabled={finishLoading} onClick={() => handleFinish('keep')}>Keep branch as-is</button>
+                  <button className="daemon-btn" disabled={finishLoading} style={{ color: '#ef4444', borderColor: 'rgba(239,68,68,0.4)' }} onClick={() => handleFinish('discard')}>Discard this work</button>
+                </div>
+              )}
+              <button className="daemon-btn" style={{ marginTop: 16, width: '100%', fontSize: 11 }} onClick={() => setShowFinishModal(false)}>Close</button>
+            </div>
+          </div>
+        )}
         {/* Hero section: ring + info */}
         <div className="run-progress-hero">
           <div className="run-progress-ring-wrap">
@@ -3077,7 +3129,7 @@ function RunTab({ project }: RunTabProps) {
           <div className="run-stuck-banner">
             <span>⚠ Process ended with tasks still in progress — server will auto-reset on next connect.</span>
             <button className="run-stuck-reset-btn" onClick={async () => {
-              await apiPost(`/api/projects/${project.id}/retry`, { executionModel, taskReviewModel, runReviewModel }).catch(() => {});
+              await apiPost(`/api/projects/${project.id}/retry`, { executionModel, taskReviewModel, runReviewModel, qualityReviewModel: qualityReviewModel || undefined }).catch(() => {});
               setViewMode('progress');
             }}>↺ Retry now</button>
           </div>
@@ -3189,6 +3241,7 @@ function RunTab({ project }: RunTabProps) {
               <ModelPicker value={executionModel} onChange={setExecutionModel} label="Execution" />
               <ModelPicker value={taskReviewModel} onChange={setTaskReviewModel} label="Task Review" />
               <ModelPicker value={runReviewModel} onChange={setRunReviewModel} label="Run Review" />
+              <ModelPicker value={qualityReviewModel} onChange={setQualityReviewModel} label="Quality Review" />
               <button className="daemon-btn primary" onClick={handleRetryFailed}>
                 ↺ Retry failed ({failedTasks.length})
               </button>
@@ -3342,6 +3395,7 @@ function RunTab({ project }: RunTabProps) {
             <ModelPicker value={executionModel} onChange={setExecutionModel} label="Execution" />
             <ModelPicker value={taskReviewModel} onChange={setTaskReviewModel} label="Task Review" />
             <ModelPicker value={runReviewModel} onChange={setRunReviewModel} label="Run Review" />
+            <ModelPicker value={qualityReviewModel} onChange={setQualityReviewModel} label="Quality Review" />
             <button
               className="daemon-btn primary"
               disabled={chainSteps.length === 0}

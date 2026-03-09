@@ -284,3 +284,106 @@ describe('runLoop', () => {
     expect(mockRunClaude).toHaveBeenCalledTimes(3);
   });
 });
+
+// ─── LEARNINGS extraction ───────────────────────────────────────────────────
+
+describe('LEARNINGS accumulation across loop iterations', () => {
+  let mockRunClaude: ReturnType<typeof vi.fn>;
+  let mockGetGitDiff: ReturnType<typeof vi.fn>;
+  let mockExeca: ReturnType<typeof vi.fn>;
+
+  beforeEach(async () => {
+    vi.resetModules();
+    const { runClaude } = await import('../../src/executor/claude-runner.js');
+    mockRunClaude = runClaude as ReturnType<typeof vi.fn>;
+    mockRunClaude.mockClear();
+    const { getGitDiff } = await import('../../src/git/git.js');
+    mockGetGitDiff = getGitDiff as ReturnType<typeof vi.fn>;
+    mockGetGitDiff.mockResolvedValue('diff-1');
+    const { execa } = await import('execa');
+    mockExeca = execa as ReturnType<typeof vi.fn>;
+    mockExeca.mockClear();
+  });
+
+  it('learnings from iteration 1 appear in iteration 2 prompt', async () => {
+    const prompts: string[] = [];
+    // runClaude receives an object { prompt, model, cwd, onOutput }
+    mockRunClaude.mockImplementation(async (opts: { prompt: string }) => {
+      prompts.push(opts.prompt);
+      return makeClaudeSuccess('Work done\n\n## LEARNINGS\n- Use src/ for all new files');
+    });
+    // First two checkUntil calls fail; third passes → loop runs Claude twice
+    let checkN = 0;
+    mockExeca.mockImplementation(() =>
+      Promise.resolve({ exitCode: checkN++ < 2 ? 1 : 0, stdout: 'ok', stderr: '' }),
+    );
+    mockGetGitDiff.mockResolvedValue('diff --git a/f b/f\n+line');
+
+    const { runLoop } = await import('../../src/core/loop-runner.js');
+    await runLoop({
+      goal: 'fix tests',
+      untilCommand: 'npm test',
+      maxIterations: 5,
+      model: 'haiku',
+      cwd: '/project',
+    });
+
+    expect(prompts.length).toBeGreaterThanOrEqual(2);
+    expect(prompts[1]).toContain('Discoveries from Previous Iterations');
+    expect(prompts[1]).toContain('Use src/ for all new files');
+  });
+
+  it('duplicate learnings are not repeated in accumulated list', async () => {
+    const prompts: string[] = [];
+    const sameLearning = 'Use src/ for all new files';
+    mockRunClaude.mockImplementation(async (opts: { prompt: string }) => {
+      prompts.push(opts.prompt);
+      return makeClaudeSuccess(`Work done\n\n## LEARNINGS\n- ${sameLearning}`);
+    });
+    let checkN = 0;
+    mockExeca.mockImplementation(() =>
+      Promise.resolve({ exitCode: checkN++ < 3 ? 1 : 0, stdout: 'ok', stderr: '' }),
+    );
+    mockGetGitDiff.mockResolvedValue('diff --git a/f b/f\n+line');
+
+    const { runLoop } = await import('../../src/core/loop-runner.js');
+    await runLoop({
+      goal: 'fix tests',
+      untilCommand: 'npm test',
+      maxIterations: 5,
+      model: 'haiku',
+      cwd: '/project',
+    });
+
+    // After iteration 2, the same learning should not appear twice in iteration 3 prompt
+    if (prompts.length >= 3) {
+      const occurrences = (prompts[2].match(new RegExp(sameLearning, 'g')) ?? []).length;
+      expect(occurrences).toBe(1);
+    }
+  });
+
+  it('prompt includes LEARNINGS instruction in first iteration', async () => {
+    const prompts: string[] = [];
+    mockRunClaude.mockImplementation(async (opts: { prompt: string }) => {
+      prompts.push(opts.prompt);
+      return makeClaudeSuccess('done');
+    });
+    // Fail first check so Claude runs at all, then pass
+    let checkN = 0;
+    mockExeca.mockImplementation(() =>
+      Promise.resolve({ exitCode: checkN++ === 0 ? 1 : 0, stdout: 'ok', stderr: '' }),
+    );
+
+    const { runLoop } = await import('../../src/core/loop-runner.js');
+    await runLoop({
+      goal: 'do something',
+      untilCommand: 'npm test',
+      maxIterations: 3,
+      model: 'haiku',
+      cwd: '/project',
+    });
+
+    expect(prompts.length).toBeGreaterThanOrEqual(1);
+    expect(prompts[0]).toContain('## LEARNINGS');
+  });
+});

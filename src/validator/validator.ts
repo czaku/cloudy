@@ -14,6 +14,7 @@ import { runLintCheck } from './strategies/lint-check.js';
 import { runBuildCheck, detectPlatformBuildNeeds, runIosBuildCheck, runAndroidBuildCheck } from './strategies/build-check.js';
 import { runTestRunner } from './strategies/test-runner.js';
 import { runAiReview } from './strategies/ai-review.js';
+import { runAiQualityReview } from './strategies/ai-review-quality.js';
 import { runArtifactCheck } from './strategies/artifact-check.js';
 import { getGitDiff, getChangedFiles } from '../git/git.js';
 import { log } from '../utils/logger.js';
@@ -205,6 +206,12 @@ export interface ValidateOptions {
   task: Task;
   config: ValidationConfig;
   model: ClaudeModel;
+  /**
+   * Model for Phase 2b code quality review. Defaults to `model` if not provided.
+   * You can pass a cheaper model (e.g. haiku) for spec compliance (Phase 2a)
+   * and a stronger model here for quality review.
+   */
+  qualityModel?: ClaudeModel;
   cwd: string;
   checkpointSha?: string;
   /** Artifacts created by upstream dependency tasks — not expected in this task's diff */
@@ -213,12 +220,15 @@ export interface ValidateOptions {
 
 /**
  * Run multi-strategy validation on a task.
- * Deterministic checks run first; AI review only if all pass.
+ * Deterministic checks run first; AI review is split into two phases:
+ *   Phase 2a: spec compliance (did it meet every AC? any extras added?)
+ *   Phase 2b: code quality (only runs if 2a passes)
  */
 export async function validateTask(
   options: ValidateOptions,
 ): Promise<ValidationReport> {
-  const { task, config, model, cwd, checkpointSha, priorArtifacts } = options;
+  const { task, config, model, qualityModel, cwd, checkpointSha, priorArtifacts } = options;
+  const resolvedQualityModel: ClaudeModel = qualityModel ?? model;
   const results: ValidationResult[] = [];
 
   await log.info(`Validating task "${task.id}": ${task.title}`);
@@ -318,41 +328,34 @@ export async function validateTask(
     }
   }
 
-  // Phase 2: AI review (only if deterministic checks pass)
+  // Phase 2a: Spec compliance review (only if deterministic checks pass)
+  // Checks: did it meet every AC? did it add anything not asked for?
+  let specCompliancePassed = false;
   if (deterministicPassed && config.aiReview) {
-    await log.info('  Running AI review...');
+    await log.info('  Phase 2a: spec compliance review...');
 
     const rawDiff = await getGitDiff(cwd, checkpointSha);
-    // Split diff into per-file chunks, filter noise files, then prioritise source code
-    // before truncating so the AI reviewer always sees the most important changes.
     const LOW_VALUE_FILE_RE = /^diff --git a\/[^\n]*?(?:package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|Gemfile\.lock|poetry\.lock|go\.sum|composer\.lock|\.log|\.tsbuildinfo|\.pbxproj|(?:^|\/)dist\/|(?:^|\/)build\/|\.next\/|\.nuxt\/)/m;
     const allChunks = rawDiff.split(/(?=^diff --git )/m).filter(Boolean);
-    // Separate high-value source chunks from low-value build/lock chunks
     const sourceChunks = allChunks.filter((c) => !LOW_VALUE_FILE_RE.test(c));
     const otherChunks = allChunks.filter((c) => LOW_VALUE_FILE_RE.test(c));
 
-    // If there are no source code changes (only cache/lock noise) but artifacts all exist,
-    // the implementation was previously merged into main — skip AI review and pass.
     const artifactCheckPassedEarly = results.find((r) => r.strategy === 'artifacts')?.passed;
     if (sourceChunks.length === 0 && artifactCheckPassedEarly) {
-      await log.info('  No source changes in diff but artifacts verified — skipping AI review (previously merged)');
+      await log.info('  No source changes in diff but artifacts verified — skipping spec review (previously merged)');
       results.push({
         strategy: 'ai-review',
         passed: true,
         output: 'Skipped: no source diff detected, all output artifacts verified present.',
         durationMs: 0,
       });
+      specCompliancePassed = true;
     } else if (sourceChunks.length === 0) {
-      // No source changes and no artifact verification — the agent may have found the work
-      // already complete. Do an AI review using existing file contents so the reviewer can
-      // confirm the acceptance criteria are already met without requiring a diff.
-      await log.info('  No source changes detected — AI reviewing existing files to confirm already complete');
+      await log.info('  No source changes detected — reviewing existing files to confirm already complete');
 
       const alreadyDoneNote = 'No changes were made. The agent determined this task was already implemented.';
       const fileSections: Array<{ path: string; content: string; note?: string }> = [];
 
-      // Read outputArtifacts + contextPatterns (resolve globs) to give the AI reviewer
-      // enough evidence to verify criteria against existing code.
       const artifactPaths = task.outputArtifacts ?? [];
       const patternPaths: string[] = [];
       for (const pattern of (task.contextPatterns ?? [])) {
@@ -385,7 +388,7 @@ export async function validateTask(
         .map((r) => ({ label: r.strategy, passed: r.passed, output: r.output }));
 
       await log.info(
-        `  AI review (already-done check): ${fileSections.length} file(s)` +
+        `  Spec review (already-done check): ${fileSections.length} file(s)` +
         (commandResults.length ? ` + ${commandResults.length} command result(s)` : ''),
       );
 
@@ -402,57 +405,102 @@ export async function validateTask(
         commandResults,
       );
       results.push(result);
+      specCompliancePassed = result.passed;
 
       if (!result.passed) {
-        await log.warn('  AI review FAILED (work not yet complete despite no changes)');
+        await log.warn('  Spec review FAILED (work not yet complete despite no changes)');
       } else {
-        await log.info('  AI review passed (work was already complete)');
+        await log.info('  Spec review passed (work was already complete)');
       }
     } else {
+      const orderedDiff = [...sourceChunks, ...otherChunks].join('');
+      const MAX_DIFF_CHARS = 160_000;
+      const truncatedDiff = orderedDiff.length > MAX_DIFF_CHARS
+        ? orderedDiff.slice(0, MAX_DIFF_CHARS) + '\n... (diff truncated at 160 KB for AI review)'
+        : orderedDiff;
+      const changedFiles = await getChangedFiles(cwd, checkpointSha);
+      const changedFileSections = await readChangedFileSections(changedFiles, cwd, truncatedDiff);
+      const artifactCheckPassed = results.find((r) => r.strategy === 'artifacts')?.passed;
 
-    // Source-first ordering ensures we hit the important code before any truncation
-    const orderedDiff = [...sourceChunks, ...otherChunks].join('');
-    const MAX_DIFF_CHARS = 160_000;
-    const truncatedDiff = orderedDiff.length > MAX_DIFF_CHARS
-      ? orderedDiff.slice(0, MAX_DIFF_CHARS) + '\n... (diff truncated at 160 KB for AI review)'
-      : orderedDiff;
-    const changedFiles = await getChangedFiles(cwd, checkpointSha);
-    const changedFileSections = await readChangedFileSections(changedFiles, cwd, truncatedDiff);
-    const artifactCheckPassed = results.find((r) => r.strategy === 'artifacts')?.passed;
+      const commandResults = results
+        .filter((r) => r.strategy === 'command' || r.strategy === 'typecheck' || r.strategy === 'lint')
+        .map((r) => ({ label: r.strategy, passed: r.passed, output: r.output }));
 
-    // Collect deterministic command results to give the AI reviewer ground-truth evidence.
-    // If a smoke test confirms "POST /api/v1/skills → 200", the reviewer shouldn't
-    // fail on "endpoint missing" just because it can't find it in the diff.
-    const commandResults = results
-      .filter((r) => r.strategy === 'command' || r.strategy === 'typecheck' || r.strategy === 'lint')
-      .map((r) => ({ label: r.strategy, passed: r.passed, output: r.output }));
+      await log.info(
+        `  Spec review: diff + ${changedFileSections.length} file section(s)` +
+        (priorArtifacts?.length ? ` + ${priorArtifacts.length} prior artifact(s)` : '') +
+        (commandResults.length ? ` + ${commandResults.length} command result(s)` : ''),
+      );
 
-    await log.info(
-      `  AI review: diff + ${changedFileSections.length} file section(s)` +
-      (priorArtifacts?.length ? ` + ${priorArtifacts.length} prior artifact(s)` : '') +
-      (commandResults.length ? ` + ${commandResults.length} command result(s)` : ''),
-    );
+      const result = await runAiReview(
+        task.title,
+        task.acceptanceCriteria,
+        truncatedDiff,
+        model,
+        cwd,
+        changedFileSections,
+        priorArtifacts,
+        artifactCheckPassed,
+        task.outputArtifacts,
+        commandResults,
+      );
+      results.push(result);
+      specCompliancePassed = result.passed;
 
-    const result = await runAiReview(
-      task.title,
-      task.acceptanceCriteria,
-      truncatedDiff,
-      model,
-      cwd,
-      changedFileSections,
-      priorArtifacts,
-      artifactCheckPassed,
-      task.outputArtifacts,
-      commandResults,
-    );
-    results.push(result);
-
-    if (!result.passed) {
-      await log.warn('  AI review FAILED');
-    } else {
-      await log.info('  AI review passed');
+      if (!result.passed) {
+        await log.warn('  Spec review FAILED');
+      } else {
+        await log.info('  Spec review passed');
+        // Log any extras the reviewer flagged (over-building)
+        try {
+          const json = result.output.match(/\{[\s\S]*\}/)?.[0];
+          if (json) {
+            const parsed = JSON.parse(json);
+            if (parsed.extras && parsed.extras.length > 0) {
+              await log.warn(`  Extras flagged (built beyond AC): ${parsed.extras.join('; ')}`);
+            }
+          }
+        } catch { /* non-fatal */ }
+      }
     }
-    } // end else (source changes present)
+  }
+
+  // Phase 2b: Code quality review (only runs if spec compliance passed)
+  if (specCompliancePassed && config.aiReview) {
+    await log.info('  Phase 2b: code quality review...');
+
+    const rawDiff = await getGitDiff(cwd, checkpointSha);
+    const LOW_VALUE_FILE_RE = /^diff --git a\/[^\n]*?(?:package-lock\.json|yarn\.lock|pnpm-lock\.yaml|Cargo\.lock|Gemfile\.lock|poetry\.lock|go\.sum|composer\.lock|\.log|\.tsbuildinfo|\.pbxproj|(?:^|\/)dist\/|(?:^|\/)build\/|\.next\/|\.nuxt\/)/m;
+    const allChunks = rawDiff.split(/(?=^diff --git )/m).filter(Boolean);
+    const sourceChunks = allChunks.filter((c) => !LOW_VALUE_FILE_RE.test(c));
+    const otherChunks = allChunks.filter((c) => LOW_VALUE_FILE_RE.test(c));
+
+    if (sourceChunks.length > 0) {
+      const orderedDiff = [...sourceChunks, ...otherChunks].join('');
+      const MAX_DIFF_CHARS = 160_000;
+      const truncatedDiff = orderedDiff.length > MAX_DIFF_CHARS
+        ? orderedDiff.slice(0, MAX_DIFF_CHARS) + '\n... (diff truncated at 160 KB for quality review)'
+        : orderedDiff;
+      const changedFiles = await getChangedFiles(cwd, checkpointSha);
+      const changedFileSections = await readChangedFileSections(changedFiles, cwd, truncatedDiff);
+
+      const qualityResult = await runAiQualityReview(
+        task.title,
+        truncatedDiff,
+        resolvedQualityModel,
+        cwd,
+        changedFileSections,
+      );
+      results.push(qualityResult);
+
+      if (!qualityResult.passed) {
+        await log.warn('  Code quality review FAILED');
+      } else {
+        await log.info('  Code quality review passed');
+      }
+    } else {
+      await log.info('  Code quality review skipped (no source changes)');
+    }
   }
 
   const passed = results.every((r) => r.passed);
@@ -473,6 +521,9 @@ export function formatValidationErrors(report: ValidationReport): string {
   return failed.map((r) => {
     if (r.strategy === 'ai-review') {
       return formatAiReviewFailure(r.output);
+    }
+    if (r.strategy === 'ai-review-quality') {
+      return formatQualityReviewFailure(r.output);
     }
     if (r.strategy === 'artifacts') {
       return formatArtifactFailure(r.output);
@@ -508,6 +559,29 @@ function formatAiReviewFailure(output: string): string {
   }
   // Fallback: truncate raw output to avoid overwhelming the retry prompt
   return `[ai-review] ${output.slice(0, 2000)}${output.length > 2000 ? '\n... (truncated)' : ''}`;
+}
+
+/**
+ * For quality review failures, extract only critical issues from the JSON response.
+ */
+function formatQualityReviewFailure(output: string): string {
+  try {
+    const jsonMatch = output.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const critical = (parsed.issues ?? []).filter(
+        (i: { severity: string }) => i.severity === 'critical',
+      );
+      if (critical.length > 0) {
+        const items = critical.map(
+          (i: { location: string; description: string }) =>
+            `  ✗ ${i.location}: ${i.description}`,
+        ).join('\n');
+        return `[code-quality] FAIL — ${parsed.summary ?? ''}\n\nCritical issues:\n${items}`;
+      }
+    }
+  } catch { /* fall through */ }
+  return `[code-quality] ${output.slice(0, 2000)}${output.length > 2000 ? '\n... (truncated)' : ''}`;
 }
 
 /**

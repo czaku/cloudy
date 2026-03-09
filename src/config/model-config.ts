@@ -33,6 +33,7 @@ export function mergeModelConfig(
     planningModel?: ClaudeModel;
     executionModel?: ClaudeModel;
     taskReviewModel?: ClaudeModel;
+    qualityReviewModel?: ClaudeModel;
   },
 ): ModelConfig {
   const result = { ...base };
@@ -42,12 +43,14 @@ export function mergeModelConfig(
     result.planning = overrides.model;
     result.execution = overrides.model;
     result.validation = overrides.model;
+    result.qualityReview = overrides.model;
   }
 
   // Per-phase flags override --model
   if (overrides.planningModel) result.planning = overrides.planningModel;
   if (overrides.executionModel) result.execution = overrides.executionModel;
   if (overrides.taskReviewModel) result.validation = overrides.taskReviewModel;
+  if (overrides.qualityReviewModel) result.qualityReview = overrides.qualityReviewModel;
 
   return result;
 }
