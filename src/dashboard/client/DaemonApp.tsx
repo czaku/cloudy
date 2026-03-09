@@ -5435,7 +5435,18 @@ function parseRunName(name: string): RunEntry {
 }
 
 interface RunStateTask { id: string; title: string; status: string; }
-interface RunStateSummary { completedAt?: string; costSummary?: { totalEstimatedUsd?: number }; plan?: { tasks?: RunStateTask[] }; }
+interface RunStateSummary { startedAt?: string; completedAt?: string; costSummary?: { totalEstimatedUsd?: number }; plan?: { tasks?: RunStateTask[] }; }
+
+function fmtDuration(startedAt?: string, completedAt?: string): string | null {
+  if (!startedAt) return null;
+  const end = completedAt ? new Date(completedAt).getTime() : Date.now();
+  const secs = Math.round((end - new Date(startedAt).getTime()) / 1000);
+  if (secs < 0) return null;
+  if (secs < 60) return `${secs}s`;
+  const m = Math.floor(secs / 60), s = secs % 60;
+  if (m < 60) return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
 
 function HistoryTab({ project }: { project: ProjectStatusSnapshot }) {
   const [runs, setRuns] = useState<string[]>([]);
@@ -5532,6 +5543,11 @@ function HistoryTab({ project }: { project: ProjectStatusSnapshot }) {
             const total = tasks.length;
             const cost = st?.costSummary?.totalEstimatedUsd;
             const isScope = entry.name.toLowerCase().startsWith('scope-');
+            const duration = fmtDuration(st?.startedAt, st?.completedAt);
+            // Show date inline if it differs from group day (undated runs show today's date group)
+            const dateStr = entry.date
+              ? entry.date.slice(5, 10).replace('-', ' ') + ' · ' + entry.date.slice(11)
+              : null; // e.g. "03 09 · 07:27"
             return (
               <div key={entry.name} className="history-run-card">
                 <div className="history-run-header" onClick={() => toggleExpand(entry.name)}>
@@ -5543,13 +5559,14 @@ function HistoryTab({ project }: { project: ProjectStatusSnapshot }) {
                     <div className="history-run-meta">
                       {entry.isPipeline && <span className="history-run-badge pipeline">chain</span>}
                       {isScope && <span className="history-run-badge" style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}>plan</span>}
+                      {dateStr && <span>{dateStr}</span>}
+                      {duration && <span>· {duration}</span>}
                       {total > 0 && (
                         <span style={{ color: failed > 0 ? '#ef4444' : done === total ? '#10b981' : 'var(--text-muted)' }}>
-                          {done === total && failed === 0 ? `✓ ${done}/${total}` : failed > 0 ? `✗ ${failed} failed` : `${done}/${total}`}
+                          · {done === total && failed === 0 ? `✓ ${done}/${total}` : failed > 0 ? `✗ ${failed} failed` : `${done}/${total}`}
                         </span>
                       )}
-                      {cost != null && <span>${cost.toFixed(2)}</span>}
-                      {entry.date.slice(11) && <span>{entry.date.slice(11)}</span>}
+                      {cost != null && <span>· ${cost.toFixed(2)}</span>}
                     </div>
                   </div>
                   <span className="history-run-toggle">{isOpen ? '▾' : '▸'}</span>
