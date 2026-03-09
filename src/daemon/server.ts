@@ -1232,7 +1232,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           : 'plan';
         const runName = `scope-${ts}-${slug}`;
         const proc = spawnCloudyProcess(projectId, meta.path, 'init', [
-          'scope', ...specArgs, ...modelArg, '--run-name', runName,
+          'plan', ...specArgs, ...modelArg, '--run-name', runName,
         ], body.planName, specPaths);
         if (body.planIds?.length) proc.planIds = body.planIds;
         sendJson(res, 200, { ok: true, started: true, processId: proc.id });
@@ -1287,7 +1287,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         // execution always goes through cloudy build using the current state.json
 
         const proc = spawnCloudyProcess(projectId, meta.path, 'run', [
-          'build',
+          'run',
           '--non-interactive',
           '--agent-output',
           '--execution-model', execModel,
@@ -1362,7 +1362,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         if (body.effort) { extraArgs.push('--effort', body.effort); }
 
         spawnCloudyProcess(projectId, meta.path, 'run', [
-          'build', '--non-interactive', '--agent-output',
+          'run', '--non-interactive', '--agent-output',
           '--execution-model', execModel,
           '--task-review-model', taskReviewModel,
           '--run-review-model', runReviewModel,
