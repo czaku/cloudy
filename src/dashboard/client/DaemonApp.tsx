@@ -5567,7 +5567,7 @@ function HistoryTab({ project }: { project: ProjectStatusSnapshot }) {
                       {duration && <span>· {duration}</span>}
                       {total > 0 && (
                         <span style={{ color: failed > 0 ? '#ef4444' : done === total ? '#10b981' : 'var(--text-muted)' }}>
-                          · {done === total && failed === 0 ? `✓ ${done}/${total}` : failed > 0 ? `✗ ${failed} failed` : `${done}/${total}`}
+                          · {done === total && failed === 0 ? `✓ passed` : failed > 0 ? `✗ ${failed} failed` : `${done}/${total} tasks`}
                         </span>
                       )}
                       {cost != null && <span>· ${cost.toFixed(2)}</span>}
