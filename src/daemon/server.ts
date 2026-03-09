@@ -1958,6 +1958,18 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
         },
       });
 
+      // ── Register with keel daemon ─────────────────────────────────────
+      const keelSocket = process.env.HOME + '/.keel.sock';
+      try {
+        const net = await import('node:net');
+        const sock = net.createConnection(keelSocket);
+        sock.on('connect', () => {
+          sock.write(JSON.stringify({ type: 'register_service', name: 'cloudy', port, pid: process.pid, version: '0.1.0' }) + '\n');
+          sock.end();
+        });
+        sock.on('error', () => { /* keel daemon not running — silent */ });
+      } catch { /* ignore */ }
+
       // ── mDNS advertisement ────────────────────────────────────────────
       startMdnsAdvertising({ identity, port: fedPort, service: 'cloudy', version: '0.1.0' });
 
