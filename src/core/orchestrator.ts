@@ -444,6 +444,8 @@ export class Orchestrator {
   }
 
   private async runSequential(queue: TaskQueue, plan: Plan): Promise<void> {
+    const useWorktrees = this.config.worktrees && await isGitRepo(this.cwd);
+
     while (!queue.isComplete() && !this.aborted) {
       if (queue.hasFailures()) {
         // Check for halt-on-failure tasks
@@ -465,7 +467,43 @@ export class Orchestrator {
         break;
       }
       const taskToRun = ready[0];
-      await this.executeTask(taskToRun, queue, plan, this.cwd);
+
+      // Worktree isolation for sequential tasks — each task gets its own branch.
+      // On success: merge back. On failure: discard cleanly.
+      let worktree: WorktreeInfo | null = null;
+      let taskCwd = this.cwd;
+      if (useWorktrees) {
+        try {
+          worktree = await createWorktree(this.cwd, taskToRun.id);
+          taskCwd = worktree.path;
+        } catch (err) {
+          await log.warn(
+            `Failed to create worktree for ${taskToRun.id}: ${err instanceof Error ? err.message : String(err)} — running in main cwd`,
+          );
+        }
+      }
+
+      try {
+        await this.executeTask(taskToRun, queue, plan, taskCwd);
+      } finally {
+        if (worktree) {
+          const taskStatus = queue.getTask(taskToRun.id)?.status;
+          if (taskStatus === 'completed') {
+            const mergeResult = await mergeWorktree(this.cwd, worktree).catch(() => ({
+              merged: false,
+              conflict: true,
+            }));
+            if (!mergeResult.merged && mergeResult.conflict) {
+              await log.warn(`Merge conflict integrating ${taskToRun.id} — task marked failed`);
+              queue.setError(taskToRun.id, 'Merge conflict when integrating worktree changes');
+              queue.updateStatus(taskToRun.id, 'failed');
+            }
+          } else {
+            await log.info(`Task ${taskToRun.id} did not complete — discarding worktree without merging`);
+          }
+          await removeWorktree(this.cwd, worktree).catch(() => {});
+        }
+      }
       // Track completed tasks for rolling summary refresh
       const justCompleted = queue.getTask(taskToRun.id);
       if (justCompleted?.status === 'completed') {

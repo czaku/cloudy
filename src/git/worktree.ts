@@ -41,6 +41,20 @@ export async function createWorktree(
   await execa('git', ['worktree', 'add', '-b', branch, wtPath], { cwd });
   await log.info(`Worktree created: branch=${branch}, path=${wtPath}`);
 
+  // Symlink dependency directories so the task doesn't need to reinstall.
+  // Only symlinks dirs that already exist in the main tree.
+  // Safe when no new deps are added — if deps change, task should run install itself.
+  for (const depDir of ['node_modules', '.venv', 'vendor', '.gradle']) {
+    const mainDirPath = path.join(cwd, depDir);
+    const wtDirPath = path.join(wtPath, depDir);
+    try {
+      await fs.access(mainDirPath);
+      try { await fs.access(wtDirPath); continue; } catch { /* doesn't exist — safe to symlink */ }
+      await fs.symlink(mainDirPath, wtDirPath);
+      await log.info(`  Symlinked ${depDir} into worktree`);
+    } catch { /* dir doesn't exist in main tree — skip */ }
+  }
+
   return { path: wtPath, branch, taskId };
 }
 

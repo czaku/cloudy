@@ -120,6 +120,7 @@ export const initCommand = new Command('plan')
   .option('--run-name <name>', 'Explicit run directory name (used by pipeline command)')
   .option('--questions-auto-answering-model <model>', 'Model used to auto-answer planning questions on timeout (default: planning model)')
   .option('--questions-timeout <seconds>', 'Seconds to wait for human answer before auto-assuming (default: 60)', parseInt)
+  .option('--brainstorm', 'Show 2-3 candidate approaches before planning (interactive only, skipped for simple goals)')
   .action(async (goalArg: string | undefined, opts: {
     model?: string;
     planningModel?: string;
@@ -129,6 +130,7 @@ export const initCommand = new Command('plan')
     runName?: string;
     questionsAutoAnsweringModel?: string;
     questionsTimeout?: number;
+    brainstorm?: boolean;
   }) => {
     const cwd = process.cwd();
     const projectName = path.basename(cwd);
@@ -330,6 +332,48 @@ export const initCommand = new Command('plan')
       );
     } else {
       p.log.info(`Planning context: spec ${specKb}KB + CLAUDE.md ${claudeKb}KB = ${totalKb}KB`);
+    }
+
+    // ── Brainstorm gate (opt-in, interactive only, skipped for simple goals) ──
+    if (opts.brainstorm && process.stdout.isTTY && process.stdin.isTTY) {
+      const { brainstorm: runBrainstorm, isGoalComplexEnoughForBrainstorm } = await import('../../planner/brainstorm.js');
+      if (isGoalComplexEnoughForBrainstorm(goal)) {
+        const brainstormSpinner = p.spinner();
+        brainstormSpinner.start('Brainstorming approaches…');
+        const result = await runBrainstorm(goal, config.models.planning, cwd);
+        brainstormSpinner.stop('Approaches ready');
+
+        if (result) {
+          console.log('\n  Candidate approaches:\n');
+          for (const approach of result.approaches) {
+            console.log(`  ${c(bold, approach.name)}`);
+            for (const pro of approach.pros) console.log(`    ${c(green, '+')} ${pro}`);
+            for (const con of approach.cons) console.log(`    ${c(yellow, '-')} ${con}`);
+            console.log('');
+          }
+
+          const chosen = await p.select({
+            message: `Recommended: "${result.recommended}" — ${result.rationale}. Proceed with:`,
+            options: [
+              ...result.approaches.map((a) => ({ value: a.name, label: a.name })),
+              { value: '__custom', label: 'Describe my own approach…' },
+            ],
+          });
+
+          if (!p.isCancel(chosen)) {
+            let approachContext: string;
+            if (chosen === '__custom') {
+              const custom = await p.text({ message: 'Describe your preferred approach:' });
+              approachContext = p.isCancel(custom) ? result.recommended : (custom as string);
+            } else {
+              approachContext = chosen as string;
+            }
+            goal = `${goal}\n\nChosen implementation approach: ${approachContext}`;
+          }
+        }
+      } else {
+        p.log.info('Goal is concise — skipping brainstorm (use --brainstorm for complex goals with 20+ words)');
+      }
     }
 
     // ── Planning ──────────────────────────────────────────────────────────────
