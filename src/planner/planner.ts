@@ -5,6 +5,8 @@ import { validateDependencyGraph } from './dependency-graph.js';
 import { loadRecentRunInsights } from '../knowledge/run-logger.js';
 import { log } from '../utils/logger.js';
 import fs from 'node:fs/promises';
+import path from 'node:path';
+import { glob } from 'glob';
 
 export interface PlanQuestion {
   type: 'text' | 'select' | 'multiselect' | 'confirm';
@@ -90,6 +92,9 @@ export async function createPlan(
 
   // Plan quality warnings — catch common planner mistakes before execution
   await warnPlanQuality(tasks, cwd, specContent);
+
+  // Artifact path validation — warn when declared paths look wrong
+  await warnArtifactPaths(tasks, cwd);
 
   // Second pass: verify and fix the dependency graph with a cheap focused call.
   // The planner sometimes generates tasks with missing or empty dependencies —
@@ -284,6 +289,62 @@ Return ONLY valid JSON with this structure:
     createdAt: existingPlan.createdAt,
     updatedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Warn when declared artifact paths look wrong — e.g. use a top-level directory that
+ * doesn't exist (like `android/` when the repo uses `google/`).
+ *
+ * For each artifact path that doesn't exist AND whose top-level directory doesn't exist,
+ * we glob for similarly-named files in the repo to suggest a correction.
+ */
+async function warnArtifactPaths(tasks: Task[], cwd: string): Promise<void> {
+  for (const task of tasks) {
+    const artifacts = task.outputArtifacts ?? [];
+    for (const artifact of artifacts) {
+      const fullPath = path.join(cwd, artifact);
+      // Only check files that don't already exist (new files are expected to not exist,
+      // but their parent directory should exist or be recognisable)
+      let parentExists = false;
+      try {
+        const parentDir = path.dirname(fullPath);
+        await fs.access(parentDir);
+        parentExists = true;
+      } catch {
+        parentExists = false;
+      }
+
+      if (!parentExists) {
+        // Try to find a similar path: search for the filename in the repo
+        const basename = path.basename(artifact);
+        const topDir = artifact.split('/')[0];
+
+        try {
+          const similar = await glob(`**/${basename}`, { cwd, nodir: true, ignore: ['node_modules/**', '.git/**'], absolute: false });
+          if (similar.length > 0) {
+            await log.warn(
+              `[ARTIFACT:PATH_WARNING] task "${task.id}" declares artifact "${artifact}" ` +
+              `but parent dir "${topDir}/" does not exist. ` +
+              `Similar file(s) found: ${similar.slice(0, 3).join(', ')}`,
+            );
+          } else {
+            // Check if the top-level directory has a similar alternative
+            const topDirs = await glob('*/', { cwd, absolute: false });
+            const topDirNames = topDirs.map((d) => d.replace(/\/$/, ''));
+            if (topDirNames.length > 0) {
+              await log.warn(
+                `[ARTIFACT:PATH_WARNING] task "${task.id}" declares artifact "${artifact}" ` +
+                `but top-level directory "${topDir}/" does not exist. ` +
+                `Available top-level dirs: ${topDirNames.slice(0, 8).join(', ')}`,
+              );
+            }
+          }
+        } catch {
+          // glob failed — skip silently
+        }
+      }
+    }
+  }
 }
 
 /**

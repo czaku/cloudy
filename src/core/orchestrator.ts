@@ -677,16 +677,18 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
         currentPatterns = await expandContext(currentPatterns, taskCwd, budget);
         contextFiles = await resolveContextFiles(currentPatterns, taskCwd, budget);
 
-        // Roll back to the checkpoint so Claude doesn't inherit orphan files,
-        // partial writes, or half-applied changes from the previous attempt.
+        // Always roll back to the checkpoint on any retry.
+        // Resume-on-retry causes empty diffs: the agent sees completed work,
+        // declares done, produces no commit, and fails artifact checks.
+        // Rolling back to a clean checkpoint ensures every retry starts fresh.
         // Safe when: sequential mode (one task at a time) OR the task runs in
         // its own isolated worktree (taskCwd !== this.cwd).
         // NOT safe for parallel mode without worktrees (shared working tree).
-        // Skip rollback when resuming a session — the SDK session transcript already
-        // contains what was written; rolling back would break the resume context.
-        if (checkpointSha && !task.sessionId) {
+        if (checkpointSha) {
           const isIsolated = !this.config.parallel || taskCwd !== this.cwd;
           if (isIsolated) {
+            // Clear session ID so the retry never resumes a prior session
+            task.sessionId = undefined;
             try {
               await rollbackToCheckpoint(taskCwd, checkpointSha);
               await log.info(`  Rolled back to checkpoint ${checkpointSha.slice(0, 8)} for clean retry`);
@@ -694,8 +696,6 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
               await log.warn(`  Rollback failed (non-fatal): ${err instanceof Error ? err.message : String(err)}`);
             }
           }
-        } else if (task.sessionId) {
-          await log.info(`  Resuming session ${task.sessionId.slice(0, 8)}… (skipping rollback)`);
         }
 
         this.onEvent({
@@ -729,7 +729,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       const _engineStart = Date.now();
       let _lastOutputMs = Date.now();            // updated on every onOutput chunk
       const _SILENCE_WARN_MS  = 3 * 60 * 1000;  // 3 min no output → warn
-      const _SILENCE_ABORT_MS = 10 * 60 * 1000; // 10 min no output → abort via AbortController
+      const _SILENCE_ABORT_MS = 5 * 60 * 1000;  // 5 min no output → abort via AbortController (was 10 min)
       const _heartbeatId = setInterval(() => {
         const elapsedMs  = Date.now() - _engineStart;
         const silenceMs  = Date.now() - _lastOutputMs;

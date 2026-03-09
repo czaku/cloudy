@@ -11,7 +11,7 @@ import type {
 } from '../core/types.js';
 import { runTypeCheck } from './strategies/type-check.js';
 import { runLintCheck } from './strategies/lint-check.js';
-import { runBuildCheck } from './strategies/build-check.js';
+import { runBuildCheck, detectPlatformBuildNeeds, runIosBuildCheck, runAndroidBuildCheck } from './strategies/build-check.js';
 import { runTestRunner } from './strategies/test-runner.js';
 import { runAiReview } from './strategies/ai-review.js';
 import { runArtifactCheck } from './strategies/artifact-check.js';
@@ -278,6 +278,42 @@ export async function validateTask(
         await log.warn(`  Command "${cmd}" FAILED`);
       } else {
         await log.info(`  Command "${cmd}" passed`);
+      }
+    }
+  }
+
+  // Phase 1c: Auto platform build checks — injected when changed files include .swift or .kt
+  // This is additive: only runs if the equivalent check isn't already in config.commands.
+  if (deterministicPassed) {
+    const changedFilesForBuild = checkpointSha
+      ? await getChangedFiles(cwd, checkpointSha).catch(() => [] as string[])
+      : (task.filesWritten ?? []);
+    const { ios, android } = detectPlatformBuildNeeds(changedFilesForBuild);
+    const existingLabels = config.commands ?? [];
+
+    if (ios) {
+      const iosResult = await runIosBuildCheck(cwd, existingLabels);
+      if (iosResult) {
+        results.push(iosResult);
+        if (!iosResult.passed) {
+          deterministicPassed = false;
+          await log.warn('  iOS auto-build check FAILED');
+        } else {
+          await log.info('  iOS auto-build check passed');
+        }
+      }
+    }
+
+    if (android && deterministicPassed) {
+      const androidResult = await runAndroidBuildCheck(cwd, existingLabels);
+      if (androidResult) {
+        results.push(androidResult);
+        if (!androidResult.passed) {
+          deterministicPassed = false;
+          await log.warn('  Android auto-build check FAILED');
+        } else {
+          await log.info('  Android auto-build check passed');
+        }
       }
     }
   }

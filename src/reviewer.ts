@@ -8,6 +8,8 @@ import { ensureDir, readJson, writeJson } from './utils/fs.js';
 import { CLAWDASH_DIR, CHECKPOINTS_DIR } from './config/defaults.js';
 import { getCurrentRunDir } from './utils/run-dir.js';
 
+const KNOWN_CONVENTIONS_FILE = '.cloudy/known-conventions.json';
+
 export interface ReviewResult {
   verdict: 'PASS' | 'PASS_WITH_NOTES' | 'FAIL';
   summary: string;
@@ -424,7 +426,119 @@ export async function runHolisticReview(
   await ensureDir(runDir);
   await writeJson(path.join(runDir, 'review.json'), result);
 
+  // 11. Track convention violations across phases
+  if (result.conventionViolations.length > 0) {
+    const locations = result.issues
+      .filter((i) => i.severity !== 'minor')
+      .map((i) => i.location ?? '');
+    const recurring = await trackConventionViolations(result.conventionViolations, locations, cwd).catch(() => []);
+    if (recurring.length > 0) {
+      // Promote recurring violations as major issues in the result so they surface to the caller
+      for (const r of recurring) {
+        const alreadyPresent = result.issues.some((i) => i.description.includes(r.pattern.slice(0, 50)));
+        if (!alreadyPresent) {
+          result.issues.push({
+            severity: 'major',
+            description: `Recurring convention violation (${r.seenCount}x): ${r.pattern}`,
+            location: r.locations[r.locations.length - 1],
+          });
+        }
+      }
+    }
+  }
+
   return result;
+}
+
+// ── Convention tracking helpers ──────────────────────────────────────────────
+
+interface KnownConvention {
+  pattern: string;
+  seenCount: number;
+  locations: string[];
+  lastSeen: string;
+}
+
+async function loadKnownConventions(cwd: string): Promise<KnownConvention[]> {
+  try {
+    const raw = await fs.readFile(path.join(cwd, KNOWN_CONVENTIONS_FILE), 'utf-8');
+    return JSON.parse(raw) as KnownConvention[];
+  } catch {
+    return [];
+  }
+}
+
+async function saveKnownConventions(cwd: string, conventions: KnownConvention[]): Promise<void> {
+  const filePath = path.join(cwd, KNOWN_CONVENTIONS_FILE);
+  await fs.mkdir(path.dirname(filePath), { recursive: true });
+  await fs.writeFile(filePath, JSON.stringify(conventions, null, 2), 'utf-8');
+}
+
+/**
+ * Track convention violations across phases.
+ * When a convention pattern appears for the second time, it is promoted to major severity
+ * and returned so callers can surface it in the next phase's planning context.
+ * Returns the list of recurring violations.
+ */
+export async function trackConventionViolations(
+  violations: string[],
+  locations: string[],
+  cwd: string,
+): Promise<KnownConvention[]> {
+  if (violations.length === 0) return [];
+
+  const known = await loadKnownConventions(cwd);
+  const recurring: KnownConvention[] = [];
+  const now = new Date().toISOString();
+
+  for (let i = 0; i < violations.length; i++) {
+    const pattern = violations[i].trim().slice(0, 200);
+    const location = locations[i] ?? '';
+    const existing = known.find((k) => k.pattern === pattern);
+    if (existing) {
+      existing.seenCount++;
+      existing.lastSeen = now;
+      if (location && !existing.locations.includes(location)) {
+        existing.locations.push(location);
+      }
+      if (existing.seenCount >= 2) {
+        recurring.push(existing);
+      }
+    } else {
+      known.push({ pattern, seenCount: 1, locations: location ? [location] : [], lastSeen: now });
+    }
+  }
+
+  await saveKnownConventions(cwd, known);
+  return recurring;
+}
+
+// ── Directory listing helper ─────────────────────────────────────────────────
+
+/**
+ * Get a directory listing for the directory containing the given path.
+ * Returns a compact string like: `ls apple/Sitches/Features/Auth/: WelcomeView.swift ...`
+ */
+async function getDirListingForPath(location: string, cwd: string): Promise<string> {
+  if (!location) return '';
+  // Extract directory from the location string (may be a file path or a description)
+  // Try to find a path-like substring
+  const pathMatch = location.match(/([\w./\-]+\/[\w./\-]+)/);
+  if (!pathMatch) return '';
+
+  const candidate = pathMatch[1];
+  // Walk up to find an existing directory
+  let dirToList = path.dirname(path.join(cwd, candidate));
+  for (let i = 0; i < 3; i++) {
+    try {
+      const entries = await fs.readdir(dirToList);
+      const rel = path.relative(cwd, dirToList);
+      return `ls ${rel || '.'}/ : ${entries.slice(0, 30).join('  ')}`;
+    } catch {
+      dirToList = path.dirname(dirToList);
+    }
+  }
+  return '';
 }
 
 /**
@@ -449,10 +563,19 @@ export async function generateFixTasks(
     return m ? Math.max(max, parseInt(m[0], 10)) : max;
   }, 0);
 
+  // Build directory context for each issue location so the agent doesn't waste time
+  // on path discovery
+  const dirContexts: string[] = [];
+  for (const issue of actionable) {
+    const listing = await getDirListingForPath(issue.location ?? '', cwd).catch(() => '');
+    dirContexts.push(listing);
+  }
+
   const issueList = actionable
-    .map((issue, i) =>
-      `${i + 1}. [${issue.severity.toUpperCase()}] ${issue.description}${issue.location ? ` — at ${issue.location}` : ''}`,
-    )
+    .map((issue, i) => {
+      const dirCtx = dirContexts[i] ? `\n   Directory context: ${dirContexts[i]}` : '';
+      return `${i + 1}. [${issue.severity.toUpperCase()}] ${issue.description}${issue.location ? ` — at ${issue.location}` : ''}${dirCtx}`;
+    })
     .join('\n');
 
   const prompt = `You are creating targeted repair tasks for an automated coding system.
@@ -468,6 +591,7 @@ Rules:
 - outputArtifacts lists only files that the task will create or modify.
 - dependencies: [] (fix tasks run independently after all spec tasks completed).
 - Keep descriptions under 300 chars.
+- Use the directory context provided above to ensure correct file paths — do not guess.
 
 Respond ONLY with valid JSON (no markdown):
 {

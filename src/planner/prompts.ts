@@ -15,6 +15,10 @@ export function buildPlanningPrompt(goal: string, specContent?: string, claudeMd
 
 # Goal
 ${goal}${specSection}${claudeMdSection}${insightsSection}
+# Standing Rules
+
+PRISMA RULE: Any task that modifies \`prisma/schema.prisma\` MUST include \`npx prisma migrate dev --name <descriptive-name>\` as an explicit step. The agent must NEVER create migration files manually. The migration command must run and exit 0. Declare the generated \`backend/prisma/migrations/*_<name>/migration.sql\` as a required artifact.
+
 
 # Instructions
 
