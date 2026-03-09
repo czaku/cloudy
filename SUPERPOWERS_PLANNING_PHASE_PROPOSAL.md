@@ -76,6 +76,8 @@ Identical behaviour — exploration is read-only and never blocks.
 ### Why It Matters
 This is the single highest-leverage fix for task failure at the planning stage. Plans written with real repo knowledge have dramatically more accurate file references and avoid duplicating existing work.
 
+**Ted's take:** Highest-leverage planning improvement by far. But don't use a Haiku call — just run deterministic commands (`find`, read `package.json`/`requirements.txt`, `ls src/`) and inject the raw output as a `# Codebase Snapshot` section. Cheaper, faster, and more reliable than asking an LLM to summarise a repo it hasn't seen. The planner model will interpret the raw listing just fine. Save the LLM call budget for things that actually need reasoning.
+
 ---
 
 ## Item 2 — Baseline Test Run as Pre-Execution Gate
@@ -116,6 +118,8 @@ Capture baseline, log it, continue. Never block.
 ### Config
 Add `testCommand?: string` to `RunConfig` (already partially wired in `src/core/types.ts`). If not set, skip silently.
 
+**Ted's take:** Excellent idea — pre-existing failures burning retries is a real problem we've hit. One concern: some test suites take 5+ minutes. Needs a timeout (e.g. 120s) and a skip-if-slow fallback so baseline capture doesn't delay execution. Also consider caching the baseline per branch — no need to re-run if nothing changed since last capture.
+
 ---
 
 ## Item 3 — Human Approval Checkpoint Before Execution
@@ -153,6 +157,8 @@ The `designRationale` is the output of Item 5 (rationale doc) — they compose n
 
 ### Non-interactive
 Skip the checkpoint entirely, log `[auto-approved: non-interactive mode]`, proceed.
+
+**Ted's take:** Cloudy already displays the plan and has a "Run now?" prompt in interactive mode. This adds more structure, which is fine. But drop the `$EDITOR` JSON editing idea — users will break the JSON and blame cloudy. A simpler "approve / reject / re-plan with feedback" three-option prompt is better. If they reject, let them provide a one-line feedback string that gets appended to the goal for re-planning.
 
 ---
 
@@ -200,6 +206,8 @@ if (task.implementationSteps && task.implementationSteps.length > 0) {
 ### Non-interactive
 No change — steps are injected into the execution prompt regardless.
 
+**Ted's take:** Good idea but the hardcoded 5-step TDD sequence is too rigid. Not every testable task benefits from strict red-green-refactor (e.g. adding a FastAPI endpoint where the test is a smoke-test curl). Make `implementationSteps` planner-generated per task — let the planner decide the steps based on the task type. The planner prompt should say "include implementationSteps when TDD applies" rather than always injecting the same 5 steps.
+
 ---
 
 ## Item 5 — Design Rationale Document
@@ -236,6 +244,8 @@ Prompt: "Given this goal and the plan below, write a 150-word rationale document
 ### Non-interactive
 Generate and write the file, don't display it interactively. Same as interactive.
 
+**Ted's take:** Nice for debugging failed runs. But a separate Haiku call is overkill — just add `"rationale": "..."` as a field on the plan JSON that the planner returns alongside tasks. The planner already reasons about approach when generating tasks; asking it to also output a rationale string costs zero extra LLM calls. Write it to `.cloudy/rationale.md` from the plan JSON after parsing. No new file needed.
+
 ---
 
 ## Item 6 — Sequential Clarifying Questions
@@ -264,6 +274,8 @@ This adds one Haiku call per question (cheap), reduces user friction significant
 
 ### Non-interactive
 Skip all questions, use AI-assumed defaults (already the current behaviour — no change needed).
+
+**Ted's take:** The relevance check per question is smart. But a Haiku call per question adds latency to what should be a fast interactive flow. Consider a simpler heuristic first: if a question mentions a keyword from a previous answer, skip it. No LLM needed. If that proves too crude, upgrade to the Haiku call. Also, cloudy already has `--questions-auto-answering-model` — make sure this composes with it rather than fighting it.
 
 ---
 
@@ -306,6 +318,8 @@ Uses `git worktree add` / `git worktree remove`. Requires git 2.5+.
 ### Non-interactive
 Same as interactive — worktrees are transparent to the execution model.
 
+**Ted's take:** Correctly flagged as highest risk. Three problems: (1) merge conflicts between worktrees need a resolution strategy, (2) worktrees don't share `node_modules` — each needs its own install, which is expensive in time and disk, (3) tasks currently run sequentially so this solves a problem that doesn't exist yet. Deprioritise until parallel task execution is actually shipping. The opt-in `--worktrees` flag is essential — never make this default without extensive validation.
+
 ---
 
 ## Item 8 — Task Granularity Guidance
@@ -335,6 +349,8 @@ Replace the current single-line guidance with this block.
 
 ### Non-interactive
 No change — guidance is baked into the planner prompt.
+
+**Ted's take:** Easy win, ~10 lines. The "single shell command as AC" heuristic is excellent guidance. The sizing rules are well-calibrated. Ship it.
 
 ---
 
@@ -368,6 +384,8 @@ parts.push('- More than 2 mocks in a unit test — if it needs 3 mocks, extract 
 
 ### Non-interactive
 No change — built into the execution prompt.
+
+**Ted's take:** Yes, but merge these into the existing `## Anti-Patterns — Do Not Do These` section rather than creating a separate `## Testing Anti-Patterns` header. Two headers dilutes the impact. Add the testing bullets as additional items under the single anti-patterns block. The "mock returns what you told it" and "tests without assertions" ones are the highest-value — the rest are good but secondary.
 
 ---
 
@@ -421,6 +439,8 @@ if (!isNonInteractive) {
 
 ### Non-interactive
 Skip the brainstorm gate entirely. No approaches are generated, no selection is made. Planner runs as today.
+
+**Ted's take:** Skipped entirely in non-interactive mode, which is ~99% of cloudy usage. For interactive mode, it adds friction to simple tasks — "add a health endpoint" doesn't need 3 candidate approaches. Gate it on complexity: skip brainstorming if the plan has < 3 tasks or the goal is < 20 words. For larger goals it could be valuable, but make it opt-in (`--brainstorm` flag) until proven useful.
 
 ---
 
