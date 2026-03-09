@@ -160,7 +160,7 @@ export const pipelineCommand = new Command('chain')
       try {
         await execa(process.argv[0], [
           cloudyBin,
-          'init',
+          'plan',
           '--spec', path.resolve(cwd, specPath),
           '--no-review',
           '--yes',
