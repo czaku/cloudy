@@ -161,14 +161,12 @@ export function buildExecutionPrompt(
   parts.push('Follow all conventions in the Project Conventions section above exactly.');
   parts.push('');
 
-  // #9 — Anti-pattern catalog (general + testing)
+  // #9 — Anti-pattern catalog (general + testing, merged into one section)
   parts.push('## Anti-Patterns — Do Not Do These');
   parts.push('- "I\'ll verify later" — verify now, before summarising');
   parts.push('- "The tests should pass" — run them and show the actual pass/fail count');
   parts.push('- "I\'ll add that cleanup in a follow-up" — scope = exactly what\'s in the AC');
   parts.push('- "This approach is close enough" — implement exactly what was specified');
-  parts.push('- "The simulator build passes so it should be fine on device" — simulator ≠ device; flag device-specific concerns explicitly');
-  parts.push('- "I\'ll test on the simulator later" — if a build or lint check is available, run it now');
   parts.push('- Mock returns what you told it to return — that tests the mock, not the code; use in-memory DB or temp files for integration tests');
   parts.push('- Tests without assertions — a test that does not assert is not a test');
   parts.push('- `expect(fn()).toBeDefined()` — assert the actual value, not just that something exists');

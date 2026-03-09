@@ -48,19 +48,15 @@ export async function captureTestBaseline(testCommand: string, cwd: string): Pro
   let output = '';
 
   try {
-    const result = await Promise.race([
-      execa(cmd, args, { cwd, reject: false, all: true }),
-      new Promise<never>((_, reject) =>
-        setTimeout(() => { timedOut = true; reject(new Error('baseline timeout')); }, TIMEOUT_MS),
-      ),
-    ]);
+    const result = await execa(cmd, args, { cwd, reject: false, all: true, timeout: TIMEOUT_MS });
     output = result.all ?? result.stdout ?? '';
+    timedOut = result.timedOut ?? false;
   } catch (err) {
-    if (timedOut) {
-      await log.warn(`Test baseline timed out after ${TIMEOUT_MS / 1000}s — proceeding without baseline`);
-    } else {
-      await log.warn(`Test baseline capture failed: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    await log.warn(`Test baseline capture failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  if (timedOut) {
+    await log.warn(`Test baseline timed out after ${TIMEOUT_MS / 1000}s — proceeding without baseline`);
   }
 
   // Extract failing test names from output — look for common failure patterns

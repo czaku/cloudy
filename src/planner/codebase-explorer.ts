@@ -23,7 +23,7 @@ export async function exploreCodebase(cwd: string): Promise<string> {
 
   // ── Directory structure (top 2 levels) ──────────────────────────────────
   try {
-    const { stdout } = await execa('find', ['.', '-maxdepth', '2', '-not', '-path', './.git/*', '-not', '-path', './node_modules/*', '-not', '-path', './.cloudy/*'], {
+    const { stdout } = await execa('find', ['.', '-maxdepth', '2', '-not', '-path', './.git/*', '-not', '-path', './node_modules/*', '-not', '-path', './.cloudy/*', '-not', '-path', './dist/*', '-not', '-path', './.next/*', '-not', '-path', './build/*', '-not', '-path', './__pycache__/*', '-not', '-path', './.venv/*', '-not', '-path', './target/*'], {
       cwd,
       reject: false,
     });
