@@ -5545,9 +5545,13 @@ function HistoryTab({ project }: { project: ProjectStatusSnapshot }) {
             const isScope = entry.name.toLowerCase().startsWith('scope-');
             const duration = fmtDuration(st?.startedAt, st?.completedAt);
             // Show date inline if it differs from group day (undated runs show today's date group)
-            const dateStr = entry.date
-              ? entry.date.slice(5, 10).replace('-', ' ') + ' · ' + entry.date.slice(11)
-              : null; // e.g. "03 09 · 07:27"
+            const dateStr = entry.date ? (() => {
+              const [datePart, timePart] = entry.date.split(' ');
+              const d = new Date(datePart + 'T00:00:00');
+              const day = d.getDate();
+              const month = d.toLocaleString('en-GB', { month: 'short' });
+              return `${day} ${month} · ${timePart}`;
+            })() : null; // e.g. "9 Mar · 07:27"
             return (
               <div key={entry.name} className="history-run-card">
                 <div className="history-run-header" onClick={() => toggleExpand(entry.name)}>
