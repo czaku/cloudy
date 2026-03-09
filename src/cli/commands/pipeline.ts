@@ -169,7 +169,7 @@ export const pipelineCommand = new Command('chain')
         ], {
           stdio: 'inherit',
           cwd,
-          env: { ...process.env, CLOUDY_PLANNING_TIMEOUT_MS: String(planningTimeoutMs) },
+          env: { ...process.env, CLOUDY_PLANNING_TIMEOUT_MS: String(planningTimeoutMs), CLAUDECODE: undefined, CLAUDE_CODE_ENTRYPOINT: undefined },
         });
       } catch (err: any) {
         console.error(c(red, `✖  init failed for phase ${phaseNum}: ${err?.message ?? err}`));
@@ -217,7 +217,7 @@ export const pipelineCommand = new Command('chain')
       // Run the phase
       console.log(c(dim, `    running phase ${phaseNum}…`));
       try {
-        await execa(process.argv[0], runArgs, { stdio: 'inherit', cwd });
+        await execa(process.argv[0], runArgs, { stdio: 'inherit', cwd, env: { ...process.env, CLAUDECODE: undefined, CLAUDE_CODE_ENTRYPOINT: undefined } });
       } catch (err: any) {
         if (err?.signal !== 'SIGTERM') {
           console.error(c(red, `✖  run failed for phase ${phaseNum}: ${err?.message ?? err}`));
@@ -296,7 +296,7 @@ export const pipelineCommand = new Command('chain')
               // Re-run — completed tasks are skipped, only new pending fix tasks execute
               console.log(c(dim, `    re-running with fix tasks…`));
               try {
-                await execa(process.argv[0], runArgs, { stdio: 'inherit', cwd });
+                await execa(process.argv[0], runArgs, { stdio: 'inherit', cwd, env: { ...process.env, CLAUDECODE: undefined, CLAUDE_CODE_ENTRYPOINT: undefined } });
               } catch (err: any) {
                 if (err?.signal !== 'SIGTERM') {
                   // Non-fatal: log but continue pipeline — fixes are best-effort
@@ -342,7 +342,7 @@ export const pipelineCommand = new Command('chain')
                     console.log(c(dim, `    repair pass: injected ${repairTasks.length} task(s)`));
 
                     try {
-                      await execa(process.argv[0], runArgs, { stdio: 'inherit', cwd });
+                      await execa(process.argv[0], runArgs, { stdio: 'inherit', cwd, env: { ...process.env, CLAUDECODE: undefined, CLAUDE_CODE_ENTRYPOINT: undefined } });
                     } catch (repairErr: any) {
                       if (repairErr?.signal !== 'SIGTERM') {
                         console.error(c(red, `    repair run failed: ${repairErr?.message ?? repairErr}`));
