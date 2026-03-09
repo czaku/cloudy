@@ -1,4 +1,4 @@
-export function buildPlanningPrompt(goal: string, specContent?: string, claudeMdContent?: string, runInsights?: string): string {
+export function buildPlanningPrompt(goal: string, specContent?: string, claudeMdContent?: string, runInsights?: string, codebaseSnapshot?: string): string {
   const specSection = specContent
     ? `\n# Specification\n${specContent.slice(0, 120000)}\n\nUse this spec to derive specific tasks and acceptance criteria. Include ALL tasks mentioned in the spec — do not drop or merge tasks unless they are truly trivial.\n`
     : '';
@@ -11,10 +11,14 @@ export function buildPlanningPrompt(goal: string, specContent?: string, claudeMd
     ? `\n# Learnings from Previous Runs\n${runInsights}\n`
     : '';
 
+  const snapshotSection = codebaseSnapshot
+    ? `\n${codebaseSnapshot}\n`
+    : '';
+
   return `You are a software project planner. Decompose the following goal into concrete, ordered implementation tasks.
 
 # Goal
-${goal}${specSection}${claudeMdSection}${insightsSection}
+${goal}${specSection}${claudeMdSection}${insightsSection}${snapshotSection}
 # Standing Rules
 
 PRISMA RULE: Any task that modifies \`prisma/schema.prisma\` MUST include \`npx prisma migrate dev --name <descriptive-name>\` as an explicit step. The agent must NEVER create migration files manually. The migration command must run and exit 0. Declare the generated \`backend/prisma/migrations/*_<name>/migration.sql\` as a required artifact.
@@ -31,7 +35,7 @@ For each task, provide:
 - A short title
 - A concise description (2-3 sentences max) of what to implement and which files to touch. Do NOT reproduce the full spec detail — the executor has access to the full spec.
 - Implementation approach (optional, 1 sentence): if the task involves new logic or a non-obvious implementation choice, state the approach. Otherwise omit.
-- TDD note: if the task produces testable units (functions, endpoints, components), the description should remind the executor to write failing tests first, implement the minimal code to pass them, then commit. Do not add this for tasks that are purely config, migration, or scaffolding with nothing to unit test.
+- implementationSteps (optional array): if the task produces testable units (functions, endpoints, components), provide an ordered list of implementation steps. For TDD tasks this is typically: ["Write failing test(s) for the acceptance criteria", "Run tests — confirm they are red", "Implement the minimum code to pass", "Run tests — confirm they are green"]. For non-TDD tasks (config, migration, scaffolding) omit this field entirely. Tailor the steps to the task type — the goal is to give the executor a clear sequence, not to mandate a fixed template.
 - Specific acceptance criteria — each criterion MUST be one of:
     (a) A shell command that exits 0: e.g. "cd web && bunx tsc --noEmit exits 0"
     (b) A file that must exist with a specific export: e.g. "api/executor/quality_monitor.py exports QualityMonitor class"
@@ -42,6 +46,12 @@ For each task, provide:
 - Context patterns: file glob patterns for existing files that are relevant to the task (e.g. "src/components/Header.tsx", "api/routes/**", "lib/utils/*.ts"). These help the executor understand the codebase context. Use glob syntax where appropriate.
 - outputArtifacts: List key files this task must create. Only include files this task is responsible for creating (not files that already exist). Use exact paths, not globs.
 - timeoutMinutes: Estimate how long this task might take Claude to execute. Use 15 for simple edits, 30 for typical coding tasks, 60 for the largest tasks. Cap at 60 — if a task needs more than 60 minutes it should be split into smaller tasks instead.
+
+Task Sizing Rules:
+- IDEAL: A task whose acceptance criterion is a single shell command (e.g. "tsc --noEmit exits 0"). If you can state the criterion as one command, the task size is right.
+- TOO LARGE: A task that touches more than 3 unrelated files or implements more than one user-facing feature — split it.
+- TOO SMALL: A task that only adds a type alias or renames a variable — merge with a related task.
+- Sweet spot: 15-30 minutes, one clear deliverable, one passing shell command as the criterion.
 
 # Output Format
 
@@ -60,6 +70,7 @@ Respond with ONLY valid JSON (no markdown, no explanation), matching this struct
       "dependencies": [],
       "contextPatterns": ["src/relevant-file.ts", "src/related/**"],
       "outputArtifacts": ["src/auth/routes.ts", "migrations/001_users.ts"],
+      "implementationSteps": ["Write failing test for X", "Run tests — confirm red", "Implement X", "Run tests — confirm green"],
       "timeoutMinutes": 30
     },
     {
@@ -73,6 +84,7 @@ Respond with ONLY valid JSON (no markdown, no explanation), matching this struct
       "timeoutMinutes": 15
     }
   ],
+  "rationale": "One paragraph: approach chosen and why, 1-2 alternatives rejected, key assumptions this plan depends on.",
   "questions": [
     { "type": "select", "text": "Should auth use JWT or session cookies?", "options": ["JWT (stateless)", "Session cookies (stateful)"] },
     { "type": "text", "text": "Which cloud region should S3 buckets target?" },
@@ -116,6 +128,7 @@ export function buildValidationPrompt(
   artifactCheckPassed?: boolean,
   taskOutputArtifacts?: string[],
   commandResults?: Array<{ label: string; passed: boolean; output: string }>,
+  baselineFailures?: string[],
 ): string {
   const fileSection = changedFileSections && changedFileSections.length > 0
     ? `\n# Changed Files (relevant sections)\n${changedFileSections.map(
@@ -154,6 +167,12 @@ export function buildValidationPrompt(
       }\n`
     : '';
 
+  const baselineSection = baselineFailures && baselineFailures.length > 0
+    ? `\n# Pre-existing Test Failures (ignore these — they were failing before this task ran)\n${
+        baselineFailures.map((t) => `- ${t}`).join('\n')
+      }\nDo NOT fail any criterion solely because one of the above tests fails — they were already broken.\n`
+    : '';
+
   return `You are reviewing code changes for the task: "${taskTitle}"
 
 IMPORTANT: Do not trust the implementation's apparent completeness at face value.
@@ -163,7 +182,7 @@ expect to see. If evidence is absent, the criterion is not met.
 
 # Acceptance Criteria
 ${acceptanceCriteria.map((c) => `- ${c}`).join('\n')}
-${responsibilitiesSection}${priorSection}${artifactSection}${commandSection}
+${responsibilitiesSection}${priorSection}${artifactSection}${commandSection}${baselineSection}
 # Git Diff
 \`\`\`
 ${gitDiff}

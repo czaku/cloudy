@@ -525,6 +525,50 @@ Before running `cloudy plan`:
 
 ---
 
+## 🔗 Keel Integration
+
+Cloudy can write run outcomes back to a [keel](https://github.com/czaku/keel) project automatically — updating task status, appending a structured note, and drafting a decision record on failure.
+
+### Flags
+
+```bash
+cloudy run spec.md --keel-slug myproject --keel-task T-007
+```
+
+| Flag | Description |
+|------|-------------|
+| `--keel-slug <slug>` | Keel project slug to write outcomes to |
+| `--keel-task <id>` | Keel task ID to update on completion (e.g. `T-007`) |
+
+### Config (persistent)
+
+```json
+// .cloudy/config.json
+{
+  "keel": {
+    "slug": "myproject",
+    "taskId": "T-007",
+    "port": 7842
+  }
+}
+```
+
+### What gets written
+
+**On success** — sets keel task status to `done`, appends a note:
+```
+Run completed. Tasks: 5 done, 0 failed. Cost: $0.0312. Spec: feature.md.
+```
+
+**On failure** — sets keel task status to `blocked`, appends a note with the top error, and drafts a `proposed` Decision record with the failure context for future reference.
+
+### Requirements
+
+- Keel dashboard running at `http://localhost:7842` (preferred — used automatically when available)
+- Or: `keel` CLI on your PATH (fallback)
+
+---
+
 ## ⚙️ Configuration
 
 Full config reference (`.cloudy/config.json`):
@@ -554,6 +598,11 @@ Full config reference (`.cloudy/config.json`):
   "review": {
     "enabled": true,
     "model": "opus"
+  },
+  "keel": {
+    "slug": "myproject",
+    "taskId": "T-001",
+    "port": 7842
   },
   "dashboard": true,
   "dashboardPort": 3117,

@@ -57,6 +57,7 @@ export interface Task {
   retryHistory?: RetryHistoryEntry[];
   acceptanceCriteriaResults?: AcceptanceCriterionResult[];
   outputArtifacts?: string[]; // file paths that must exist after completion
+  implementationSteps?: string[]; // planner-generated numbered steps (e.g. TDD red-green-refactor)
   parentTaskId?: string;     // set when this task was dynamically created by another task
   requiresApproval?: boolean; // per-task override: require human approval before running
   sessionId?: string;        // SDK session ID from last execution — used for resume on retry
@@ -93,6 +94,8 @@ export interface Plan {
   pipelineContext?: PipelineContext;
   /** Decisions made during planning Q&A (injected into executor context). */
   decisionLog?: DecisionLogEntry[];
+  /** One-paragraph rationale: approach chosen, alternatives rejected, key assumptions. */
+  rationale?: string;
 }
 
 // ── Validation types ─────────────────────────────────────────────────
@@ -188,6 +191,7 @@ export interface CloudyConfig {
   contextBudgetTokens: number;              // max tokens of context to load per task (0 = unlimited)
   contextBudgetMode: 'warn' | 'enforce';    // warn = skip over-budget files; enforce = throw
   preflightCommands: string[];              // shell commands that must exit 0 before first task
+  baselineTestCommand?: string;            // command to capture pre-run test baseline (optional)
   maxCostPerTaskUsd: number;   // abort task if cumulative cost exceeds this (0 = unlimited)
   maxCostPerRunUsd: number;    // abort entire run if cumulative cost exceeds this (0 = unlimited)
   worktrees: boolean;          // use git worktrees for parallel task isolation
@@ -195,6 +199,11 @@ export interface CloudyConfig {
   approval: ApprovalConfig;
   engine: Engine;              // execution engine (always claude-code)
   review: ReviewConfig;        // post-run holistic review configuration
+  keel?: {
+    slug: string
+    taskId?: string
+    port?: number     // default 7842
+  }
 }
 
 // ── State types ──────────────────────────────────────────────────────

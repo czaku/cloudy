@@ -1,6 +1,7 @@
 import type { ClaudeModel, Plan, Task } from '../core/types.js';
 import { runClaude } from '../executor/claude-runner.js';
 import { buildPlanningPrompt } from './prompts.js';
+import { exploreCodebase } from './codebase-explorer.js';
 import { validateDependencyGraph } from './dependency-graph.js';
 import { loadRecentRunInsights } from '../knowledge/run-logger.js';
 import { log } from '../utils/logger.js';
@@ -23,12 +24,14 @@ interface RawTask {
   dependencies: string[];
   contextPatterns?: string[];
   outputArtifacts?: string[];
+  implementationSteps?: string[];
   timeoutMinutes?: number;
 }
 
 interface RawPlan {
   tasks: RawTask[];
   questions?: Array<PlanQuestion | string>;
+  rationale?: string;
 }
 
 /**
@@ -52,7 +55,11 @@ export async function createPlan(
     await log.info('Injecting learnings from previous runs into planning prompt');
   }
 
-  const prompt = buildPlanningPrompt(goal, specContent, claudeMdContent, runInsights);
+  // Deterministic codebase snapshot — runs find/ls/reads package.json, no LLM call
+  await log.info('Exploring codebase for planning context…');
+  const codebaseSnapshot = await exploreCodebase(cwd);
+
+  const prompt = buildPlanningPrompt(goal, specContent, claudeMdContent, runInsights, codebaseSnapshot);
 
   const timeoutMs = Number(process.env['CLOUDY_PLANNING_TIMEOUT_MS']) || 900_000; // 15 min
 
@@ -80,7 +87,7 @@ export async function createPlan(
     throw new Error(`Planning failed: ${result.error}`);
   }
 
-  const { tasks: rawTasks, questions: planQuestions } = parsePlanOutput(result.output);
+  const { tasks: rawTasks, questions: planQuestions, rationale } = parsePlanOutput(result.output);
   let tasks = rawTasks.map(toTask);
 
   const validation = validateDependencyGraph(tasks);
@@ -115,7 +122,20 @@ export async function createPlan(
     tasks,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+    rationale,
   };
+
+  // Write rationale to .cloudy/rationale.md for debugging and transparency
+  if (rationale) {
+    try {
+      await fs.mkdir(path.join(cwd, '.cloudy'), { recursive: true });
+      await fs.writeFile(
+        path.join(cwd, '.cloudy', 'rationale.md'),
+        `# Plan Rationale\n\n${rationale}\n\nGenerated: ${new Date().toISOString()}\n`,
+        'utf8',
+      );
+    } catch { /* non-fatal */ }
+  }
 
   if (planQuestions && planQuestions.length > 0) {
     // Stash questions on the plan temporarily — init.ts will consume them and save decision_log
@@ -484,6 +504,7 @@ function parsePlanOutput(output: string): RawPlan {
     return {
       tasks: parsed.tasks,
       questions,
+      rationale: typeof parsed.rationale === 'string' ? parsed.rationale : undefined,
     };
   } catch (err) {
     throw new Error(
@@ -501,6 +522,7 @@ function toTask(raw: RawTask): Task {
     dependencies: raw.dependencies ?? [],
     contextPatterns: raw.contextPatterns ?? [],
     outputArtifacts: raw.outputArtifacts ?? [],
+    implementationSteps: raw.implementationSteps && raw.implementationSteps.length > 0 ? raw.implementationSteps : undefined,
     status: 'pending',
     retries: 0,
     maxRetries: 2,

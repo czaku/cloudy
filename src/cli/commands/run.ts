@@ -140,6 +140,8 @@ export const runCommand = new Command('run')
   .option('--non-interactive', 'Skip all interactive prompts — requires explicit model flags, exits when run completes')
   .option('--agent-output', 'Emit structured plain-text lines (no ANSI, no emoji) — auto-enabled with --non-interactive')
   .option('--effort <level>', 'Thinking effort for execution tasks: low|medium|high|max (high/max enable extended thinking; max requires opus)')
+  .option('--keel-slug <slug>', 'Keel project slug to write outcomes back to')
+  .option('--keel-task <id>', 'Keel task ID to update on completion')
   .action(
     async (opts: {
       model?: string;
@@ -163,6 +165,8 @@ export const runCommand = new Command('run')
       heartbeatInterval?: number;
       nonInteractive?: boolean;
       agentOutput?: boolean;
+      keelSlug?: string;
+      keelTask?: string;
     }) => {
       const isNonInteractive = opts.nonInteractive || !process.stdout.isTTY;
       const isAgentOutput = opts.agentOutput || isNonInteractive;
@@ -824,7 +828,7 @@ export const runCommand = new Command('run')
                 id: t.id, title: t.title, description: t.description, dependencies: t.dependencies,
               })),
             );
-            const preflightResult = await runClaude({ prompt: preflightPrompt, model: 'haiku', cwd });
+            const preflightResult = await runClaude({ prompt: preflightPrompt, model: 'haiku', cwd, abortSignal: AbortSignal.timeout(30_000) });
             if (preflightResult.success) {
               try {
                 const jsonMatch = preflightResult.output.match(/\{[\s\S]*\}/);
@@ -843,6 +847,12 @@ export const runCommand = new Command('run')
               } catch { /* malformed JSON — skip silently */ }
             }
           } catch { /* non-fatal — preflight failure never blocks execution */ }
+        }
+
+        // Capture test baseline before first task runs so the validator can ignore pre-existing failures
+        if (config.baselineTestCommand && !opts.resume && !opts.retry && !opts.retryFailed) {
+          const { captureTestBaseline } = await import('../../core/baseline.js');
+          await captureTestBaseline(config.baselineTestCommand, cwd);
         }
 
         const pending = freshState.plan.tasks.filter((t) => t.status === 'pending');
@@ -917,6 +927,22 @@ export const runCommand = new Command('run')
 
             // Re-run recovery is now handled automatically inside the orchestrator
 
+            // Keel write-back (success)
+            const keelSlug = opts.keelSlug ?? config.keel?.slug;
+            if (keelSlug) {
+              const { writeRunOutcome } = await import('../../integrations/keel.js');
+              const keelCtx = { slug: keelSlug, taskId: opts.keelTask ?? config.keel?.taskId, port: config.keel?.port ?? 7842 };
+              const tasksDone = freshState.plan!.tasks.filter((t) => t.status === 'completed').length;
+              const tasksFailed = freshState.plan!.tasks.filter((t) => t.status === 'failed').length;
+              await writeRunOutcome(keelCtx, {
+                success: true,
+                tasksDone,
+                tasksFailed,
+                costUsd: freshState.costSummary.totalEstimatedUsd,
+                durationMs: freshState.startedAt ? Date.now() - new Date(freshState.startedAt).getTime() : 0,
+              }, cwd).catch(() => {});
+            }
+
             // #8 — block exit when review says FAIL
             if (config.review.failBlocksRun && lastReviewResult?.verdict === 'FAIL') {
               console.error(c(red + bold, '\n✗  Review verdict: FAIL — exiting with code 1'));
@@ -939,6 +965,23 @@ export const runCommand = new Command('run')
             `\n${c(red, '❌')}  ${c(red + bold, 'orchestration failed:')}  ${errMsg}`,
           );
           void notifyRunFailed(errMsg, config.notifications);
+
+          // Keel write-back (failure)
+          const keelSlug = opts.keelSlug ?? config.keel?.slug;
+          if (keelSlug) {
+            const { writeRunOutcome } = await import('../../integrations/keel.js');
+            const keelCtx = { slug: keelSlug, taskId: opts.keelTask ?? config.keel?.taskId, port: config.keel?.port ?? 7842 };
+            const tasksDone = freshState?.plan?.tasks.filter((t) => t.status === 'completed').length ?? 0;
+            const tasksFailed = freshState?.plan?.tasks.filter((t) => t.status === 'failed').length ?? 0;
+            await writeRunOutcome(keelCtx, {
+              success: false,
+              tasksDone,
+              tasksFailed,
+              topError: errMsg,
+              costUsd: freshState?.costSummary?.totalEstimatedUsd ?? 0,
+              durationMs: freshState?.startedAt ? Date.now() - new Date(freshState.startedAt).getTime() : 0,
+            }, cwd).catch(() => {});
+          }
         }
       }
 

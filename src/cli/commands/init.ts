@@ -404,6 +404,30 @@ export const initCommand = new Command('plan')
         const questionId = `q${qi + 1}`;
         let answer: string | null = null;
 
+        // Sequential Q&A: skip questions whose keywords are already resolved in prior answers.
+        // Avoids asking "which session expiry?" after "use JWT or sessions?" was answered "JWT".
+        // Ted's heuristic: keyword overlap in question text vs. prior answer text — no LLM needed.
+        if (decisionLog.length > 0) {
+          const priorAnswers = decisionLog.map((d) => d.answer.toLowerCase());
+          const questionWords = q.text.toLowerCase().split(/\W+/).filter((w) => w.length > 4);
+          const alreadyCovered = questionWords.some((word) =>
+            priorAnswers.some((ans) => ans.includes(word)),
+          );
+          if (alreadyCovered) {
+            await log.info(`Skipping question ${qi + 1} — keywords already addressed in prior answers`);
+            // Auto-answer with AI assumption so decisionLog stays complete
+            decisionLog.push({
+              questionId,
+              question: q.text,
+              answeredBy: 'agent',
+              answer: `Skipped — context resolved by earlier answers`,
+              reasoning: 'Prior answers already addressed the key decision this question covers.',
+              timestamp: new Date().toISOString(),
+            });
+            continue;
+          }
+        }
+
         // Always show the question so it's visible in logs and CI output
         console.log(`\n  ${c(cyan + bold, `Question ${qi + 1}/${planQuestions.length}:`)}  ${q.text}`);
         if (q.options && q.options.length > 0) {
@@ -560,6 +584,10 @@ Respond with ONLY valid JSON:
 
     // ── Display plan ──────────────────────────────────────────────────────────
     p.note(formatPlanNote(plan), `📋 ${plan.tasks.length} tasks`);
+
+    if (plan.rationale) {
+      console.log(`  ${c(dim, 'Rationale: .cloudy/rationale.md')}`);
+    }
 
     // ── Approval ──────────────────────────────────────────────────────────────
     if (opts.review && !(opts as any).yes && process.stdout.isTTY) {
