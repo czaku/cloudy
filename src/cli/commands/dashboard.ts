@@ -24,11 +24,11 @@ function isCloudyLocalInHosts(): boolean {
 
 export const dashboardCommand = new Command('dashboard')
   .description('Start a persistent dashboard server (no active run required)')
-  .option('--port <n>', 'Dashboard port (default: from config or 3117)', parseInt)
+  .option('--port <n>', 'Dashboard port (default: from config or 1510)', parseInt)
   .action(async (opts: { port?: number }) => {
     const cwd = process.cwd();
     const config = await loadConfig(cwd);
-    const port = opts.port ?? config.dashboardPort ?? 3117;
+    const port = opts.port ?? config.dashboardPort ?? 1510;
 
     // We need a minimal ProjectState to bootstrap the server.
     // The server will serve runs from .cloudy/runs/ dynamically.

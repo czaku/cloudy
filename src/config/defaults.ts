@@ -21,7 +21,7 @@ export const DEFAULT_CONFIG: CloudyConfig = {
   taskTimeoutMs: 3600000, // 1 hour
   autoModelRouting: false,
   dashboard: true,
-  dashboardPort: 3117,
+  dashboardPort: 1510,
   notifications: { desktop: false, sound: true },
   contextBudgetTokens: 60000,
   contextBudgetMode: 'warn',

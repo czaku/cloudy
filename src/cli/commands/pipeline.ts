@@ -136,7 +136,7 @@ export const pipelineCommand = new Command('pipeline')
     console.log('');
 
     // Always open the dashboard in the browser when pipeline starts
-    const dashboardPort = 3117;
+    const dashboardPort = 1510;
     const dashboardUrl = `http://localhost:${dashboardPort}`;
     console.log(`${c(cyan, '🌐')}  ${c(cyanBright + bold, dashboardUrl)}  ${c(dim, '(dashboard — opens in browser)')}`);
     import('open').then(({ default: open }) => open(dashboardUrl)).catch(() => {});
