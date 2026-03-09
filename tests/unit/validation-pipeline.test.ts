@@ -198,7 +198,7 @@ describe('validateTask — two-stage AI review (Phase 2a → 2b)', () => {
     expect(runAiQualityReview).not.toHaveBeenCalled();
   });
 
-  it('Phase 2b failure marks overall report as failed', async () => {
+  it('Phase 2b failure is advisory — overall report still passes', async () => {
     vi.mocked(runAiQualityReview).mockResolvedValueOnce({
       strategy: 'ai-review-quality',
       passed: false,
@@ -206,10 +206,12 @@ describe('validateTask — two-stage AI review (Phase 2a → 2b)', () => {
       durationMs: 200,
     });
     const report = await validateTask({ task: makeTask(), config: ALL_ON, model: 'haiku', cwd: '/tmp' });
-    expect(report.passed).toBe(false);
+    // Phase 2b is advisory — spec-compliant code shouldn't be retried for quality nits
+    expect(report.passed).toBe(true);
     const qualityResult = report.results.find((r) => r.strategy === 'ai-review-quality');
     expect(qualityResult).toBeDefined();
-    expect(qualityResult?.passed).toBe(false);
+    // The result is coerced to passed=true (advisory) but logged as a warning
+    expect(qualityResult?.passed).toBe(true);
   });
 
   it('skips Phase 2b when aiReview is disabled', async () => {

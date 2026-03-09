@@ -491,12 +491,19 @@ export async function validateTask(
         cwd,
         changedFileSections,
       );
-      results.push(qualityResult);
 
       if (!qualityResult.passed) {
-        await log.warn('  Code quality review FAILED');
+        // Phase 2b is advisory — log warnings but don't fail the task.
+        // The code is already spec-compliant (Phase 2a passed). Quality issues
+        // are worth noting but shouldn't trigger a full retry that rewrites
+        // working, spec-compliant code.
+        await log.warn('  Code quality review: issues found (advisory, not blocking)');
+        await log.warn(`  Quality notes: ${qualityResult.output ?? ''}`);
+        // Push as passed=true so it doesn't block — the warning is in the logs
+        results.push({ ...qualityResult, passed: true });
       } else {
         await log.info('  Code quality review passed');
+        results.push(qualityResult);
       }
     } else {
       await log.info('  Code quality review skipped (no source changes)');

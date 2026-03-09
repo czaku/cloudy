@@ -74,6 +74,7 @@ export const pipelineCommand = new Command('chain')
   .option('--task-review-model <model>', 'Per-task validation model')
   .option('--run-review-model <model>', 'Post-phase holistic review model')
   .option('--planning-model <model>', 'Planning model (default: sonnet)')
+  .option('--quality-review-model <model>', 'Model for Phase 2b code quality review (default: same as --task-review-model)')
   .option('--no-auto-fix', 'Disable automatic fix-task generation from review notes')
   .option('--verbose', 'Pass --verbose to each run')
   .option('--heartbeat-interval <seconds>', 'Write status.json every N seconds during each phase', parseInt)
@@ -82,6 +83,7 @@ export const pipelineCommand = new Command('chain')
     spec: string[];
     executionModel?: string;
     taskReviewModel?: string;
+    qualityReviewModel?: string;
     runReviewModel?: string;
     planningModel?: string;
     autoFix?: boolean;
@@ -211,6 +213,7 @@ export const pipelineCommand = new Command('chain')
         '--task-review-model', opts.taskReviewModel!,
         '--run-review-model', opts.runReviewModel!,
       ];
+      if (opts.qualityReviewModel) runArgs.push('--quality-review-model', opts.qualityReviewModel);
       if (opts.verbose) runArgs.push('--verbose');
       if (opts.heartbeatInterval) runArgs.push('--heartbeat-interval', String(opts.heartbeatInterval));
 

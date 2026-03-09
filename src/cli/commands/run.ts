@@ -68,7 +68,7 @@ async function runFinishingWorkflow(cwd: string): Promise<void> {
     if (choice === '1') {
       const uncommitted = await execa('git', ['status', '--porcelain'], { cwd, reject: false });
       if (uncommitted.stdout.trim()) {
-        await execa('git', ['add', '-A'], { cwd });
+        await execa('git', ['add', '-u'], { cwd });  // only tracked files — avoids staging .env, credentials, binaries
         await execa('git', ['commit', '-m', 'chore: wrap up cloudy run'], { cwd });
       }
       await execa('git', ['checkout', baseBranch], { cwd });
@@ -86,8 +86,13 @@ async function runFinishingWorkflow(cwd: string): Promise<void> {
         console.error(c(red, `\n✗  Push failed:\n${pushResult.stderr}`));
         return;
       }
-      // Try gh cli first, fall back to printing the URL
-      const ghResult = await execa('gh', ['pr', 'create', '--fill'], { cwd, reject: false });
+      // Try gh cli — use --title with branch name, body summarises the run
+      const prTitle = currentBranch.replace(/^cloudy\//, '').replace(/-/g, ' ');
+      const ghResult = await execa('gh', [
+        'pr', 'create',
+        '--title', prTitle,
+        '--body', `Automated implementation via cloudy.\n\nBranch: \`${currentBranch}\``,
+      ], { cwd, reject: false });
       if (ghResult.exitCode === 0) {
         console.log(c(green, `\n✓  PR created`));
         console.log(ghResult.stdout.trim());

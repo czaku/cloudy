@@ -89,11 +89,11 @@ describe('daemon spawnCloudyProcess — command/flag compatibility', () => {
     expect(types).toContain('chain');
   });
 
-  it('init spawns use "scope" as the command name', () => {
+  it('init spawns use "plan" as the command name', () => {
     const initCalls = spawnCalls.filter((c) => c.type === 'init');
     expect(initCalls.length).toBeGreaterThanOrEqual(1);
     for (const call of initCalls) {
-      expect(call.commandName).toBe('scope');
+      expect(call.commandName).toBe('plan');
     }
   });
 
