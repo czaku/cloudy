@@ -155,24 +155,20 @@ export function buildExecutionPrompt(
   parts.push('Follow all conventions in the Project Conventions section above exactly.');
   parts.push('');
 
-  // #9 — Anti-pattern catalog (includes mobile-specific patterns)
+  // #9 — Anti-pattern catalog
   parts.push('## Anti-Patterns — Do Not Do These');
   parts.push('- "I\'ll verify later" — verify now, before summarising');
   parts.push('- "The tests should pass" — run them and show the actual pass/fail count');
   parts.push('- "I\'ll add that cleanup in a follow-up" — scope = exactly what\'s in the AC');
   parts.push('- "This approach is close enough" — implement exactly what was specified');
-  parts.push('- "The simulator build passes so it should be fine on device" — simulator ≠ device; if there are device-specific concerns, flag them explicitly');
-  parts.push('- "I\'ll test on the simulator later" — if a build or lint check is available, run it now');
   parts.push('');
 
   parts.push('## Verification Gate (mandatory before claiming done)');
   parts.push('Before summarizing completion, run at least one verification command that proves the work is correct:');
-  parts.push('- TypeScript/JS: `tsc --noEmit` or `bun run typecheck` — show actual error count');
+  parts.push('- TypeScript/JS: `tsc --noEmit` (or project equivalent) — show actual error count');
   parts.push('- Tests added: run the test command — show actual pass/fail count, not "should pass"');
   parts.push('- New endpoints/functions: call them with realistic input — show actual output');
   parts.push('- Python: `python -m py_compile` on changed files');
-  parts.push('- Swift/iOS: `xcodebuild build -scheme <scheme> -destination "generic/platform=iOS Simulator"` or use `simemu build` if available');
-  parts.push('- Kotlin/Android: `./gradlew assembleDebug` or `./gradlew compileDebugKotlin`');
   parts.push('Do NOT summarise completion based on how the code looks. Run a command that proves it works.');
   parts.push('');
 

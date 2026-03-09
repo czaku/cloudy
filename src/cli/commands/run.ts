@@ -824,7 +824,7 @@ export const runCommand = new Command('run')
                 id: t.id, title: t.title, description: t.description, dependencies: t.dependencies,
               })),
             );
-            const preflightResult = await runClaude({ prompt: preflightPrompt, model: 'haiku', cwd, timeout: 30_000 });
+            const preflightResult = await runClaude({ prompt: preflightPrompt, model: 'haiku', cwd });
             if (preflightResult.success) {
               try {
                 const jsonMatch = preflightResult.output.match(/\{[\s\S]*\}/);

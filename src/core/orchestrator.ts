@@ -317,7 +317,11 @@ export class Orchestrator {
         await log.info('Holistic review passed with notes — implementation complete but has minor concerns');
         if ((this.config.review as any)?.doublePass) {
           await log.info('Running second holistic review pass (review.doublePass enabled)');
-          await this.runHolisticReview();
+          const secondResult = await this.runHolisticReview();
+          if (secondResult && secondResult.verdict === 'PASS_WITH_NOTES') {
+            await log.info('Second holistic pass also has notes — accepting (no further passes)');
+          }
+          // Do NOT recurse further — max 2 holistic passes to avoid infinite loops
         }
       }
 
@@ -605,7 +609,6 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       : undefined;
 
     // #5 — Architectural scene-setting: derive where this task fits in the dependency graph
-    const plan = this.state.plan!;
     const depTitles = task.dependencies
       .map((id) => plan.tasks.find((t) => t.id === id)?.title)
       .filter(Boolean) as string[];
