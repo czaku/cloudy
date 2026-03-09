@@ -136,6 +136,7 @@ export const runCommand = new Command('run')
   .option('--run-review-model <model>', 'Model for post-run holistic review (haiku/sonnet/opus)')
   .option('--quality-review-model <model>', 'Model for Phase 2b code quality review (default: same as --task-review-model)')
 
+  .option('--worktrees', 'Isolate each task in its own git worktree (merges back on success, discards on failure)')
   .option('--heartbeat-interval <seconds>', 'Write status.json to run dir every N seconds during execution', parseInt)
   .option('--non-interactive', 'Skip all interactive prompts — requires explicit model flags, exits when run completes')
   .option('--agent-output', 'Emit structured plain-text lines (no ANSI, no emoji) — auto-enabled with --non-interactive')
@@ -165,6 +166,7 @@ export const runCommand = new Command('run')
       heartbeatInterval?: number;
       nonInteractive?: boolean;
       agentOutput?: boolean;
+      worktrees?: boolean;
       keelSlug?: string;
       keelTask?: string;
     }) => {
@@ -304,6 +306,7 @@ export const runCommand = new Command('run')
       if (opts.modelAuto) config.autoModelRouting = true;
       if (opts.parallel) config.parallel = true;
       if (opts.maxParallel) config.maxParallel = opts.maxParallel;
+      if (opts.worktrees) config.worktrees = true;
       if (opts.maxRetries !== undefined) config.maxRetries = opts.maxRetries;
       if (!opts.dashboard) config.dashboard = false; // --no-dashboard for headless CI
 

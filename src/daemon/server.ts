@@ -1292,7 +1292,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         return;
       }
       try {
-        const body = await parseBody(req) as { executionModel?: string; taskReviewModel?: string; runReviewModel?: string; qualityReviewModel?: string; planIds?: string[]; parallel?: boolean; maxParallel?: number; noValidate?: boolean; maxRetries?: number; effort?: string };
+        const body = await parseBody(req) as { executionModel?: string; taskReviewModel?: string; runReviewModel?: string; qualityReviewModel?: string; planIds?: string[]; parallel?: boolean; maxParallel?: number; noValidate?: boolean; maxRetries?: number; effort?: string; worktrees?: boolean };
         const execModel = body.executionModel ?? 'sonnet';
         const taskReviewModel = body.taskReviewModel ?? 'haiku';
         const runReviewModel = body.runReviewModel ?? 'sonnet';
@@ -1304,6 +1304,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         if (body.maxRetries) { extraArgs.push('--max-retries', String(body.maxRetries)); }
         if (body.effort) { extraArgs.push('--effort', body.effort); }
         if (body.qualityReviewModel) { extraArgs.push('--quality-review-model', body.qualityReviewModel); }
+        if (body.worktrees) { extraArgs.push('--worktrees'); }
 
         // planIds is used client-side to identify which plan was queued;
         // execution always goes through cloudy build using the current state.json
@@ -1432,7 +1433,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         return;
       }
       try {
-        const body = await parseBody(req) as { taskId?: string; executionModel?: string; taskReviewModel?: string; runReviewModel?: string; qualityReviewModel?: string; parallel?: boolean; maxParallel?: number; noValidate?: boolean; maxRetries?: number; effort?: string };
+        const body = await parseBody(req) as { taskId?: string; executionModel?: string; taskReviewModel?: string; runReviewModel?: string; qualityReviewModel?: string; parallel?: boolean; maxParallel?: number; noValidate?: boolean; maxRetries?: number; effort?: string; worktrees?: boolean };
         const execModel = body.executionModel ?? 'sonnet';
         const taskReviewModel = body.taskReviewModel ?? 'haiku';
         const runReviewModel = body.runReviewModel ?? 'sonnet';
@@ -1445,6 +1446,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         if (body.maxRetries) { extraArgs.push('--max-retries', String(body.maxRetries)); }
         if (body.effort) { extraArgs.push('--effort', body.effort); }
         if (body.qualityReviewModel) { extraArgs.push('--quality-review-model', body.qualityReviewModel); }
+        if (body.worktrees) { extraArgs.push('--worktrees'); }
 
         spawnCloudyProcess(projectId, meta.path, 'run', [
           'run', '--non-interactive', '--agent-output',

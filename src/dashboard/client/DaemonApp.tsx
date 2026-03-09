@@ -2713,6 +2713,7 @@ function RunTab({ project }: RunTabProps) {
   const [qualityReviewModel, setQualityReviewModel] = useState('');
   const [parallel, setParallel] = useState(false);
   const [maxParallel, setMaxParallel] = useState(3);
+  const [worktrees, setWorktrees] = useState(false);
   const [noValidate, setNoValidate] = useState(false);
   const [maxRetries, setMaxRetries] = useState(3);
   const [effort, setEffort] = useState('');
@@ -2882,13 +2883,13 @@ function RunTab({ project }: RunTabProps) {
   async function handleRetryTask(taskId: string) {
     if (effectivelyRunning) return;
     setViewMode('progress');
-    await apiPost(`/api/projects/${project.id}/retry`, { taskId, executionModel, taskReviewModel, runReviewModel, qualityReviewModel: qualityReviewModel || undefined }).catch(() => {});
+    await apiPost(`/api/projects/${project.id}/retry`, { taskId, executionModel, taskReviewModel, runReviewModel, qualityReviewModel: qualityReviewModel || undefined, worktrees: worktrees || undefined }).catch(() => {});
   }
 
   async function handleRetryFailed() {
     if (effectivelyRunning) return;
     setViewMode('progress');
-    await apiPost(`/api/projects/${project.id}/retry`, { executionModel, taskReviewModel, runReviewModel, qualityReviewModel: qualityReviewModel || undefined }).catch(() => {});
+    await apiPost(`/api/projects/${project.id}/retry`, { executionModel, taskReviewModel, runReviewModel, qualityReviewModel: qualityReviewModel || undefined, worktrees: worktrees || undefined }).catch(() => {});
   }
 
   const chainPlanIds = new Set(chainSteps.map((s) => s.planId));
@@ -2982,6 +2983,7 @@ function RunTab({ project }: RunTabProps) {
       runReviewModel,
       parallel: parallel || undefined,
       maxParallel: parallel ? maxParallel : undefined,
+      worktrees: worktrees || undefined,
       noValidate: noValidate || undefined,
       maxRetries: maxRetries !== 3 ? maxRetries : undefined,
       effort: effort || undefined,
@@ -3129,7 +3131,7 @@ function RunTab({ project }: RunTabProps) {
           <div className="run-stuck-banner">
             <span>⚠ Process ended with tasks still in progress — server will auto-reset on next connect.</span>
             <button className="run-stuck-reset-btn" onClick={async () => {
-              await apiPost(`/api/projects/${project.id}/retry`, { executionModel, taskReviewModel, runReviewModel, qualityReviewModel: qualityReviewModel || undefined }).catch(() => {});
+              await apiPost(`/api/projects/${project.id}/retry`, { executionModel, taskReviewModel, runReviewModel, qualityReviewModel: qualityReviewModel || undefined, worktrees: worktrees || undefined }).catch(() => {});
               setViewMode('progress');
             }}>↺ Retry now</button>
           </div>
@@ -3417,6 +3419,10 @@ function RunTab({ project }: RunTabProps) {
                 {parallel && (
                   <input type="number" min={1} max={8} value={maxParallel} onChange={e => setMaxParallel(Number((e.target as HTMLInputElement).value))} style={{ width: 48 }} />
                 )}
+              </label>
+              <label className="run-advanced-row" title="Each task runs in its own git worktree — merges back on success, discards on failure">
+                <input type="checkbox" checked={worktrees} onChange={e => setWorktrees((e.target as HTMLInputElement).checked)} />
+                <span>Worktree isolation per task</span>
               </label>
               <label className="run-advanced-row">
                 <input type="checkbox" checked={noValidate} onChange={e => setNoValidate((e.target as HTMLInputElement).checked)} />
