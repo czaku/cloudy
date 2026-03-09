@@ -1749,7 +1749,10 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
 
   return new Promise((resolve, reject) => {
     server.on('error', reject);
-    server.listen(port, '0.0.0.0', () => {
+    server.listen(port, '0.0.0.0', async () => {
+      const daemonConfig = await readDaemonConfig();
+      const identity = daemonConfig.identitySlug ?? '';
+
       // ── mDNS advertisement ────────────────────────────────────────────
       const bonjour = new Bonjour();
       const mdnsService = bonjour.publish({
@@ -1760,6 +1763,7 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
           machine: os.hostname(),
           port: String(fedPort),
           version: '0.1.0',
+          identity,
         },
       });
 
@@ -1768,6 +1772,8 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
       const browser = bonjour.find({ type: 'cloudy' }, (service) => {
         const machine: string = (service.txt as Record<string, string>)?.machine ?? service.name;
         if (machine === selfHostname) return; // skip self
+        const peerIdentity: string = (service.txt as Record<string, string>)?.identity ?? '';
+        if (peerIdentity !== identity) return;
         const host = service.addresses?.[0] ?? service.host ?? 'localhost';
         const svcPort: number = service.port;
         const fedUrl = `http://${host}:${svcPort}`;
