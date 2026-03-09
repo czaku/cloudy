@@ -1202,7 +1202,7 @@ circle.traffic-light-active[fill="#f59e0b"] {
 .history-run-name { font-size: 12px; font-weight: 600; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-transform: capitalize; }
 .history-run-meta { display: flex; align-items: center; gap: 6px; margin-top: 2px; font-size: 10px; color: var(--text-muted); }
 .history-run-badge { padding: 1px 6px; border-radius: 8px; font-size: 9px; font-weight: 700; letter-spacing: 0.04em; }
-.history-run-badge.pipeline { background: rgba(167,139,250,0.15); color: #a78bfa; border: 1px solid rgba(167,139,250,0.25); }
+.history-run-badge.chain { background: rgba(167,139,250,0.15); color: #a78bfa; border: 1px solid rgba(167,139,250,0.25); }
 .history-run-toggle { color: var(--text-muted); flex-shrink: 0; }
 .history-run-log { padding: 10px 14px; background: var(--bg-primary); border-top: 1px solid var(--border); font-size: 10px; font-family: 'SF Mono', monospace; color: var(--text-secondary); white-space: pre-wrap; max-height: 300px; overflow-y: auto; word-break: break-all; }
 /* ── Light theme overrides ── */
@@ -1707,7 +1707,7 @@ function ProjectSidebar({ projects, selectedId, onSelect }: ProjectSidebarProps)
               }}>
                 {proj.activeProcess === 'init'     ? '⚡ planning'  :
                proj.activeProcess === 'run'      ? '⚡ running'   :
-               proj.activeProcess === 'pipeline' ? '⚡ pipeline'  :
+               proj.activeProcess === 'chain' ? '⚡ chaining'  :
                proj.status === 'failed'          ? '✗ error'      :
                                                    '○ idle'}
               </span>
@@ -5561,7 +5561,7 @@ function HistoryTab({ project }: { project: ProjectStatusSnapshot }) {
                   <div className="history-run-info">
                     <div className="history-run-name">{entry.spec || entry.name}</div>
                     <div className="history-run-meta">
-                      {entry.isPipeline && <span className="history-run-badge pipeline">chain</span>}
+                      {entry.isPipeline && <span className="history-run-badge chain">chain</span>}
                       {isScope && <span className="history-run-badge" style={{ background: 'rgba(251,191,36,0.15)', color: '#fbbf24', border: '1px solid rgba(251,191,36,0.25)' }}>plan</span>}
                       {dateStr && <span>{dateStr}</span>}
                       {duration && <span>· {duration}</span>}

@@ -327,10 +327,10 @@ export interface ProjectStatusSnapshot {
   activePlan: boolean;
   taskProgress: { done: number; total: number } | null;
   costUsd: number | null;
-  activeProcess: 'init' | 'run' | 'pipeline' | null;
+  activeProcess: 'init' | 'run' | 'chain' | null;
   processes?: Array<{
     id: string;
-    type: 'init' | 'run' | 'pipeline';
+    type: 'init' | 'run' | 'chain';
     specName?: string;
     startedAt: string;
   }>;

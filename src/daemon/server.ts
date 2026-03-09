@@ -270,7 +270,7 @@ function broadcastSse(data: unknown): void {
 
 interface ActiveProcess {
   id: string;          // unique processId (UUID-like)
-  type: 'init' | 'run' | 'pipeline';
+  type: 'init' | 'run' | 'chain';
   child: ChildProcess;
   projectId: string;
   planIds?: string[];
@@ -438,7 +438,7 @@ function getDashboardHtml(bundlePath: string): string {
 function spawnCloudyProcess(
   projectId: string,
   projectPath: string,
-  type: 'init' | 'run' | 'pipeline',
+  type: 'init' | 'run' | 'chain',
   args: string[],
   planName?: string,
   specPaths?: string[],
@@ -1268,11 +1268,11 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       return;
     }
 
-    // POST /api/projects/:id/pipeline
-    if (method === 'POST' && subpath === '/pipeline') {
+    // POST /api/projects/:id/chain
+    if (method === 'POST' && subpath === '/chain') {
       if (!meta) { send404(res); return; }
-      if (!!getRunningProcess(projectId, 'pipeline')) {
-        sendJson(res, 409, { error: 'A pipeline is already running. Stop it first.' });
+      if (!!getRunningProcess(projectId, 'chain')) {
+        sendJson(res, 409, { error: 'A chain is already running. Stop it first.' });
         return;
       }
       try {
@@ -1281,8 +1281,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         for (const sp of body.specPaths ?? []) {
           specArgs.push('--spec', sp);
         }
-        spawnCloudyProcess(projectId, meta.path, 'pipeline', [
-          'pipeline', ...specArgs,
+        spawnCloudyProcess(projectId, meta.path, 'chain', [
+          'chain', ...specArgs,
         ]);
         sendJson(res, 200, { ok: true, started: true });
       } catch (err) {
