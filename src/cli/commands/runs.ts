@@ -83,8 +83,9 @@ async function loadRunSummary(runsDir: string, name: string): Promise<RunSummary
   };
 }
 
-export const runsCommand = new Command('runs')
-  .description('List all cloudy runs for this project')
+export const runsCommand = new Command('history')
+  .alias('runs')
+  .description('List run history for this project')
   .option('--show <name>', 'Show full task breakdown for a specific run')
   .option('--json', 'Output as JSON')
   .action(async (opts: { show?: string; json?: boolean }) => {
@@ -163,7 +164,7 @@ export const runsCommand = new Command('runs')
       }
     }
 
-    console.log(`\n${c(cyan + bold, '☁️  cloudy runs')}  ${c(dim, cwd)}\n`);
+    console.log(`\n${c(cyan + bold, '☁️  cloudy history')}  ${c(dim, cwd)}\n`);
 
     // Pipelines
     for (const [pipelineId, phases] of pipelines) {
