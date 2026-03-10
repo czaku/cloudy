@@ -964,6 +964,18 @@ async function writeDaemonConfig(config: DaemonConfig): Promise<void> {
   await fs.writeFile(DAEMON_CONFIG_FILE, JSON.stringify(config, null, 2) + '\n', 'utf8');
 }
 
+const FED_CONFIG_FILE = path.join(os.homedir(), '.fed', 'config.json');
+
+interface FedConfig { identity?: string | null; tools?: Record<string, { dash: number; fed: number }> }
+
+async function readFedConfig(): Promise<FedConfig | null> {
+  try {
+    return JSON.parse(await fs.readFile(FED_CONFIG_FILE, 'utf8')) as FedConfig;
+  } catch {
+    return null;
+  }
+}
+
 // ── Federation peer registry ──────────────────────────────────────────
 
 const peers = new Map<string, Peer>(); // keyed by machine hostname
@@ -1381,7 +1393,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           '--run-review-model', body.runReviewModel ?? 'sonnet',
         ];
         spawnCloudyProcess(projectId, meta.path, 'chain', [
-          'chain', '--yes', ...specArgs, ...modelArgs,
+          'chain', ...specArgs, ...modelArgs,
         ]);
         sendJson(res, 200, { ok: true, started: true });
       } catch (err) {
@@ -1909,7 +1921,7 @@ async function handleFedRequest(req: http.IncomingMessage, res: http.ServerRespo
       identity: cfg.identity ?? os.hostname(),
       version: '0.1.0',
       port,
-      fedPort: port + 334,
+      fedPort: (await readFedConfig())?.tools?.cloudy?.fed ?? (port + 334),
       platform: process.platform,
       uptime: process.uptime(),
     });
@@ -1967,13 +1979,15 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
     }
   });
 
-  const fedPort = port + 334;
+  const fedCfgForPort = await readFedConfig();
+  const fedPort = fedCfgForPort?.tools?.cloudy?.fed ?? (port + 334);
 
   return new Promise((resolve, reject) => {
     server.on('error', reject);
     server.listen(port, '0.0.0.0', async () => {
       const daemonConfig = await readDaemonConfig();
-      const identity = daemonConfig.identity ?? '';
+      const fedCfg = await readFedConfig().catch(() => null);
+      const identity = fedCfg?.identity ?? daemonConfig.identity ?? '';
 
       // ── Federation (via @vykeai/fed registerTool) ─────────────────────
       const stopFed = await registerTool({
