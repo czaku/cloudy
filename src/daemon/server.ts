@@ -362,14 +362,10 @@ async function getProjectStatus(meta: ProjectMeta): Promise<ProjectStatusSnapsho
       const currentRun = (await fs.readFile(currentFile, 'utf-8')).trim();
       const runDir = path.join(cloudyDir, RUNS_DIR, currentRun);
 
-      // If run dir was modified in the last 5 min and we have no in_progress tasks,
-      // the process is still in planning phase
-      const runDirStat = await fs.stat(runDir).catch(() => null);
-      if (runDirStat) {
-        const ageMs = Date.now() - runDirStat.mtimeMs;
-        if (ageMs < 5 * 60 * 1000 && status === 'idle') {
-          status = 'planning';
-        }
+      // If the run dir exists but has no state.json yet, planning is in progress
+      const hasStateJson = await fs.access(path.join(runDir, 'state.json')).then(() => true).catch(() => false);
+      if (!hasStateJson && status === 'idle') {
+        status = 'planning';
       }
 
       const statusFile = path.join(runDir, 'status.json');
