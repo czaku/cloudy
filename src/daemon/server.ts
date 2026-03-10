@@ -331,55 +331,72 @@ async function getProjectStatus(meta: ProjectMeta): Promise<ProjectStatusSnapsho
   let costUsd: number | null = null;
 
   try {
-    // Check if there's an active plan
-    const stateFile = path.join(cloudyDir, 'state.json');
-    const state = await readJson<{ plan?: { tasks?: Array<{ status: string; completedAt?: string }> }; completedAt?: string; startedAt?: string; costSummary?: { totalEstimatedUsd?: number } }>(stateFile);
+    type StateShape = { plan?: { tasks?: Array<{ status: string }> }; completedAt?: string; costSummary?: { totalEstimatedUsd?: number } };
 
-    if (state?.plan) {
-      activePlan = true;
-      const tasks = state.plan.tasks ?? [];
-      const done = tasks.filter((t) => t.status === 'completed' || t.status === 'skipped').length;
-      const total = tasks.length;
-      if (total > 0) taskProgress = { done, total };
-
-      if (state.costSummary?.totalEstimatedUsd) {
-        costUsd = state.costSummary.totalEstimatedUsd;
-      }
-
-      const inProgress = tasks.some((t) => t.status === 'in_progress');
-      if (inProgress) {
-        status = 'running';
-      } else if (state.completedAt) {
-        const anyFailed = tasks.some((t) => t.status === 'failed');
-        status = anyFailed ? 'failed' : 'completed';
-        lastRunAt = state.completedAt;
-      }
-    }
-
-    // Check current run for heartbeat status + planning detection
+    // Prefer current run's state.json over root state.json — root is stale after pipeline runs
     const currentFile = path.join(cloudyDir, 'current');
+    let currentRunDir: string | null = null;
     try {
       const currentRun = (await fs.readFile(currentFile, 'utf-8')).trim();
-      const runDir = path.join(cloudyDir, RUNS_DIR, currentRun);
+      currentRunDir = path.join(cloudyDir, RUNS_DIR, currentRun);
+    } catch { /* no current pointer */ }
 
-      // If the run dir exists but has no state.json yet, planning is in progress
-      const hasStateJson = await fs.access(path.join(runDir, 'state.json')).then(() => true).catch(() => false);
-      if (!hasStateJson && status === 'idle') {
+    // If current run dir exists but has no state.json yet → still planning
+    if (currentRunDir) {
+      const runStateFile = path.join(currentRunDir, 'state.json');
+      const hasRunState = await fs.access(runStateFile).then(() => true).catch(() => false);
+      if (!hasRunState) {
         status = 'planning';
+      } else {
+        // Use the current run's state.json as the authoritative source
+        const state = await readJson<StateShape>(runStateFile);
+        if (state?.plan) {
+          activePlan = true;
+          const tasks = state.plan.tasks ?? [];
+          const done = tasks.filter((t) => t.status === 'completed' || t.status === 'skipped').length;
+          const total = tasks.length;
+          if (total > 0) taskProgress = { done, total };
+          if (state.costSummary?.totalEstimatedUsd) costUsd = state.costSummary.totalEstimatedUsd;
+          const inProgress = tasks.some((t) => t.status === 'in_progress');
+          if (inProgress) {
+            status = 'running';
+          } else if (state.completedAt) {
+            status = tasks.some((t) => t.status === 'failed') ? 'failed' : 'completed';
+            lastRunAt = state.completedAt;
+          }
+        }
       }
 
-      const statusFile = path.join(runDir, 'status.json');
-      const runStatus = await readJson<{ timestamp?: string; completedTasks?: number; totalTasks?: number; costUsd?: number }>(statusFile);
+      // Heartbeat status.json overrides task-derived status
+      const runStatus = await readJson<{ timestamp?: string; completedTasks?: number; totalTasks?: number; costUsd?: number }>(path.join(currentRunDir, 'status.json'));
       if (runStatus) {
         if (runStatus.completedTasks !== undefined && runStatus.totalTasks !== undefined) {
           taskProgress = { done: runStatus.completedTasks, total: runStatus.totalTasks };
         }
         if (runStatus.costUsd) costUsd = runStatus.costUsd;
         if (runStatus.timestamp) lastRunAt = runStatus.timestamp;
-        // If we have heartbeat data, it's definitely running not just planning
         if (status === 'planning') status = 'running';
       }
-    } catch { /* no current run */ }
+    } else {
+      // No active run — fall back to root state.json for last known status
+      const stateFile = path.join(cloudyDir, 'state.json');
+      const state = await readJson<StateShape>(stateFile);
+      if (state?.plan) {
+        activePlan = true;
+        const tasks = state.plan.tasks ?? [];
+        const done = tasks.filter((t) => t.status === 'completed' || t.status === 'skipped').length;
+        const total = tasks.length;
+        if (total > 0) taskProgress = { done, total };
+        if (state.costSummary?.totalEstimatedUsd) costUsd = state.costSummary.totalEstimatedUsd;
+        const inProgress = tasks.some((t) => t.status === 'in_progress');
+        if (inProgress) {
+          status = 'running';
+        } else if (state.completedAt) {
+          status = tasks.some((t) => t.status === 'failed') ? 'failed' : 'completed';
+          lastRunAt = state.completedAt;
+        }
+      }
+    }
   } catch { /* no state yet */ }
 
   const procs = getProjectProcesses(meta.id);
