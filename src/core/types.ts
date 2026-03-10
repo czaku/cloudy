@@ -334,7 +334,7 @@ export interface ProjectStatusSnapshot {
   id: string;
   name: string;
   path: string;
-  status: 'idle' | 'running' | 'completed' | 'failed';
+  status: 'idle' | 'planning' | 'running' | 'completed' | 'failed';
   lastRunAt: string | null;
   activePlan: boolean;
   taskProgress: { done: number; total: number } | null;

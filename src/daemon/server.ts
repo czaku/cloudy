@@ -356,11 +356,23 @@ async function getProjectStatus(meta: ProjectMeta): Promise<ProjectStatusSnapsho
       }
     }
 
-    // Check current run for heartbeat status
+    // Check current run for heartbeat status + planning detection
     const currentFile = path.join(cloudyDir, 'current');
     try {
       const currentRun = (await fs.readFile(currentFile, 'utf-8')).trim();
-      const statusFile = path.join(cloudyDir, RUNS_DIR, currentRun, 'status.json');
+      const runDir = path.join(cloudyDir, RUNS_DIR, currentRun);
+
+      // If run dir was modified in the last 5 min and we have no in_progress tasks,
+      // the process is still in planning phase
+      const runDirStat = await fs.stat(runDir).catch(() => null);
+      if (runDirStat) {
+        const ageMs = Date.now() - runDirStat.mtimeMs;
+        if (ageMs < 5 * 60 * 1000 && status === 'idle') {
+          status = 'planning';
+        }
+      }
+
+      const statusFile = path.join(runDir, 'status.json');
       const runStatus = await readJson<{ timestamp?: string; completedTasks?: number; totalTasks?: number; costUsd?: number }>(statusFile);
       if (runStatus) {
         if (runStatus.completedTasks !== undefined && runStatus.totalTasks !== undefined) {
@@ -368,6 +380,8 @@ async function getProjectStatus(meta: ProjectMeta): Promise<ProjectStatusSnapsho
         }
         if (runStatus.costUsd) costUsd = runStatus.costUsd;
         if (runStatus.timestamp) lastRunAt = runStatus.timestamp;
+        // If we have heartbeat data, it's definitely running not just planning
+        if (status === 'planning') status = 'running';
       }
     } catch { /* no current run */ }
   } catch { /* no state yet */ }

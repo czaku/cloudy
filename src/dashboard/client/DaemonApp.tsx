@@ -8,7 +8,7 @@ interface ProjectStatusSnapshot {
   id: string;
   name: string;
   path: string;
-  status: 'idle' | 'running' | 'completed' | 'failed';
+  status: 'idle' | 'planning' | 'running' | 'completed' | 'failed';
   lastRunAt: string | null;
   activePlan: boolean;
   taskProgress: { done: number; total: number } | null;
@@ -87,6 +87,7 @@ interface CCSessionStats {
 
 function statusColor(status: ProjectStatusSnapshot['status']): string {
   switch (status) {
+    case 'planning': return '#a78bfa';
     case 'running': return '#e8703a';
     case 'completed': return '#22c55e';
     case 'failed': return '#ef4444';
@@ -95,6 +96,7 @@ function statusColor(status: ProjectStatusSnapshot['status']): string {
 }
 
 function statusLabel(snap: ProjectStatusSnapshot): string {
+  if (snap.status === 'planning') return '⟳ planning';
   if (snap.activeProcess) return snap.activeProcess;
   return snap.status;
 }
