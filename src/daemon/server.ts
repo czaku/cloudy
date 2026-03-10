@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { startFedServer, startMdnsAdvertising, startMdnsBrowsing, type Peer } from '@vykeai/fed';
+import { registerTool, discoverTools as fedDiscoverTools, type Peer } from '@vykeai/fed';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -1936,12 +1936,16 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
       const daemonConfig = await readDaemonConfig();
       const identity = daemonConfig.identity ?? '';
 
-      // ── Federation server (via @vykeai/fed) ───────────────────────────
-      const fedServer = await startFedServer({
+      // ── Federation (via @vykeai/fed registerTool) ─────────────────────
+      const stopFed = await registerTool({
+        name: 'cloudy',
+        displayName: 'Cloudy',
+        port,
+        fedPort,
         identity,
-        port: fedPort,
         version: '0.1.0',
-        service: 'cloudy',
+        capabilities: ['projects', 'runs'],
+        getInfo: async () => ({ projectCount: (await listProjects().catch(() => [])).length }),
         getRuns: async () => {
           const projects = await listProjects().catch(() => [] as ProjectMeta[]);
           return Promise.all(
@@ -1958,6 +1962,13 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
         },
       });
 
+      // ── mDNS peer discovery ───────────────────────────────────────────
+      const stopBrowsing = fedDiscoverTools(
+        identity,
+        (peer: Peer) => { peers.set(peer.machine, peer); },
+        (name: string) => { peers.delete(name); },
+      );
+
       // ── Register with keel daemon ─────────────────────────────────────
       const keelSocket = process.env.HOME + '/.keel.sock';
       try {
@@ -1970,20 +1981,9 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
         sock.on('error', () => { /* keel daemon not running — silent */ });
       } catch { /* ignore */ }
 
-      // ── mDNS advertisement ────────────────────────────────────────────
-      startMdnsAdvertising({ identity, port: fedPort, service: 'cloudy', version: '0.1.0' });
-
-      // ── mDNS peer discovery ───────────────────────────────────────────
-      const stopBrowsing = startMdnsBrowsing(
-        'cloudy',
-        (peer: Peer) => { peers.set(peer.machine, peer); },
-        (name: string) => { peers.delete(name); },
-        identity,
-      );
-
       const mdnsCleanup = () => {
         stopBrowsing();
-        fedServer.close();
+        stopFed();
       };
       process.on('SIGTERM', mdnsCleanup);
       process.on('SIGINT', mdnsCleanup);
