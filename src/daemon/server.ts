@@ -1363,13 +1363,25 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         return;
       }
       try {
-        const body = await parseBody(req) as { specPaths?: string[] };
+        const body = await parseBody(req) as {
+          specPaths?: string[];
+          executionModel?: string;
+          planningModel?: string;
+          taskReviewModel?: string;
+          runReviewModel?: string;
+        };
         const specArgs: string[] = [];
         for (const sp of body.specPaths ?? []) {
           specArgs.push('--spec', sp);
         }
+        const modelArgs: string[] = [
+          '--execution-model', body.executionModel ?? 'sonnet',
+          '--planning-model', body.planningModel ?? 'sonnet',
+          '--task-review-model', body.taskReviewModel ?? 'haiku',
+          '--run-review-model', body.runReviewModel ?? 'sonnet',
+        ];
         spawnCloudyProcess(projectId, meta.path, 'chain', [
-          'chain', ...specArgs,
+          'chain', '--yes', ...specArgs, ...modelArgs,
         ]);
         sendJson(res, 200, { ok: true, started: true });
       } catch (err) {
