@@ -1,4 +1,4 @@
-import { select, type RunOptions, type FnHook } from 'omnai';
+import { select, type RunOptions, type FnHook, type ThinkingLevel } from 'omnai';
 import type { ClaudeModel, ClaudeRunResult, TokenUsage } from '../core/types.js';
 import { resolveModelId } from '../config/model-config.js';
 
@@ -26,6 +26,11 @@ export interface ClaudeRunOptions {
    *   max    → max thinking (Opus 4.6 only)
    */
   effort?: 'low' | 'medium' | 'high' | 'max';
+  /**
+   * Explicit thinking level. Overrides the budget implied by `effort`.
+   * off | minimal | low | medium | high | xhigh
+   */
+  thinking?: ThinkingLevel;
 }
 
 // ── Dangerous command guard ──────────────────────────────────────────────────
@@ -47,6 +52,7 @@ export async function runClaude(
     resumeSessionId,
     maxBudgetUsd,
     effort,
+    thinking,
   } = options;
 
   const runner = await select({ provider: 'claude' });
@@ -113,6 +119,7 @@ export async function runClaude(
     resumeSessionId,
     maxBudgetUsd,
     effort,
+    thinking,
     hooks: {
       PostToolUse: [{ matcher: '.*', hooks: [postToolUseHook] }],
       PreToolUse: [{ matcher: 'Bash', hooks: [preToolUseHook] }],

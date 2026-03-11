@@ -1,5 +1,6 @@
 import type { ClaudeModel, ClaudeRunResult } from '../core/types.js';
 import { runClaude } from './claude-runner.js';
+import type { ThinkingLevel } from 'omnai';
 
 export interface EngineRunOptions {
   prompt: string;
@@ -14,6 +15,7 @@ export interface EngineRunOptions {
   resumeSessionId?: string;
   maxBudgetUsd?: number;
   effort?: 'low' | 'medium' | 'high' | 'max';
+  thinking?: ThinkingLevel;
 }
 
 export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunResult> {
@@ -29,6 +31,7 @@ export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunRes
     resumeSessionId,
     maxBudgetUsd,
     effort,
+    thinking,
   } = options;
 
   return runClaude({
@@ -43,5 +46,6 @@ export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunRes
     resumeSessionId,
     maxBudgetUsd,
     effort,
+    thinking,
   });
 }
