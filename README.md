@@ -49,6 +49,37 @@ cloudy run --goal "add user authentication with JWT"
 
 ---
 
+## 🔗 Running from inside a Claude Code session
+
+If you invoke `cloudy` from within an active Claude Code session (e.g. via a Bash tool call), the `claude` subprocess will refuse to launch because it inherits the `CLAUDECODE` env var and detects a nested session.
+
+**Fix — unset both vars before running:**
+
+```bash
+env -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT cloudy run --spec your-spec.md --model sonnet
+```
+
+Or unset them for the whole shell before running multiple commands:
+
+```bash
+unset CLAUDECODE
+unset CLAUDE_CODE_ENTRYPOINT
+cloudy plan --spec your-spec.md --model haiku
+cloudy run --model sonnet
+```
+
+**Other flags relevant to non-interactive / scripted use:**
+
+| Flag | Notes |
+|------|-------|
+| `--model <m>` | Pre-selects model, skips interactive radio prompt |
+| `--no-dashboard` | Don't open the web UI at `http://localhost:1510` |
+| `--ni` / `--non-interactive` | Skip all TTY prompts |
+
+The cloudy daemon already strips `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` automatically when spawning subprocesses — this only affects manual `cloudy` CLI invocations from inside a Claude Code session.
+
+---
+
 ## 📦 Install
 
 ### One-liner
