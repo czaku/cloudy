@@ -160,6 +160,10 @@ export function buildExecutionPrompt(
   parts.push('Do NOT explain what you will do - just do it. Write the actual code.');
   parts.push('Follow all conventions in the Project Conventions section above exactly.');
   parts.push('');
+  parts.push('**CRITICAL — File paths:** Always write files using RELATIVE paths (e.g. `src/Foo.swift`, `StrikeThePose/Bar.ts`).');
+  parts.push('NEVER use absolute paths starting with `/Users/`, `/home/`, or `~/`.');
+  parts.push('Your working directory is the project root. Relative paths resolve correctly from it.');
+  parts.push('');
 
   // #9 — Anti-pattern catalog (general + testing, merged into one section)
   parts.push('## Anti-Patterns — Do Not Do These');

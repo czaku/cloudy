@@ -100,8 +100,45 @@ export async function runClaude(
     return {};
   };
 
+  // Derive the main repo path from the worktree cwd, if applicable.
+  // Worktree path shape: {mainRepo}/.cloudy/worktrees/{taskId}
+  const clawdashIdx = cwd.indexOf('/.cloudy/worktrees/');
+  const mainRepoCwd = clawdashIdx !== -1 ? cwd.slice(0, clawdashIdx) : null;
+
   const preToolUseHook: FnHook = async (input) => {
-    const cmd = ((input as any).tool_input?.command as string | undefined) ?? '';
+    const h = input as any;
+    const toolName: string = h.tool_name ?? '';
+    const ti = h.tool_input ?? {};
+
+    // Redirect absolute paths that land in the main repo instead of the worktree.
+    // This happens when Claude ignores the relative-path instruction and uses
+    // absolute paths it learned from CLAUDE.md or prior context.
+    if (mainRepoCwd && /^(Write|Edit|MultiEdit|NotebookEdit)$/.test(toolName)) {
+      const redirectPath = (filePath: unknown): string | null => {
+        if (typeof filePath !== 'string') return null;
+        // Path is inside the main repo but outside the worktree → redirect
+        if (
+          filePath.startsWith(mainRepoCwd + '/') &&
+          !filePath.startsWith(cwd + '/')
+        ) {
+          return cwd + filePath.slice(mainRepoCwd.length);
+        }
+        return null;
+      };
+
+      const redirected = redirectPath(ti.file_path);
+      if (redirected) {
+        ti.file_path = redirected;
+      }
+      if (Array.isArray(ti.edits)) {
+        for (const edit of ti.edits) {
+          const r = redirectPath(edit?.file_path);
+          if (r) edit.file_path = r;
+        }
+      }
+    }
+
+    const cmd = (ti?.command as string | undefined) ?? '';
     if (DANGEROUS_BASH_RE.test(cmd)) {
       return {
         decision: 'block' as const,
