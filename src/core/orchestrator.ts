@@ -1181,6 +1181,10 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
 
       this.onEvent({ type: 'validation_result', taskId: task.id, report, criteriaResults: task.acceptanceCriteriaResults });
 
+      if (report.passed && !process.stdout.isTTY) {
+        process.stdout.write(`CLOUDY_TASK_VALIDATED:${JSON.stringify({ taskId: task.id, title: task.title })}\n`);
+      }
+
       // Do NOT check this.aborted here — if validation already passed we must
       // save the completed state so the task isn't left as in_progress on the
       // next run.  Abort is checked before starting new tasks, not after a task
