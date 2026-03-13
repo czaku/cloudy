@@ -9,8 +9,9 @@ import {
   STATE_VERSION,
   DEFAULT_CONFIG,
 } from '../config/defaults.js';
-import { ensureDir, readJson, writeJson } from '../utils/fs.js';
+import { ensureDir, readJson, writeJson, fileExists } from '../utils/fs.js';
 import { getCurrentRunDir } from '../utils/run-dir.js';
+import { EventStore } from './event-store.js';
 
 // ── Run name generation ───────────────────────────────────────────────
 
@@ -65,9 +66,16 @@ export async function createRunDir(cwd: string, runName: string): Promise<string
 
 // ── State path (uses current run dir) ────────────────────────────────
 
+const EVENTS_FILE = 'events.jsonl';
+
 async function statePath(cwd: string): Promise<string> {
   const runDir = await getCurrentRunDir(cwd);
   return path.join(runDir, STATE_FILE);
+}
+
+async function eventsPath(cwd: string): Promise<string> {
+  const runDir = await getCurrentRunDir(cwd);
+  return path.join(runDir, EVENTS_FILE);
 }
 
 // ── Cost summary ──────────────────────────────────────────────────────
@@ -94,6 +102,12 @@ export function createInitialState(config?: CloudyConfig): ProjectState {
 }
 
 export async function loadState(cwd: string): Promise<ProjectState | null> {
+  const ePath = await eventsPath(cwd);
+  if (await fileExists(ePath)) {
+    const baseState = (await readJson<ProjectState>(await statePath(cwd))) ?? createInitialState();
+    const store = new EventStore(baseState, ePath);
+    return store.replay();
+  }
   return readJson<ProjectState>(await statePath(cwd));
 }
 
@@ -105,6 +119,10 @@ export async function saveState(
   await ensureDir(path.dirname(p));
   state.version = STATE_VERSION;
   await writeJson(p, state);
+}
+
+export function getEventsPath(cwd: string): Promise<string> {
+  return eventsPath(cwd);
 }
 
 export async function loadOrCreateState(

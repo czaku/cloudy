@@ -3,7 +3,7 @@ import path from 'node:path';
 import { Command } from 'commander';
 import * as p from '@clack/prompts';
 import { loadConfig } from '../../config/config.js';
-import { select } from 'omnai';
+import { selectViaDaemon } from 'omnai';
 import { createStreamFormatter } from '../../utils/stream-formatter.js';
 import type { ApprovalRequest, ApprovalAction } from '../../core/approval.js';
 import { mergeModelConfig, parseModelFlag } from '../../config/model-config.js';
@@ -207,7 +207,7 @@ export const runCommand = new Command('run')
 
       // Verify a claude engine is available before doing anything else
       try {
-        await select({ provider: 'claude' });
+        await selectViaDaemon({ provider: 'claude' });
       } catch (err) {
         console.error(c(red, `✖  ${err instanceof Error ? err.message : String(err)}`));
         process.exit(1);

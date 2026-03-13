@@ -1,4 +1,4 @@
-import { select, type RunOptions, type FnHook, type ThinkingLevel } from 'omnai';
+import { selectViaDaemon, type RunOptions, type FnHook, type ThinkingLevel } from 'omnai';
 import type { ClaudeModel, ClaudeRunResult, TokenUsage } from '../core/types.js';
 import { resolveModelId } from '../config/model-config.js';
 
@@ -55,7 +55,7 @@ export async function runClaude(
     thinking,
   } = options;
 
-  const runner = await select({ provider: 'claude' });
+  const runner = await selectViaDaemon({ provider: 'claude' });
 
   const filesWritten: string[] = [];
 
