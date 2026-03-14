@@ -1,0 +1,38 @@
+sentinel: "1.0"
+project: cloudy
+version: "0.1.0"
+
+quality:
+  tests: npx vitest run
+  typecheck: npx tsc --noEmit
+  commit-format: "^(feat|fix|chore|docs|refactor|test):"
+  require-pushed: true
+  include:
+    - "src/**/*.{ts,tsx}"
+  exclude:
+    - "node_modules/**"
+    - "dist/**"
+    - "*.test.*"
+    - "*.spec.*"
+  banned-patterns:
+    - pattern: "as any"
+      severity: error
+      message: "Type safety bypass: as any"
+    - pattern: "@ts-ignore"
+      severity: error
+      message: "Type safety bypass: @ts-ignore"
+    - pattern: "@ts-nocheck"
+      severity: error
+      message: "Type safety bypass: @ts-nocheck"
+    - pattern: "TODO: implement"
+      severity: error
+      message: "Stub code: TODO implement"
+    - pattern: "NotImplementedError"
+      severity: error
+      message: "Stub code: NotImplementedError"
+    - pattern: "process.exit"
+      severity: warning
+      message: "Prefer throwing errors over process.exit in library code"
+    - pattern: "console.log"
+      severity: warning
+      message: "Debug logging — use stderr for CLI output"
