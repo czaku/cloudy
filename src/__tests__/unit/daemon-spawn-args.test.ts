@@ -75,6 +75,10 @@ async function parseSpawnCalls(): Promise<SpawnCall[]> {
   return calls;
 }
 
+async function readServerSource(): Promise<string> {
+  return fs.readFile(SERVER_PATH, 'utf-8');
+}
+
 describe('daemon spawnCloudyProcess — command/flag compatibility', () => {
   let spawnCalls: SpawnCall[];
 
@@ -168,5 +172,34 @@ describe('daemon spawnCloudyProcess — init spawn flags', () => {
     for (const call of initCalls) {
       expect(call.args).not.toContain('--yes');
     }
+  });
+});
+
+describe('daemon server runtime flag forwarding', () => {
+  let source: string;
+
+  beforeAll(async () => {
+    source = await readServerSource();
+  });
+
+  it('forwards planning runtime flags for daemon planning requests', () => {
+    expect(source).toContain('--planning-engine');
+    expect(source).toContain('--planning-provider');
+    expect(source).toContain('--planning-model-id');
+  });
+
+  it('forwards execution runtime flags for daemon run and retry requests', () => {
+    expect(source).toContain('--engine');
+    expect(source).toContain('--provider');
+    expect(source).toContain('--execution-model-id');
+  });
+
+  it('forwards validation and review runtime flags for run and chain requests', () => {
+    expect(source).toContain('--validation-engine');
+    expect(source).toContain('--validation-provider');
+    expect(source).toContain('--validation-model-id');
+    expect(source).toContain('--review-engine');
+    expect(source).toContain('--review-provider');
+    expect(source).toContain('--review-model-id');
   });
 });

@@ -1,11 +1,14 @@
-import type { ClaudeModel, ClaudeRunResult } from '../core/types.js';
-import { runClaude } from './claude-runner.js';
+import type { ClaudeModel, ClaudeRunResult, Engine, Provider } from '../core/types.js';
+import { runModel } from './model-runner.js';
 import type { ThinkingLevel } from 'omnai';
+import { resolveModelId } from '../config/model-config.js';
 
 export interface EngineRunOptions {
   prompt: string;
-  engine?: string;
+  engine?: Engine;
+  provider?: Provider;
   claudeModel?: ClaudeModel;
+  modelId?: string;
   cwd: string;
   onOutput?: (text: string) => void;
   onToolUse?: (toolName: string, toolInput: unknown) => void;
@@ -21,7 +24,10 @@ export interface EngineRunOptions {
 export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunResult> {
   const {
     prompt,
+    engine,
+    provider,
     claudeModel,
+    modelId,
     cwd,
     onOutput,
     onToolUse,
@@ -34,9 +40,16 @@ export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunRes
     thinking,
   } = options;
 
-  return runClaude({
+  const resolvedModelId =
+    engine === 'claude-code' || !engine
+      ? resolveModelId(claudeModel ?? 'sonnet')
+      : modelId;
+
+  return runModel({
     prompt,
-    model: claudeModel ?? 'sonnet',
+    engine: engine ?? 'claude-code',
+    provider,
+    modelId: resolvedModelId,
     cwd,
     onOutput,
     onToolUse,

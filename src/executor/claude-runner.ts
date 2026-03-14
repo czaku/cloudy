@@ -1,5 +1,5 @@
 import { selectViaDaemon, type RunOptions, type FnHook, type ThinkingLevel } from 'omnai';
-import type { ClaudeModel, ClaudeRunResult, TokenUsage } from '../core/types.js';
+import type { ClaudeModel, ClaudeRunResult, Engine, Provider, TokenUsage } from '../core/types.js';
 import { resolveModelId } from '../config/model-config.js';
 
 export interface ClaudeRunOptions {
@@ -33,17 +33,61 @@ export interface ClaudeRunOptions {
   thinking?: ThinkingLevel;
 }
 
+export type ModelRunOptions = ClaudeRunOptions;
+
+export interface AbstractModelRunOptions extends ClaudeRunOptions {
+  engine?: Engine;
+  provider?: Provider;
+  modelId?: string;
+  taskType?: 'coding' | 'analysis' | 'planning' | 'review' | 'chat' | 'research';
+}
+
+export interface OmnaiRunOptions {
+  prompt: string;
+  cwd: string;
+  engine?: Engine;
+  provider?: Provider;
+  modelId?: string;
+  onOutput?: (text: string) => void;
+  onToolUse?: (toolName: string, toolInput: unknown) => void;
+  onFilesWritten?: (paths: string[]) => void;
+  onToolResult?: (toolName: string, content: string, isError: boolean) => void;
+  abortSignal?: AbortSignal;
+  resumeSessionId?: string;
+  maxBudgetUsd?: number;
+  effort?: 'low' | 'medium' | 'high' | 'max';
+  thinking?: ThinkingLevel;
+  taskType?: 'coding' | 'analysis' | 'planning' | 'review' | 'chat' | 'research';
+}
+
 // ── Dangerous command guard ──────────────────────────────────────────────────
 const DANGEROUS_BASH_RE =
   /rm\s+-[a-z]*r[a-z]*f\s+\/(?!tmp|Users|home|var\/folders)|dd\s+if=\/dev\/zero\s+of=\/dev\/|mkfs\.\w+\s+\/dev\/[a-z]+$/i;
 
-export async function runClaude(
-  options: ClaudeRunOptions,
-): Promise<ClaudeRunResult> {
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function rewritePromptForWorktree(prompt: string, cwd: string): string {
+  const worktreeMarker = '/.cloudy/worktrees/';
+  const markerIndex = cwd.indexOf(worktreeMarker);
+  if (markerIndex === -1) return prompt;
+
+  const mainRepoCwd = cwd.slice(0, markerIndex);
+  const escapedMainRepo = escapeRegExp(mainRepoCwd);
+
+  return prompt
+    .replace(new RegExp(`\\bcd\\s+${escapedMainRepo}(?=\\s|$)`, 'g'), 'cd .')
+    .replace(new RegExp(`${escapedMainRepo}/`, 'g'), '');
+}
+
+export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResult> {
   const {
     prompt,
-    model,
     cwd,
+    engine,
+    provider,
+    modelId,
     onOutput,
     onToolUse,
     onFilesWritten,
@@ -53,14 +97,20 @@ export async function runClaude(
     maxBudgetUsd,
     effort,
     thinking,
+    taskType,
   } = options;
 
-  const runner = await selectViaDaemon({ provider: 'claude' });
+  const runner = await selectViaDaemon({
+    provider,
+    engine,
+    taskType: taskType ?? 'coding',
+  });
+  const rewrittenPrompt = rewritePromptForWorktree(prompt, cwd);
 
   const filesWritten: string[] = [];
 
   // Build function hooks for file tracking, tool result forwarding, and dangerous command blocking
-  const postToolUseHook: FnHook = async (input) => {
+  const postToolUseHook: FnHook = async (input: unknown) => {
     const h = input as any;
     const ti = h.tool_input ?? {};
     const toolName: string = h.tool_name ?? '';
@@ -105,7 +155,7 @@ export async function runClaude(
   const clawdashIdx = cwd.indexOf('/.cloudy/worktrees/');
   const mainRepoCwd = clawdashIdx !== -1 ? cwd.slice(0, clawdashIdx) : null;
 
-  const preToolUseHook: FnHook = async (input) => {
+  const preToolUseHook: FnHook = async (input: unknown) => {
     const h = input as any;
     const toolName: string = h.tool_name ?? '';
     const ti = h.tool_input ?? {};
@@ -150,18 +200,21 @@ export async function runClaude(
 
   const runOpts: RunOptions = {
     cwd,
-    model: resolveModelId(model),
+    model: modelId,
     permissionMode: 'bypass',
     abortSignal,
     resumeSessionId,
     maxBudgetUsd,
     effort,
     thinking,
-    hooks: {
+  };
+
+  if (runner.engine === 'claude-code') {
+    runOpts.hooks = {
       PostToolUse: [{ matcher: '.*', hooks: [postToolUseHook] }],
       PreToolUse: [{ matcher: 'Bash', hooks: [preToolUseHook] }],
-    },
-  };
+    };
+  }
 
   let output = '';
   let sessionId: string | undefined;
@@ -177,7 +230,7 @@ export async function runClaude(
   };
 
   try {
-    for await (const event of runner.run(prompt, runOpts)) {
+    for await (const event of runner.run(rewrittenPrompt, runOpts)) {
       if (event.type === 'text') {
         onOutput?.(event.content);
 
@@ -230,3 +283,42 @@ export async function runClaude(
     filesWritten: filesWritten.length > 0 ? filesWritten : undefined,
   };
 }
+
+export const runModel = runOmnai;
+export { rewritePromptForWorktree };
+
+export async function runClaude(
+  options: ClaudeRunOptions,
+): Promise<ClaudeRunResult> {
+  return runAbstractModel(options);
+}
+
+export async function runAbstractModel(
+  options: AbstractModelRunOptions,
+): Promise<ClaudeRunResult> {
+  const resolvedModelId =
+    options.modelId ??
+    ((options.engine === 'claude-code' || !options.engine)
+      ? resolveModelId(options.model)
+      : undefined);
+
+  return runOmnai({
+    prompt: options.prompt,
+    cwd: options.cwd,
+    engine: options.engine ?? 'claude-code',
+    provider: options.provider ?? 'claude',
+    modelId: resolvedModelId,
+    onOutput: options.onOutput,
+    onToolUse: options.onToolUse,
+    onFilesWritten: options.onFilesWritten,
+    onToolResult: options.onToolResult,
+    abortSignal: options.abortSignal,
+    resumeSessionId: options.resumeSessionId,
+    maxBudgetUsd: options.maxBudgetUsd,
+    effort: options.effort,
+    thinking: options.thinking,
+    taskType: options.taskType,
+  });
+}
+
+export const runPhaseModel = runAbstractModel;

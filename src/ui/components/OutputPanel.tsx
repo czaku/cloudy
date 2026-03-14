@@ -2,6 +2,17 @@ import React from 'react';
 import { Box, Text } from 'ink';
 import type { Task } from '../../core/types.js';
 
+function formatEngineBadge(engine?: string): string | null {
+  if (!engine) return null;
+  switch (engine) {
+    case 'claude-code': return 'cc';
+    case 'codex': return 'codex';
+    case 'pi-mono': return 'pi';
+    case 'copilot': return 'gh';
+    default: return engine;
+  }
+}
+
 interface OutputPanelProps {
   task: Task | null;
   lines: string[];
@@ -35,7 +46,7 @@ export function OutputPanel({
     );
   }
 
-  const engineBadge = engine ? 'claude-code' : null;
+  const engineBadge = formatEngineBadge(engine);
   const engineColor = 'cyan';
 
   const statusColor =

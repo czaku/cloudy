@@ -48,6 +48,21 @@ export const configCommand = new Command('config')
         }
       } else if (key === 'contextBudgetTokens') {
         config.contextBudgetTokens = parseInt(value, 10);
+      } else if (key === 'engine') {
+        config.engine = value as typeof config.engine;
+      } else if (key === 'provider') {
+        config.provider = value;
+      } else if (key === 'executionModelId') {
+        config.executionModelId = value;
+      } else if (parts[0] === 'planningRuntime' && parts[1]) {
+        (config.planningRuntime ??= {});
+        (config.planningRuntime as Record<string, string | undefined>)[parts[1]] = value;
+      } else if (parts[0] === 'validationRuntime' && parts[1]) {
+        (config.validationRuntime ??= {});
+        (config.validationRuntime as Record<string, string | undefined>)[parts[1]] = value;
+      } else if (parts[0] === 'reviewRuntime' && parts[1]) {
+        (config.reviewRuntime ??= {});
+        (config.reviewRuntime as Record<string, string | undefined>)[parts[1]] = value;
       } else if (key === 'maxCostPerTaskUsd') {
         config.maxCostPerTaskUsd = parseFloat(value);
       } else if (key === 'worktrees') {
@@ -93,6 +108,12 @@ export const configCommand = new Command('config')
     console.log(`  test:      ${config.validation.test}`);
     console.log(`  aiReview:  ${config.validation.aiReview}`);
     console.log('\nExecution:');
+    console.log(`  engine:              ${config.engine}`);
+    console.log(`  provider:            ${config.provider ?? '(auto)'}`);
+    console.log(`  executionModelId:    ${config.executionModelId ?? '(engine default)'}`);
+    console.log(`  planningRuntime:     ${JSON.stringify(config.planningRuntime ?? {})}`);
+    console.log(`  validationRuntime:   ${JSON.stringify(config.validationRuntime ?? {})}`);
+    console.log(`  reviewRuntime:       ${JSON.stringify(config.reviewRuntime ?? {})}`);
     console.log(`  maxRetries:          ${config.maxRetries}`);
     console.log(`  parallel:            ${config.parallel}`);
     console.log(`  maxParallel:         ${config.maxParallel}`);

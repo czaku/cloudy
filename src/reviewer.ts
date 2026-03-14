@@ -1,8 +1,8 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
-import type { Plan, Task, ClaudeModel } from './core/types.js';
-import { runClaude } from './executor/claude-runner.js';
+import type { Plan, Task, ClaudeModel, PhaseRuntimeConfig } from './core/types.js';
+import { runPhaseModel } from './executor/model-runner.js';
 import { getGitDiff } from './git/git.js';
 import { ensureDir, readJson, writeJson } from './utils/fs.js';
 import { CLAWDASH_DIR, CHECKPOINTS_DIR } from './config/defaults.js';
@@ -246,6 +246,7 @@ export async function runHolisticReview(
   model: ClaudeModel,
   onOutput?: (text: string) => void,
   fromSha?: string,
+  runtime?: PhaseRuntimeConfig,
 ): Promise<ReviewResult> {
   const startMs = Date.now();
 
@@ -319,12 +320,16 @@ export async function runHolisticReview(
   // 7. Build review prompt
   const prompt = buildReviewPrompt(claudeMdContent, specContent, plan, taskSummary, gitDiff, verificationSection);
 
-  // 8. Call runClaude
-  const claudeResult = await runClaude({
+  // 8. Run review model through the provider-agnostic executor
+  const claudeResult = await runPhaseModel({
     prompt,
     model,
     cwd,
+    engine: runtime?.engine,
+    provider: runtime?.provider,
+    modelId: runtime?.modelId,
     onOutput,
+    taskType: 'review',
   });
 
   const durationMs = Date.now() - startMs;
@@ -551,6 +556,7 @@ export async function generateFixTasks(
   plan: Plan,
   cwd: string,
   model: ClaudeModel = 'haiku',
+  runtime?: PhaseRuntimeConfig,
 ): Promise<Task[]> {
   const actionable = review.issues.filter(
     (i) => i.severity === 'major' || i.severity === 'critical',
@@ -609,7 +615,15 @@ Respond ONLY with valid JSON (no markdown):
 
   let claudeResult;
   try {
-    claudeResult = await runClaude({ prompt, model, cwd });
+    claudeResult = await runPhaseModel({
+      prompt,
+      model,
+      cwd,
+      engine: runtime?.engine,
+      provider: runtime?.provider,
+      modelId: runtime?.modelId,
+      taskType: 'review',
+    });
   } catch {
     return [];
   }

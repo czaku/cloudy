@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { registerTool, discoverTools as fedDiscoverTools, type Peer } from '@vykeai/fed';
+import { selectViaDaemon, type EngineId as OmnaiEngineId, type Provider as OmnaiProvider } from 'omnai';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -11,6 +12,7 @@ import type { ProjectMeta, ProjectStatusSnapshot, SpecFile } from '../core/types
 import { listProjects, addProject, removeProject, findProject } from './registry.js';
 import { detectSpecFiles, scanClaudeCodeSessions, loadClaudeCodeMessages, computeSessionStats } from './scanner.js';
 import { CLAWDASH_DIR, RUNS_DIR } from '../config/defaults.js';
+import { loadConfig } from '../config/config.js';
 import { readJson, ensureDir, writeJson } from '../utils/fs.js';
 
 // ── Fed event client (lazy — cloudy works fine without fed) ──────────
@@ -319,6 +321,121 @@ function getProjectProcesses(projectId: string): ActiveProcess[] {
 
 function getRunningProcess(projectId: string, type?: ActiveProcess['type']): ActiveProcess | undefined {
   return getProjectProcesses(projectId).find((p) => !type || p.type === type);
+}
+
+interface RuntimeRouteFields {
+  planningEngine?: string;
+  planningProvider?: string;
+  planningModelId?: string;
+  validationEngine?: string;
+  validationProvider?: string;
+  validationModelId?: string;
+  reviewEngine?: string;
+  reviewProvider?: string;
+  reviewModelId?: string;
+}
+
+interface RunRuntimeRouteFields extends RuntimeRouteFields {
+  engine?: string;
+  provider?: string;
+  executionModelId?: string;
+}
+
+interface RuntimePreflight {
+  engine?: string;
+  provider?: string;
+  taskType: 'coding' | 'planning' | 'review';
+}
+
+interface RuntimeDefaults {
+  execution?: Pick<RunRuntimeRouteFields, 'engine' | 'provider'>;
+  planning?: Pick<RuntimeRouteFields, 'planningEngine' | 'planningProvider'>;
+  validation?: Pick<RuntimeRouteFields, 'validationEngine' | 'validationProvider'>;
+  review?: Pick<RuntimeRouteFields, 'reviewEngine' | 'reviewProvider'>;
+}
+
+function appendOptionalFlag(args: string[], flag: string, value: string | undefined): void {
+  if (value) args.push(flag, value);
+}
+
+function buildPlanningRuntimeArgs(runtime: RuntimeRouteFields): string[] {
+  const args: string[] = [];
+  appendOptionalFlag(args, '--planning-engine', runtime.planningEngine);
+  appendOptionalFlag(args, '--planning-provider', runtime.planningProvider);
+  appendOptionalFlag(args, '--planning-model-id', runtime.planningModelId);
+  return args;
+}
+
+function buildValidationRuntimeArgs(runtime: RuntimeRouteFields): string[] {
+  const args: string[] = [];
+  appendOptionalFlag(args, '--validation-engine', runtime.validationEngine);
+  appendOptionalFlag(args, '--validation-provider', runtime.validationProvider);
+  appendOptionalFlag(args, '--validation-model-id', runtime.validationModelId);
+  return args;
+}
+
+function buildReviewRuntimeArgs(runtime: RuntimeRouteFields): string[] {
+  const args: string[] = [];
+  appendOptionalFlag(args, '--review-engine', runtime.reviewEngine);
+  appendOptionalFlag(args, '--review-provider', runtime.reviewProvider);
+  appendOptionalFlag(args, '--review-model-id', runtime.reviewModelId);
+  return args;
+}
+
+function buildRunRuntimeArgs(runtime: RunRuntimeRouteFields): string[] {
+  const args: string[] = [];
+  appendOptionalFlag(args, '--engine', runtime.engine);
+  appendOptionalFlag(args, '--provider', runtime.provider);
+  appendOptionalFlag(args, '--execution-model-id', runtime.executionModelId);
+  args.push(
+    ...buildPlanningRuntimeArgs(runtime),
+    ...buildValidationRuntimeArgs(runtime),
+    ...buildReviewRuntimeArgs(runtime),
+  );
+  return args;
+}
+
+async function preflightRuntime(runtime: RuntimePreflight): Promise<void> {
+  if (!runtime.engine && !runtime.provider) return;
+  await selectViaDaemon({
+    engine: runtime.engine as OmnaiEngineId | undefined,
+    provider: runtime.provider as OmnaiProvider | undefined,
+    taskType: runtime.taskType,
+  });
+}
+
+function resolveRuntimePreflight(
+  taskType: RuntimePreflight['taskType'],
+  override: { engine?: string; provider?: string },
+  fallback?: { engine?: string; provider?: string },
+): RuntimePreflight {
+  return {
+    engine: override.engine ?? fallback?.engine,
+    provider: override.provider ?? fallback?.provider,
+    taskType,
+  };
+}
+
+async function loadRuntimeDefaults(projectPath: string): Promise<RuntimeDefaults> {
+  const config = await loadConfig(projectPath);
+  return {
+    execution: {
+      engine: config.engine,
+      provider: config.provider,
+    },
+    planning: {
+      planningEngine: config.planningRuntime?.engine,
+      planningProvider: config.planningRuntime?.provider,
+    },
+    validation: {
+      validationEngine: config.validationRuntime?.engine,
+      validationProvider: config.validationRuntime?.provider,
+    },
+    review: {
+      reviewEngine: config.reviewRuntime?.engine,
+      reviewProvider: config.reviewRuntime?.provider,
+    },
+  };
 }
 
 // ── Per-project output ring buffer (for replay on reconnect) ─────────
@@ -1149,6 +1266,18 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       return;
     }
 
+    // GET /api/projects/:id/config
+    if (method === 'GET' && subpath === '/config') {
+      if (!meta) { send404(res); return; }
+      try {
+        const config = await loadConfig(meta.path);
+        sendJson(res, 200, config);
+      } catch (err) {
+        sendJson(res, 500, { error: String(err) });
+      }
+      return;
+    }
+
     // GET /api/projects/:id/runs
     if (method === 'GET' && subpath === '/runs') {
       if (!meta) { send404(res); return; }
@@ -1275,7 +1404,32 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       if (!meta) { send404(res); return; }
       // No guard — allow parallel planning sessions
       try {
-        const body = await parseBody(req) as { specPaths?: string[]; planName?: string; model?: string; planIds?: string[] };
+        const body = await parseBody(req) as {
+          specPaths?: string[];
+          planName?: string;
+          model?: string;
+          planIds?: string[];
+          planningEngine?: string;
+          planningProvider?: string;
+          planningModelId?: string;
+        };
+        try {
+          const runtimeDefaults = await loadRuntimeDefaults(meta.path);
+          await preflightRuntime(resolveRuntimePreflight(
+            'planning',
+            {
+              engine: body.planningEngine,
+              provider: body.planningProvider,
+            },
+            {
+              engine: runtimeDefaults.planning?.planningEngine,
+              provider: runtimeDefaults.planning?.planningProvider,
+            },
+          ));
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+          return;
+        }
 
         // Fast-fail: check spec sizes before spawning anything
         const MAX_FILE_BYTES = 30_000;
@@ -1305,6 +1459,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         const specArgs: string[] = [];
         for (const sp of specPaths) specArgs.push('--spec', sp);
         const modelArg = body.model ? ['--model', body.model] : ['--model', 'sonnet'];
+        const runtimeArgs = buildPlanningRuntimeArgs(body);
         // Generate a stable run-name so scope exits immediately after saving the plan
         // (--run-name triggers pipeline-mode exit, preventing scope from auto-spawning cloudy run)
         const ts = new Date().toISOString().slice(0, 16).replace('T', '-').replace(/:/g, '');
@@ -1313,7 +1468,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           : 'plan';
         const runName = `scope-${ts}-${slug}`;
         const proc = spawnCloudyProcess(projectId, meta.path, 'init', [
-          'plan', ...specArgs, ...modelArg, '--run-name', runName,
+          'plan', ...specArgs, ...modelArg, ...runtimeArgs, '--run-name', runName,
         ], body.planName, specPaths);
         if (body.planIds?.length) proc.planIds = body.planIds;
         sendJson(res, 200, { ok: true, started: true, processId: proc.id });
@@ -1352,12 +1507,72 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         return;
       }
       try {
-        const body = await parseBody(req) as { executionModel?: string; taskReviewModel?: string; runReviewModel?: string; qualityReviewModel?: string; planIds?: string[]; parallel?: boolean; maxParallel?: number; noValidate?: boolean; maxRetries?: number; effort?: string; worktrees?: boolean };
+        const body = await parseBody(req) as {
+          executionModel?: string;
+          taskReviewModel?: string;
+          runReviewModel?: string;
+          qualityReviewModel?: string;
+          planIds?: string[];
+          parallel?: boolean;
+          maxParallel?: number;
+          noValidate?: boolean;
+          maxRetries?: number;
+          effort?: string;
+          worktrees?: boolean;
+          engine?: string;
+          provider?: string;
+          executionModelId?: string;
+          planningEngine?: string;
+          planningProvider?: string;
+          planningModelId?: string;
+          validationEngine?: string;
+          validationProvider?: string;
+          validationModelId?: string;
+          reviewEngine?: string;
+          reviewProvider?: string;
+          reviewModelId?: string;
+        };
+        try {
+          const runtimeDefaults = await loadRuntimeDefaults(meta.path);
+          await preflightRuntime(resolveRuntimePreflight(
+            'coding',
+            {
+              engine: body.engine,
+              provider: body.provider,
+            },
+            runtimeDefaults.execution,
+          ));
+          await preflightRuntime(resolveRuntimePreflight(
+            'review',
+            {
+              engine: body.validationEngine,
+              provider: body.validationProvider,
+            },
+            {
+              engine: runtimeDefaults.validation?.validationEngine,
+              provider: runtimeDefaults.validation?.validationProvider,
+            },
+          ));
+          await preflightRuntime(resolveRuntimePreflight(
+            'review',
+            {
+              engine: body.reviewEngine,
+              provider: body.reviewProvider,
+            },
+            {
+              engine: runtimeDefaults.review?.reviewEngine,
+              provider: runtimeDefaults.review?.reviewProvider,
+            },
+          ));
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+          return;
+        }
         const execModel = body.executionModel ?? 'sonnet';
         const taskReviewModel = body.taskReviewModel ?? 'haiku';
         const runReviewModel = body.runReviewModel ?? 'sonnet';
 
-        const extraArgs: string[] = [];
+        const extraArgs = buildRunRuntimeArgs(body);
         if (body.parallel) { extraArgs.push('--parallel'); }
         if (body.maxParallel) { extraArgs.push('--max-parallel', String(body.maxParallel)); }
         if (body.noValidate) { extraArgs.push('--no-validate'); }
@@ -1403,11 +1618,64 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           planningModel?: string;
           taskReviewModel?: string;
           runReviewModel?: string;
+          planningEngine?: string;
+          planningProvider?: string;
+          planningModelId?: string;
+          validationEngine?: string;
+          validationProvider?: string;
+          validationModelId?: string;
+          reviewEngine?: string;
+          reviewProvider?: string;
+          reviewModelId?: string;
         };
+        try {
+          const runtimeDefaults = await loadRuntimeDefaults(meta.path);
+          await preflightRuntime(resolveRuntimePreflight(
+            'planning',
+            {
+              engine: body.planningEngine,
+              provider: body.planningProvider,
+            },
+            {
+              engine: runtimeDefaults.planning?.planningEngine,
+              provider: runtimeDefaults.planning?.planningProvider,
+            },
+          ));
+          await preflightRuntime(resolveRuntimePreflight(
+            'review',
+            {
+              engine: body.validationEngine,
+              provider: body.validationProvider,
+            },
+            {
+              engine: runtimeDefaults.validation?.validationEngine,
+              provider: runtimeDefaults.validation?.validationProvider,
+            },
+          ));
+          await preflightRuntime(resolveRuntimePreflight(
+            'review',
+            {
+              engine: body.reviewEngine,
+              provider: body.reviewProvider,
+            },
+            {
+              engine: runtimeDefaults.review?.reviewEngine,
+              provider: runtimeDefaults.review?.reviewProvider,
+            },
+          ));
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+          return;
+        }
         const specArgs: string[] = [];
         for (const sp of body.specPaths ?? []) {
           specArgs.push('--spec', sp);
         }
+        const runtimeArgs = [
+          ...buildPlanningRuntimeArgs(body),
+          ...buildValidationRuntimeArgs(body),
+          ...buildReviewRuntimeArgs(body),
+        ];
         const modelArgs: string[] = [
           '--execution-model', body.executionModel ?? 'sonnet',
           '--planning-model', body.planningModel ?? 'sonnet',
@@ -1415,7 +1683,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           '--run-review-model', body.runReviewModel ?? 'sonnet',
         ];
         spawnCloudyProcess(projectId, meta.path, 'chain', [
-          'chain', ...specArgs, ...modelArgs,
+          'chain', ...specArgs, ...modelArgs, ...runtimeArgs,
         ]);
         sendJson(res, 200, { ok: true, started: true });
       } catch (err) {
@@ -1506,13 +1774,73 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         return;
       }
       try {
-        const body = await parseBody(req) as { taskId?: string; executionModel?: string; taskReviewModel?: string; runReviewModel?: string; qualityReviewModel?: string; parallel?: boolean; maxParallel?: number; noValidate?: boolean; maxRetries?: number; effort?: string; worktrees?: boolean };
+        const body = await parseBody(req) as {
+          taskId?: string;
+          executionModel?: string;
+          taskReviewModel?: string;
+          runReviewModel?: string;
+          qualityReviewModel?: string;
+          parallel?: boolean;
+          maxParallel?: number;
+          noValidate?: boolean;
+          maxRetries?: number;
+          effort?: string;
+          worktrees?: boolean;
+          engine?: string;
+          provider?: string;
+          executionModelId?: string;
+          planningEngine?: string;
+          planningProvider?: string;
+          planningModelId?: string;
+          validationEngine?: string;
+          validationProvider?: string;
+          validationModelId?: string;
+          reviewEngine?: string;
+          reviewProvider?: string;
+          reviewModelId?: string;
+        };
+        try {
+          const runtimeDefaults = await loadRuntimeDefaults(meta.path);
+          await preflightRuntime(resolveRuntimePreflight(
+            'coding',
+            {
+              engine: body.engine,
+              provider: body.provider,
+            },
+            runtimeDefaults.execution,
+          ));
+          await preflightRuntime(resolveRuntimePreflight(
+            'review',
+            {
+              engine: body.validationEngine,
+              provider: body.validationProvider,
+            },
+            {
+              engine: runtimeDefaults.validation?.validationEngine,
+              provider: runtimeDefaults.validation?.validationProvider,
+            },
+          ));
+          await preflightRuntime(resolveRuntimePreflight(
+            'review',
+            {
+              engine: body.reviewEngine,
+              provider: body.reviewProvider,
+            },
+            {
+              engine: runtimeDefaults.review?.reviewEngine,
+              provider: runtimeDefaults.review?.reviewProvider,
+            },
+          ));
+        } catch (err) {
+          sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
+          return;
+        }
         const execModel = body.executionModel ?? 'sonnet';
         const taskReviewModel = body.taskReviewModel ?? 'haiku';
         const runReviewModel = body.runReviewModel ?? 'sonnet';
         const retryArgs = body.taskId ? ['--retry', body.taskId] : ['--retry-failed'];
 
-        const extraArgs: string[] = [];
+        const extraArgs = buildRunRuntimeArgs(body);
         if (body.parallel) { extraArgs.push('--parallel'); }
         if (body.maxParallel) { extraArgs.push('--max-parallel', String(body.maxParallel)); }
         if (body.noValidate) { extraArgs.push('--no-validate'); }
@@ -2011,6 +2339,7 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
       const daemonConfig = await readDaemonConfig();
       const fedCfg = await readFedConfig().catch(() => null);
       const identity = fedCfg?.identity ?? daemonConfig.identity ?? '';
+      let cleanedUp = false;
 
       // ── Federation (via @vykeai/fed registerTool) ─────────────────────
       const stopFed = await registerTool({
@@ -2058,9 +2387,15 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
       } catch { /* ignore */ }
 
       const mdnsCleanup = () => {
+        if (cleanedUp) return;
+        cleanedUp = true;
+        server.off('close', mdnsCleanup);
+        process.off('SIGTERM', mdnsCleanup);
+        process.off('SIGINT', mdnsCleanup);
         stopBrowsing();
         stopFed();
       };
+      server.once('close', mdnsCleanup);
       process.on('SIGTERM', mdnsCleanup);
       process.on('SIGINT', mdnsCleanup);
 

@@ -32,6 +32,10 @@ export const DEFAULT_CONFIG: CloudyConfig = {
   runBranch: false,
   approval: { mode: 'never', timeoutSec: 300, autoAction: 'continue' },
   engine: 'claude-code',
+  provider: 'claude',
+  planningRuntime: {},
+  validationRuntime: {},
+  reviewRuntime: {},
   review: { enabled: true, model: 'opus', failBlocksRun: false },
 };
 

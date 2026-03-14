@@ -4,6 +4,7 @@ import { glob } from 'glob';
 import { execa } from 'execa';
 import type {
   ClaudeModel,
+  PhaseRuntimeConfig,
   Task,
   ValidationConfig,
   ValidationReport,
@@ -212,6 +213,7 @@ export interface ValidateOptions {
    * and a stronger model here for quality review.
    */
   qualityModel?: ClaudeModel;
+  runtime?: PhaseRuntimeConfig;
   cwd: string;
   checkpointSha?: string;
   /** Artifacts created by upstream dependency tasks — not expected in this task's diff */
@@ -227,7 +229,7 @@ export interface ValidateOptions {
 export async function validateTask(
   options: ValidateOptions,
 ): Promise<ValidationReport> {
-  const { task, config, model, qualityModel, cwd, checkpointSha, priorArtifacts } = options;
+  const { task, config, model, qualityModel, runtime, cwd, checkpointSha, priorArtifacts } = options;
   const resolvedQualityModel: ClaudeModel = qualityModel ?? model;
   const results: ValidationResult[] = [];
 
@@ -403,6 +405,7 @@ export async function validateTask(
         artifactCheckPassedEarly,
         task.outputArtifacts,
         commandResults,
+        runtime,
       );
       results.push(result);
       specCompliancePassed = result.passed;
@@ -443,6 +446,7 @@ export async function validateTask(
         artifactCheckPassed,
         task.outputArtifacts,
         commandResults,
+        runtime,
       );
       results.push(result);
       specCompliancePassed = result.passed;
@@ -490,6 +494,7 @@ export async function validateTask(
         resolvedQualityModel,
         cwd,
         changedFileSections,
+        runtime,
       );
 
       if (!qualityResult.passed) {

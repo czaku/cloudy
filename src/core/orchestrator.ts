@@ -31,6 +31,7 @@ import {
 } from '../git/worktree.js';
 import { CostTracker } from '../cost/tracker.js';
 import { routeModelForTask } from '../config/auto-routing.js';
+import { getPhaseRuntime } from '../config/phase-runtime.js';
 import { saveState } from './state.js';
 import { log, logTaskOutput } from '../utils/logger.js';
 import { execa } from 'execa';
@@ -158,6 +159,7 @@ export class Orchestrator {
   private taskStartCostUsd = new Map<string, number>();
   private rollingContextSummary = '';
   private completedTasksForSummary = 0;
+  private reviewBaseSha?: string;
 
   constructor(options: OrchestratorOptions) {
     this.cwd = options.cwd;
@@ -168,6 +170,7 @@ export class Orchestrator {
     this.dryRun = options.dryRun ?? false;
     this.onApprovalRequest = options.onApprovalRequest;
     this.onReviewModelRequest = options.onReviewModelRequest;
+    this.reviewBaseSha = this.state.plan?.tasks.find((task) => task.checkpointSha)?.checkpointSha;
   }
 
   private needsApproval(task: Task): boolean {
@@ -412,6 +415,8 @@ export class Orchestrator {
         this.state.plan!,
         reviewModel,
         (text) => this.onEvent({ type: 'review_output', text }),
+        this.reviewBaseSha,
+        getPhaseRuntime(this.config, 'review'),
       );
       this.onEvent({ type: 'review_completed', result });
       return result;
@@ -428,7 +433,10 @@ export class Orchestrator {
     try {
       const result = await runEngine({
         prompt,
+        engine: this.config.engine,
+        provider: this.config.provider,
         claudeModel: this.config.models.execution,
+        modelId: this.config.executionModelId,
         cwd: this.cwd,
         onOutput: (text) => this.onEvent({ type: 'task_output', taskId: 'wrap-up', text }),
         abortSignal: this.abortController.signal,
@@ -517,7 +525,8 @@ export class Orchestrator {
 
   private async refreshRollingSummary(queue: TaskQueue, plan: Plan): Promise<void> {
     try {
-      const { runClaude } = await import('../executor/claude-runner.js');
+      const { runPhaseModel } = await import('../executor/model-runner.js');
+      const reviewRuntime = getPhaseRuntime(this.config, 'review');
       const completedTasks = queue.getTasksByStatus('completed');
       const summaryList = completedTasks
         .map((t) => `- ${t.id}: ${t.title}${(t as any).resultSummary ? ` — ${(t as any).resultSummary}` : ''}${t.outputArtifacts?.length ? ` (files: ${t.outputArtifacts.join(', ')})` : ''}`)
@@ -532,7 +541,15 @@ ${summaryList}
 
 Write a concise paragraph (max 150 words) covering: what files/modules were created, what patterns were established, what still needs to be done. This summary will be shown to the AI before each subsequent task. Be specific about file names and function signatures where important.`;
 
-      const result = await runClaude({ prompt, model: 'haiku', cwd: this.cwd });
+      const result = await runPhaseModel({
+        prompt,
+        model: 'haiku',
+        cwd: this.cwd,
+        engine: reviewRuntime.engine,
+        provider: reviewRuntime.provider,
+        modelId: reviewRuntime.modelId,
+        taskType: 'review',
+      });
       if (result.success && result.output?.trim()) {
         this.rollingContextSummary = result.output.trim();
         await log.info('Rolling context summary refreshed');
@@ -611,7 +628,11 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
     const maxAttempts = task.maxRetries + 1;
     const executionModel = this.getModelForTask(task);
     const engine = this.config.engine ?? 'claude-code';
-    const engineModel = executionModel;
+    const provider = this.config.provider;
+    const engineModel =
+      engine === 'claude-code'
+        ? executionModel
+        : (this.config.executionModelId ?? 'default');
     let currentPatterns = [...task.contextPatterns];
     const budget = this.config.contextBudgetTokens;
     const budgetMode = this.config.contextBudgetMode ?? 'warn';
@@ -689,6 +710,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       } else {
         checkpointSha = await createCheckpoint(taskCwd, task.id);
         queue.setCheckpoint(task.id, checkpointSha);
+        this.reviewBaseSha ??= checkpointSha;
         // Persist checkpoint SHA immediately so it survives across runs
         plan.tasks = queue.getAllTasks();
         await saveState(this.cwd, this.state);
@@ -848,6 +870,9 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       try {
         result = await runEngine({
           prompt,
+          engine,
+          provider,
+          modelId: this.config.executionModelId,
           claudeModel: executionModel,
           cwd: taskCwd,
           onOutput: (text) => {
@@ -899,7 +924,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       }
 
       // Track cost
-      this.costTracker.record(executionModel, 'execution', result, engine);
+      this.costTracker.record(String(engineModel), 'execution', result, engine);
       taskCostUsd += result.costUsd;
       this.onEvent({ type: 'cost_update', summary: this.costTracker.getSummary() });
 
@@ -1152,6 +1177,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
         config: this.config.validation,
         model: this.config.models.validation,
         qualityModel: this.config.models.qualityReview ?? this.config.models.validation,
+        runtime: getPhaseRuntime(this.config, 'validation'),
         cwd: taskCwd,
         checkpointSha,
         priorArtifacts: priorArtifacts.length > 0 ? priorArtifacts : undefined,

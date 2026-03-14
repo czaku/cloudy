@@ -1,5 +1,5 @@
-import type { ClaudeModel, Plan, Task } from '../core/types.js';
-import { runClaude } from '../executor/claude-runner.js';
+import type { ClaudeModel, PhaseRuntimeConfig, Plan, Task } from '../core/types.js';
+import { runPhaseModel } from '../executor/model-runner.js';
 import { buildPlanningPrompt } from './prompts.js';
 import { exploreCodebase } from './codebase-explorer.js';
 import { validateDependencyGraph } from './dependency-graph.js';
@@ -34,6 +34,18 @@ interface RawPlan {
   rationale?: string;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function normalizeRepoAbsolutePath(value: string, cwd: string): string {
+  if (!value.includes(cwd)) return value;
+
+  return value
+    .replace(new RegExp(`\\bcd\\s+${escapeRegExp(cwd)}(?=\\s|$)`, 'g'), 'cd .')
+    .replace(new RegExp(`${escapeRegExp(cwd)}/`, 'g'), '');
+}
+
 /**
  * Use Claude to decompose a goal into tasks.
  */
@@ -45,6 +57,7 @@ export async function createPlan(
   specContent?: string,
   claudeMdContent?: string,
   abortSignal?: AbortSignal,
+  runtime?: PhaseRuntimeConfig,
 ): Promise<Plan> {
   await log.info(`Planning with model: ${model}`);
   await log.info(`Goal: ${goal}`);
@@ -63,12 +76,16 @@ export async function createPlan(
 
   const timeoutMs = Number(process.env['CLOUDY_PLANNING_TIMEOUT_MS']) || 900_000; // 15 min
 
-  const planningCall = runClaude({
+  const planningCall = runPhaseModel({
     prompt,
     model,
     cwd,
+    engine: runtime?.engine,
+    provider: runtime?.provider,
+    modelId: runtime?.modelId,
     onOutput,
     abortSignal,
+    taskType: 'planning',
     // Use 'high' effort for planning — enables extended thinking on capable models,
     // leading to better dependency graphs and acceptance criteria.
     effort: model === 'haiku' ? 'medium' : 'high',
@@ -88,7 +105,7 @@ export async function createPlan(
   }
 
   const { tasks: rawTasks, questions: planQuestions, rationale } = parsePlanOutput(result.output);
-  let tasks = rawTasks.map(toTask);
+  let tasks = rawTasks.map((task) => toTask(task, cwd));
 
   const validation = validateDependencyGraph(tasks);
   if (!validation.valid) {
@@ -106,7 +123,7 @@ export async function createPlan(
   // Second pass: verify and fix the dependency graph with a cheap focused call.
   // The planner sometimes generates tasks with missing or empty dependencies —
   // this pass catches edges that the planner missed without re-running the full plan.
-  tasks = await verifyAndFixDependencies(tasks, cwd);
+  tasks = await verifyAndFixDependencies(tasks, cwd, runtime);
 
   // Re-validate after corrections (LLM might introduce bad refs or cycles)
   const validation2 = validateDependencyGraph(tasks);
@@ -114,7 +131,7 @@ export async function createPlan(
     await log.warn(
       `Dependency verification introduced graph errors — reverting to original: ${validation2.errors.join(', ')}`,
     );
-    tasks = rawTasks.map(toTask);
+    tasks = rawTasks.map((task) => toTask(task, cwd));
   }
 
   const plan: Plan = {
@@ -163,6 +180,7 @@ export async function createPlan(
 async function verifyAndFixDependencies(
   tasks: Task[],
   cwd: string,
+  runtime?: PhaseRuntimeConfig,
 ): Promise<Task[]> {
   await log.info('Verifying dependency graph…');
 
@@ -198,7 +216,15 @@ Respond with ONLY a JSON object mapping every task ID to its complete (corrected
 
   let result;
   try {
-    result = await runClaude({ prompt, model: 'haiku', cwd });
+    result = await runPhaseModel({
+      prompt,
+      model: 'haiku',
+      cwd,
+      engine: runtime?.engine,
+      provider: runtime?.provider,
+      modelId: runtime?.modelId,
+      taskType: 'planning',
+    });
   } catch (err) {
     await log.warn(`Dependency verification skipped: ${err instanceof Error ? err.message : String(err)}`);
     return tasks;
@@ -257,6 +283,7 @@ export async function editPlan(
   model: ClaudeModel,
   cwd: string,
   onOutput?: (text: string) => void,
+  runtime?: PhaseRuntimeConfig,
 ): Promise<Plan> {
   await log.info(`Editing plan with model: ${model}`);
 
@@ -280,14 +307,23 @@ Return ONLY valid JSON with this structure:
   "tasks": [ ... ]
 }`;
 
-  const result = await runClaude({ prompt, model, cwd, onOutput });
+  const result = await runPhaseModel({
+    prompt,
+    model,
+    cwd,
+    engine: runtime?.engine,
+    provider: runtime?.provider,
+    modelId: runtime?.modelId,
+    onOutput,
+    taskType: 'planning',
+  });
 
   if (!result.success) {
     throw new Error(`Plan editing failed: ${result.error}`);
   }
 
   const { tasks: rawTasks2 } = parsePlanOutput(result.output);
-  const tasks = rawTasks2.map(toTask);
+  const tasks = rawTasks2.map((task) => toTask(task, cwd));
 
   const validation = validateDependencyGraph(tasks);
   if (!validation.valid) {
@@ -513,15 +549,15 @@ function parsePlanOutput(output: string): RawPlan {
   }
 }
 
-function toTask(raw: RawTask): Task {
+function toTask(raw: RawTask, cwd: string): Task {
   return {
     id: raw.id,
     title: raw.title,
     description: raw.description,
-    acceptanceCriteria: raw.acceptanceCriteria ?? [],
+    acceptanceCriteria: (raw.acceptanceCriteria ?? []).map((criterion) => normalizeRepoAbsolutePath(criterion, cwd)),
     dependencies: raw.dependencies ?? [],
-    contextPatterns: raw.contextPatterns ?? [],
-    outputArtifacts: raw.outputArtifacts ?? [],
+    contextPatterns: (raw.contextPatterns ?? []).map((pattern) => normalizeRepoAbsolutePath(pattern, cwd)),
+    outputArtifacts: (raw.outputArtifacts ?? []).map((artifact) => normalizeRepoAbsolutePath(artifact, cwd)),
     implementationSteps: raw.implementationSteps && raw.implementationSteps.length > 0 ? raw.implementationSteps : undefined,
     status: 'pending',
     retries: 0,

@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ClaudeRunResult } from '../../src/core/types.js';
 
-vi.mock('../../src/executor/claude-runner.js', () => ({
-  runClaude: vi.fn(),
+vi.mock('../../src/executor/model-runner.js', () => ({
+  runModel: vi.fn(),
 }));
 
 import { runEngine } from '../../src/executor/engine.js';
-import { runClaude } from '../../src/executor/claude-runner.js';
+import { runModel } from '../../src/executor/model-runner.js';
 
-const mockRunClaude = vi.mocked(runClaude);
+const mockRunModel = vi.mocked(runModel);
 
 const SUCCESS_RESULT: ClaudeRunResult = {
   success: true,
@@ -21,10 +21,10 @@ const SUCCESS_RESULT: ClaudeRunResult = {
 describe('runEngine', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockRunClaude.mockResolvedValue(SUCCESS_RESULT);
+    mockRunModel.mockResolvedValue(SUCCESS_RESULT);
   });
 
-  it('routes to runClaude when engine is claude-code', async () => {
+  it('routes to omnai execution when engine is claude-code', async () => {
     await runEngine({
       prompt: 'hello',
       engine: 'claude-code',
@@ -32,10 +32,10 @@ describe('runEngine', () => {
       cwd: '/tmp',
     });
 
-    expect(mockRunClaude).toHaveBeenCalledOnce();
+    expect(mockRunModel).toHaveBeenCalledOnce();
   });
 
-  it('passes claudeModel to runClaude', async () => {
+  it('maps claudeModel to a Claude model ID for claude-code', async () => {
     await runEngine({
       prompt: 'hello',
       engine: 'claude-code',
@@ -43,8 +43,8 @@ describe('runEngine', () => {
       cwd: '/tmp',
     });
 
-    expect(mockRunClaude).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'opus' }),
+    expect(mockRunModel).toHaveBeenCalledWith(
+      expect.objectContaining({ modelId: 'claude-opus-4-6' }),
     );
   });
 
@@ -61,22 +61,36 @@ describe('runEngine', () => {
       abortSignal,
     });
 
-    expect(mockRunClaude).toHaveBeenCalledWith(
+    expect(mockRunModel).toHaveBeenCalledWith(
       expect.objectContaining({ cwd: '/my/project', onOutput, abortSignal }),
     );
   });
 
-  it('defaults claudeModel to sonnet when not specified', async () => {
+  it('defaults claudeModel to sonnet for claude-code when not specified', async () => {
     await runEngine({ prompt: 'hello', engine: 'claude-code', cwd: '/tmp' });
 
-    expect(mockRunClaude).toHaveBeenCalledWith(
-      expect.objectContaining({ model: 'sonnet' }),
+    expect(mockRunModel).toHaveBeenCalledWith(
+      expect.objectContaining({ modelId: 'claude-sonnet-4-6' }),
+    );
+  });
+
+  it('passes provider-native settings through for non-claude engines', async () => {
+    await runEngine({
+      prompt: 'hello',
+      engine: 'codex',
+      provider: 'codex',
+      modelId: 'o3',
+      cwd: '/tmp',
+    });
+
+    expect(mockRunModel).toHaveBeenCalledWith(
+      expect.objectContaining({ engine: 'codex', provider: 'codex', modelId: 'o3' }),
     );
   });
 
   it('returns the result from the underlying runner', async () => {
     const customResult: ClaudeRunResult = { ...SUCCESS_RESULT, output: 'custom output' };
-    mockRunClaude.mockResolvedValueOnce(customResult);
+    mockRunModel.mockResolvedValueOnce(customResult);
 
     const result = await runEngine({ prompt: 'hi', engine: 'claude-code', cwd: '/tmp' });
 

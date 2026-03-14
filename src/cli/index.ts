@@ -23,7 +23,7 @@ export function createProgram(): Command {
   program
     .name('cloudy')
     .description(
-      'Claude Code orchestration tool - decompose goals, execute with model selection, validate with deterministic + AI checks',
+      'AI orchestration tool - decompose goals, route phases across local CLIs or APIs, and validate with deterministic + AI checks',
     )
     .version('0.1.0');
 

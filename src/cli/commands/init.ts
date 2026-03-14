@@ -19,6 +19,7 @@ import type { ClaudeModel, DecisionLogEntry } from '../../core/types.js';
 import { CLAWDASH_DIR } from '../../config/defaults.js';
 import { createStreamFormatter } from '../../utils/stream-formatter.js';
 import type { Plan } from '../../core/types.js';
+import { getPhaseRuntime } from '../../config/phase-runtime.js';
 
 /**
  * Prompt for input with a countdown timer. Returns the trimmed answer or null on timeout/empty.
@@ -109,14 +110,17 @@ function formatPlanNote(plan: Plan): string {
 }
 
 export const initCommand = new Command('plan')
-  .description('Decompose a goal into tasks using Claude')
+  .description('Decompose a goal into tasks using the configured planning runtime')
   .argument('[goal]', 'The project goal to decompose into tasks')
   .option('--model <model>', 'Model for all phases')
   .option('--planning-model <model>', 'Model for planning phase')
+  .option('--planning-engine <engine>', 'Planning engine (e.g. claude-code, codex, pi-mono)')
+  .option('--planning-provider <provider>', 'Planning provider/auth route (e.g. claude subscription, codex subscription, openai API)')
+  .option('--planning-model-id <id>', 'Provider-native planning model ID')
   .option('--spec <file>', 'Spec/PRD file (repeatable: --spec A --spec B)', (v: string, prev: string[]) => [...prev, v], [] as string[])
   .option('--no-review', 'Auto-approve the generated plan without interactive review')
   .option('--yes', 'Skip "Run now?" confirmation and proceed automatically')
-  .option('--verbose', 'Show live Claude output during planning')
+  .option('--verbose', 'Show live planning output during execution')
   .option('--run-name <name>', 'Explicit run directory name (used by pipeline command)')
   .option('--questions-auto-answering-model <model>', 'Model used to auto-answer planning questions on timeout (default: planning model)')
   .option('--questions-timeout <seconds>', 'Seconds to wait for human answer before auto-assuming (default: 60)', parseInt)
@@ -124,6 +128,9 @@ export const initCommand = new Command('plan')
   .action(async (goalArg: string | undefined, opts: {
     model?: string;
     planningModel?: string;
+    planningEngine?: string;
+    planningProvider?: string;
+    planningModelId?: string;
     spec: string[];
     review: boolean;
     verbose?: boolean;
@@ -148,6 +155,9 @@ export const initCommand = new Command('plan')
     p.intro(`${c(cyan + bold, '☁️  cloudy plan')}  ${c(bold, projectName)}  ${c(dim, cwd)}`);
 
     const config = await loadConfig(cwd);
+    if (opts.planningEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planningEngine as typeof config.engine };
+    if (opts.planningProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planningProvider };
+    if (opts.planningModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planningModelId };
 
     // ── Spec file(s) ──────────────────────────────────────────────────────────
     let specContent: string | undefined;
@@ -340,7 +350,7 @@ export const initCommand = new Command('plan')
       if (isGoalComplexEnoughForBrainstorm(goal)) {
         const brainstormSpinner = p.spinner();
         brainstormSpinner.start('Brainstorming approaches…');
-        const result = await runBrainstorm(goal, config.models.planning, cwd);
+        const result = await runBrainstorm(goal, config.models.planning, cwd, getPhaseRuntime(config, 'planning'));
         brainstormSpinner.stop('Approaches ready');
 
         if (result) {
@@ -408,6 +418,7 @@ export const initCommand = new Command('plan')
         specContent,
         claudeMdContent,
         planningAbort.signal,
+        getPhaseRuntime(config, 'planning'),
       );
     } catch (err) {
       clearInterval(tickInterval);
@@ -583,9 +594,17 @@ Respond with ONLY valid JSON:
 
           let assumptionResult = { assumption: `Proceeding with default approach for: ${q.text}`, reasoning: 'Spec context insufficient for a specific assumption; defaulting to common patterns.' };
           try {
-            const { runClaude } = await import('../../executor/claude-runner.js');
+            const { runPhaseModel } = await import('../../executor/model-runner.js');
             const result = await Promise.race([
-              runClaude({ prompt: assumptionPrompt, model: autoAnswerModel, cwd }),
+              runPhaseModel({
+                prompt: assumptionPrompt,
+                model: autoAnswerModel,
+                cwd,
+                engine: config.planningRuntime?.engine,
+                provider: config.planningRuntime?.provider,
+                modelId: config.planningRuntime?.modelId,
+                taskType: 'planning',
+              }),
               new Promise<never>((_, reject) => setTimeout(() => reject(new Error('assumption timeout')), 30_000)),
             ]);
             if (result.success) {
@@ -669,6 +688,8 @@ Respond with ONLY valid JSON:
               () => {},
               specContent,
               claudeMdContent,
+              undefined,
+              getPhaseRuntime(config, 'planning'),
             );
             reviseSpinner.stop(`Revised  ·  ${plan.tasks.length} tasks`);
             p.note(formatPlanNote(plan), `📋 ${plan.tasks.length} tasks`);

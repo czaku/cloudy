@@ -13,8 +13,8 @@
  * Never runs in non-interactive / --non-interactive mode.
  */
 
-import { runClaude } from '../executor/claude-runner.js';
-import type { ClaudeModel } from '../core/types.js';
+import { runPhaseModel } from '../executor/model-runner.js';
+import type { ClaudeModel, PhaseRuntimeConfig } from '../core/types.js';
 
 export interface BrainstormApproach {
   name: string;
@@ -36,6 +36,7 @@ export async function brainstorm(
   goal: string,
   model: ClaudeModel,
   cwd: string,
+  runtime?: PhaseRuntimeConfig,
 ): Promise<BrainstormResult | null> {
   const prompt = `You are a software architect doing a quick pre-planning brainstorm.
 
@@ -65,11 +66,15 @@ Respond with ONLY valid JSON:
 }`;
 
   try {
-    const result = await runClaude({
+  const result = await runPhaseModel({
       prompt,
       model: 'haiku',
       cwd,
+      engine: runtime?.engine,
+      provider: runtime?.provider,
+      modelId: runtime?.modelId,
       abortSignal: AbortSignal.timeout(30_000),
+      taskType: 'planning',
     });
     if (!result.success) return null;
 

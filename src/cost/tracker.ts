@@ -1,5 +1,4 @@
 import type {
-  ClaudeModel,
   ClaudeRunResult,
   CostSummary,
   Engine,
@@ -11,7 +10,7 @@ export class CostTracker {
   private entries: TaskCostData[] = [];
 
   record(
-    model: ClaudeModel,
+    model: string,
     phase: 'planning' | 'execution' | 'validation',
     result: ClaudeRunResult,
     engine: Engine = 'claude-code',

@@ -3,10 +3,11 @@ import path from 'node:path';
 
 // ── Mocks ────────────────────────────────────────────────────────────────────
 
-// Mock the claude runner so we don't spawn real processes
-vi.mock('../executor/claude-runner.js', () => ({
-  runClaude: vi.fn(),
-}));
+// Mock the model runner so we don't spawn real processes
+vi.mock('../executor/model-runner.js', () => {
+  const runPhaseModel = vi.fn();
+  return { runPhaseModel, runAbstractModel: runPhaseModel, runClaude: runPhaseModel };
+});
 
 // Mock filesystem operations
 vi.mock('node:fs/promises', () => ({
@@ -34,7 +35,7 @@ vi.mock('../utils/fs.js', () => ({
 
 import fs from 'node:fs/promises';
 import type { Plan, Task } from '../core/types.js';
-import { runClaude } from '../executor/claude-runner.js';
+import { runPhaseModel } from '../executor/model-runner.js';
 import { getGitDiff } from '../git/git.js';
 import { readJson, writeJson, ensureDir } from '../utils/fs.js';
 import { runHolisticReview } from '../reviewer.js';
@@ -135,8 +136,8 @@ beforeEach(() => {
   // Default: readJson returns null (no checkpoint files)
   vi.mocked(readJson).mockResolvedValue(null);
 
-  // Default: runClaude returns a PASS verdict
-  vi.mocked(runClaude).mockResolvedValue({
+  // Default: runPhaseModel returns a PASS verdict
+  vi.mocked(runPhaseModel).mockResolvedValue({
     success: true,
     output: makePassResponse(),
     usage: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 0, cacheWriteTokens: 0 },
@@ -160,7 +161,7 @@ describe('runHolisticReview', () => {
 
     await runHolisticReview(cwd, makePlan(), 'sonnet');
 
-    const callArgs = vi.mocked(runClaude).mock.calls[0][0];
+    const callArgs = vi.mocked(runPhaseModel).mock.calls[0][0] as any;
     expect(callArgs.prompt).toContain('# My Spec');
     expect(callArgs.prompt).toContain('Build the API');
   });
@@ -172,7 +173,7 @@ describe('runHolisticReview', () => {
     const plan = makePlan();
     await runHolisticReview(cwd, plan, 'sonnet');
 
-    const callArgs = vi.mocked(runClaude).mock.calls[0][0];
+    const callArgs = vi.mocked(runPhaseModel).mock.calls[0][0] as any;
     expect(callArgs.prompt).toContain(plan.goal);
     expect(callArgs.prompt).toContain('spec not saved');
     expect(callArgs.prompt).toContain('Implement API');
@@ -188,7 +189,7 @@ describe('runHolisticReview', () => {
 
     await runHolisticReview(cwd, makePlan(), 'sonnet');
 
-    const callArgs = vi.mocked(runClaude).mock.calls[0][0];
+    const callArgs = vi.mocked(runPhaseModel).mock.calls[0][0] as any;
     expect(callArgs.prompt).toContain('Use bun, not npm.');
     expect(callArgs.prompt).toContain('47820, 47821, 47822');
   });
@@ -198,8 +199,25 @@ describe('runHolisticReview', () => {
 
     await runHolisticReview(cwd, makePlan(), 'sonnet');
 
-    const callArgs = vi.mocked(runClaude).mock.calls[0][0];
+    const callArgs = vi.mocked(runPhaseModel).mock.calls[0][0];
     expect(callArgs.prompt).toContain('CLAUDE.md not found');
+  });
+
+  it('forwards review runtime overrides to the abstract runner', async () => {
+    await runHolisticReview(
+      cwd,
+      makePlan(),
+      'sonnet',
+      undefined,
+      undefined,
+      { engine: 'codex', provider: 'codex', modelId: 'o3' },
+    );
+
+    const callArgs = vi.mocked(runPhaseModel).mock.calls[0][0] as any;
+    expect(callArgs.engine).toBe('codex');
+    expect(callArgs.provider).toBe('codex');
+    expect(callArgs.modelId).toBe('o3');
+    expect(callArgs.taskType).toBe('review');
   });
 
   it('uses earliest checkpoint as phase-start SHA', async () => {
@@ -243,7 +261,7 @@ describe('runHolisticReview', () => {
     const plan = makePlan();
     await runHolisticReview(cwd, plan, 'sonnet');
 
-    const callArgs = vi.mocked(runClaude).mock.calls[0][0];
+    const callArgs = vi.mocked(runPhaseModel).mock.calls[0][0];
     const prompt = callArgs.prompt;
 
     // Should include CLAUDE.md content
@@ -261,7 +279,7 @@ describe('runHolisticReview', () => {
   });
 
   it('parses PASS verdict from Claude response', async () => {
-    vi.mocked(runClaude).mockResolvedValue({
+    vi.mocked(runPhaseModel).mockResolvedValue({
       success: true,
       output: makePassResponse(),
       usage: { inputTokens: 200, outputTokens: 100, cacheReadTokens: 0, cacheWriteTokens: 0 },
@@ -283,7 +301,7 @@ describe('runHolisticReview', () => {
   });
 
   it('parses FAIL verdict with issues', async () => {
-    vi.mocked(runClaude).mockResolvedValue({
+    vi.mocked(runPhaseModel).mockResolvedValue({
       success: true,
       output: makeFailResponse(),
       usage: { inputTokens: 300, outputTokens: 150, cacheReadTokens: 0, cacheWriteTokens: 0 },
@@ -306,7 +324,7 @@ describe('runHolisticReview', () => {
   });
 
   it('handles malformed JSON from Claude gracefully', async () => {
-    vi.mocked(runClaude).mockResolvedValue({
+    vi.mocked(runPhaseModel).mockResolvedValue({
       success: true,
       output: 'This is not JSON at all! The implementation looks good overall.',
       usage: { inputTokens: 50, outputTokens: 25, cacheReadTokens: 0, cacheWriteTokens: 0 },

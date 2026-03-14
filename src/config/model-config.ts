@@ -54,3 +54,7 @@ export function mergeModelConfig(
 
   return result;
 }
+
+export function isAbstractClaudeModel(value: string): value is ClaudeModel {
+  return isValidModel(value);
+}

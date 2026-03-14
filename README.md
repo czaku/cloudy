@@ -1,10 +1,10 @@
 # ☁️ cloudy
 
-**Give Claude a goal. Watch it build.**
+**Give an agent a goal. Watch it build.**
 
-> `v0.1.0` · MIT · Node.js 18+ · Requires [Claude Code](https://claude.ai/code)
+> `v0.1.0` · MIT · Node.js 18+ · Runs local agent CLIs and API-backed engines via `omnai`
 
-Cloudy breaks a project goal into a dependency-ordered task graph, then works through each task using Claude Code — with validation, automatic retry, and real-time feedback. Works with any language or stack.
+Cloudy breaks a project goal into a dependency-ordered task graph, then works through each task using local agent CLIs or API-backed runtimes via `omnai` — with validation, automatic retry, and real-time feedback. Works with any language or stack.
 
 ```
 ☁️  cloudy  ·  10 tasks
@@ -114,7 +114,8 @@ npm run build
 npm link
 ```
 
-**Requirements:** Node.js 18+, `claude` on your PATH ([Claude Code](https://claude.ai/code))
+**Requirements:** Node.js 18+ and at least one supported runtime route.
+Examples: `claude` on your PATH for Claude Code, Codex CLI for `codex`, or API credentials for supported `omnai` providers.
 
 ---
 
@@ -156,9 +157,12 @@ cloudy plan --spec ./PRD.md --no-review
 
 # Control the planning model
 cloudy plan --spec ./PRD.md --planning-model sonnet
+
+# Override the planning runtime
+cloudy plan --spec ./PRD.md --planning-engine codex --planning-provider codex --planning-model-id o3-mini
 ```
 
-The planner uses Claude to decompose your goal into concrete, ordered tasks — each with a title, description, acceptance criteria, context file patterns, expected output artifacts, and a time estimate. If you don't pass `--no-review`, you can approve the plan or describe changes in plain English and iterate before running.
+The planner uses the configured planning runtime to decompose your goal into concrete, ordered tasks — each with a title, description, acceptance criteria, context file patterns, expected output artifacts, and a time estimate. If you don't pass `--no-review`, you can approve the plan or describe changes in plain English and iterate before running.
 
 ---
 
@@ -170,7 +174,13 @@ cloudy run
 # Choose models per phase
 cloudy run --execution-model sonnet --task-review-model haiku --run-review-model opus
 
-# Show live Claude output as each task runs
+# Override planning / validation / review runtimes
+cloudy run \
+  --planning-engine codex --planning-provider codex --planning-model-id o3-mini \
+  --validation-engine codex --validation-provider codex --validation-model-id o4-mini \
+  --review-engine codex --review-provider codex --review-model-id gpt-4.1
+
+# Show live agent output as each task runs
 cloudy run --verbose
 
 # Re-run a failed task (full retry budget, plan continues after)
@@ -201,18 +211,18 @@ cloudy run --no-dashboard
 | `--max-parallel <n>` | Concurrency cap (default: 3) |
 | `--no-validate` | Skip all validation |
 | `--no-dashboard` | Disable the web dashboard |
-| `--verbose` | Stream live Claude output per task |
+| `--verbose` | Stream live agent output per task |
 | `--model <m>` | Model for all phases (`opus`, `sonnet`, `haiku`) |
+| `--planning-model <m>` | Planning model (used for `cloudy plan` or `cloudy run --goal`) |
 | `--execution-model <m>` | Model for execution phase |
 | `--task-review-model <m>` | Model for per-task validation |
 | `--run-review-model <m>` | Model for holistic post-run review |
+| `--planning-engine <e>` / `--planning-provider <p>` / `--planning-model-id <id>` | Planning runtime override |
 | `--non-interactive` | Skip all prompts, disable dashboard (also `--ni`) |
 | `--model-auto` | Auto-route model by task complexity |
-| `--engine <e>` | Execution engine: `claude-code` (default) or `pi-mono` |
-| `--pi-provider <p>` | Pi-mono provider (e.g. `openai`, `anthropic`, `google`) |
-| `--pi-model <m>` | Pi-mono model ID (e.g. `gpt-4o-mini`) |
-| `--pi-base-url <url>` | Custom base URL for pi-mono provider |
-| `--tui` / `--no-tui` | Force terminal UI on/off |
+| `--engine <e>` / `--provider <p>` / `--execution-model-id <id>` | Execution runtime override |
+| `--validation-engine <e>` / `--validation-provider <p>` / `--validation-model-id <id>` | Per-task AI validation runtime override |
+| `--review-engine <e>` / `--review-provider <p>` / `--review-model-id <id>` | Holistic review runtime override |
 
 ---
 
@@ -223,7 +233,7 @@ cloudy tasks                 # full task list
 cloudy tasks --graph         # ASCII dependency tree
 cloudy tasks --mermaid       # Mermaid diagram
 cloudy tasks --json          # raw JSON
-cloudy tasks edit            # edit pending tasks via Claude
+cloudy tasks edit            # edit pending tasks via the configured planning runtime
 ```
 
 `cloudy tasks --graph`:
@@ -245,7 +255,7 @@ After each task, cloudy runs a validation pipeline:
 ```
 Phase 0  Artifact check    — required output files exist
 Phase 1  Custom commands   — project-specific checks (exit 0 = pass)
-Phase 2  AI review         — Claude reviews git diff vs acceptance criteria
+Phase 2  AI review         — selected review runtime checks git diff vs acceptance criteria
 ```
 
 Configure validation commands for your project:
@@ -295,9 +305,8 @@ All decisions are logged to `.cloudy/logs/approvals.jsonl`.
 A real-time web UI starts automatically at `http://localhost:3117`. It shows live task status, streaming output, cost tracking, and approval cards.
 
 ```bash
-cloudy run                        # dashboard on by default, browser auto-opens
-cloudy run --no-dashboard         # disable
-cloudy run --dashboard-port 4000  # custom port
+cloudy run                # dashboard on by default, browser auto-opens
+cloudy run --no-dashboard # disable
 ```
 
 ---
@@ -326,6 +335,25 @@ The dashboard has six tabs per project:
 | 📜 **History** | Browse past runs, costs, task outcomes |
 | 🧠 **Memory** | View `CLAUDE.md` and `.claude/MEMORY.md` for the project |
 
+### Runtime controls in the dashboard
+
+The dashboard exposes the same phase/runtime split as the CLI:
+
+- **Plan tab**: planning `engine`, `provider`, and provider-native `modelId`
+- **Run tab**: execution, validation, and review runtime routes
+- **Retry flow**: failed-task retries reuse the same execution / validation / review runtime settings
+
+Use this when you want the web path to behave like:
+
+```bash
+cloudy plan --planning-engine codex --planning-provider codex --planning-model-id o3-mini
+
+cloudy run \
+  --engine codex --provider codex --execution-model-id o3 \
+  --validation-engine claude-code --validation-provider claude --validation-model-id claude-sonnet-4-6 \
+  --review-engine pi-mono --review-provider openai --review-model-id gpt-5
+```
+
 ### 💬 Chat tab
 
 The Chat tab shows both Cloudy sessions (started from the web) and Claude Code CLI sessions (from your terminal). CLI sessions are read-only while the CLI is active. Once you close the terminal, inactive CC sessions unlock — type to resume the exact conversation via `claude --resume`.
@@ -351,6 +379,51 @@ http://localhost:3117/#/myproject/chat/cc%3A1498d6da-...
                           ↑project  ↑tab  ↑session id
 ```
 
+### HTTP API
+
+The dashboard talks to a small local HTTP API. The runtime-routing endpoints are:
+
+- `POST /api/projects/:id/plan`
+- `POST /api/projects/:id/run`
+- `POST /api/projects/:id/retry`
+
+Planning example:
+
+```json
+{
+  "specPaths": ["/Users/ted/dev/myapp/specs/auth.md"],
+  "model": "sonnet",
+  "planningEngine": "codex",
+  "planningProvider": "codex",
+  "planningModelId": "o3-mini"
+}
+```
+
+Run example:
+
+```json
+{
+  "executionModel": "sonnet",
+  "taskReviewModel": "haiku",
+  "runReviewModel": "sonnet",
+  "engine": "codex",
+  "provider": "codex",
+  "executionModelId": "o3",
+  "validationEngine": "claude-code",
+  "validationProvider": "claude",
+  "validationModelId": "claude-sonnet-4-6",
+  "reviewEngine": "pi-mono",
+  "reviewProvider": "openai",
+  "reviewModelId": "gpt-5"
+}
+```
+
+The daemon forwards these fields directly into spawned `cloudy plan` / `cloudy run` processes, so the browser path and CLI path stay aligned.
+
+### Fed compatibility
+
+When the daemon starts, it registers itself with `fed` and advertises project/run metadata to the rest of the local estate. When the daemon stops, it cleans up discovery and registration handles so tests, embedders, and local tooling do not leak background peer-discovery state.
+
 ---
 
 ## 🖱️ Terminal UI (TUI)
@@ -375,32 +448,48 @@ cloudy run --tui          # force on even in non-TTY contexts
 
 ---
 
-## ⚙️ Execution Engines
+## ⚙️ Engines And Providers
 
 ### Claude Code (default)
 
-Uses the `claude` CLI with `--dangerously-skip-permissions` for full autonomous operation.
+Uses your local Claude Code subscription/login.
 
 ```bash
-cloudy run --engine claude-code --execution-model sonnet
+cloudy run --engine claude-code --provider claude --execution-model sonnet
 ```
 
-### Pi-mono
+### Codex CLI subscription
 
-Abstraction layer supporting OpenAI, Google, Ollama, and other providers.
+Uses your local Codex CLI login/subscription, separate from OpenAI API keys.
 
 ```bash
-cloudy run --engine pi-mono --pi-provider openai --pi-model gpt-4o-mini
-cloudy run --engine pi-mono --pi-provider google --pi-model gemini-2.0-flash
-cloudy run --engine pi-mono --pi-provider ollama --pi-model llama3.2 --pi-base-url http://localhost:11434
+cloudy run --engine codex --provider codex --execution-model-id o3
 ```
 
-Persist the engine in config:
+### OpenAI API route
+
+Uses an API-backed engine such as `pi-mono`, separate from the Codex CLI path.
 
 ```bash
-cloudy config --set engine=pi-mono
-cloudy config --set piMono.provider=openai
-cloudy config --set piMono.model=gpt-4o-mini
+cloudy run --engine pi-mono --provider openai --execution-model-id gpt-4.1-mini
+```
+
+Persist execution defaults in config:
+
+```bash
+cloudy config --set engine=codex
+cloudy config --set provider=codex
+cloudy config --set executionModelId=o3
+```
+
+Persist phase-specific runtimes:
+
+```bash
+cloudy config --set planningRuntime.engine=codex
+cloudy config --set planningRuntime.provider=codex
+cloudy config --set planningRuntime.modelId=o3-mini
+cloudy config --set validationRuntime.engine=codex
+cloudy config --set reviewRuntime.engine=codex
 ```
 
 ---
@@ -430,13 +519,15 @@ cloudy config --set review.model=opus
 | 🔍 Task review | `--task-review-model` | haiku | Per-task diff review, runs every task |
 | 🔭 Run review | `--run-review-model` | opus | Holistic post-run review, runs once at the end |
 
-With `--model-auto`, task complexity (acceptance criteria count, description length, dep count, context size) determines the model automatically.
+These abstract model flags map cleanly to Claude-style runtimes. For non-Claude providers, use the phase runtime `*ModelId` flags/config keys instead.
+
+With `--model-auto`, task complexity (acceptance criteria count, description length, dep count, context size) determines the execution model automatically.
 
 ---
 
 ## 🌱 Dynamic Subtasks
 
-If Claude discovers unexpected work mid-task, it can extend the plan:
+If the runtime discovers unexpected work mid-task, it can extend the plan:
 
 ```
 ## SUBTASKS
@@ -468,6 +559,7 @@ Add a `wrapUpPrompt` to your plan to run a final prompt after all tasks complete
 cloudy check
 cloudy check task-3
 cloudy check --no-ai-review
+cloudy check --validation-engine codex --validation-provider codex --validation-model-id o3
 
 # ↩️ Roll back a task to its pre-execution git checkpoint
 cloudy rollback task-3
@@ -499,7 +591,7 @@ cloudy reset --force
 
 ## 📝 Writing Good Specs
 
-Cloudy is only as good as the specs you give it. The most common cause of incomplete implementations isn't a model failure — it's an incomplete spec. Claude will implement exactly what you describe, no more. **The spec is the complete contract. The agent fills in the gaps with guesses.**
+Cloudy is only as good as the specs you give it. The most common cause of incomplete implementations isn't a model failure — it's an incomplete spec. The runtime will implement exactly what you describe, no more. **The spec is the complete contract. The agent fills in the gaps with guesses.**
 
 ### 📁 Complete the Files list
 
@@ -612,6 +704,23 @@ Full config reference (`.cloudy/config.json`):
     "validation": "haiku"
   },
   "engine": "claude-code",
+  "provider": "claude",
+  "executionModelId": "",
+  "planningRuntime": {
+    "engine": "codex",
+    "provider": "codex",
+    "modelId": "o3-mini"
+  },
+  "validationRuntime": {
+    "engine": "claude-code",
+    "provider": "claude",
+    "modelId": "claude-sonnet-4-6"
+  },
+  "reviewRuntime": {
+    "engine": "pi-mono",
+    "provider": "openai",
+    "modelId": "gpt-5"
+  },
   "piMono": {
     "provider": "openai",
     "model": "gpt-4o-mini",
@@ -644,6 +753,8 @@ Full config reference (`.cloudy/config.json`):
   }
 }
 ```
+
+`engine` / `provider` / `executionModelId` apply to execution by default. `planningRuntime`, `validationRuntime`, and `reviewRuntime` let you route those phases independently from config, CLI flags, or daemon HTTP requests.
 
 ---
 

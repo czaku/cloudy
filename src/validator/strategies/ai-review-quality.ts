@@ -1,5 +1,5 @@
-import type { ClaudeModel, ValidationResult } from '../../core/types.js';
-import { runClaude } from '../../executor/claude-runner.js';
+import type { ClaudeModel, PhaseRuntimeConfig, ValidationResult } from '../../core/types.js';
+import { runPhaseModel } from '../../executor/model-runner.js';
 import { buildQualityReviewPrompt } from '../../planner/prompts.js';
 
 export async function runAiQualityReview(
@@ -8,13 +8,22 @@ export async function runAiQualityReview(
   model: ClaudeModel,
   cwd: string,
   changedFileSections?: Array<{ path: string; content: string; note?: string }>,
+  runtime?: PhaseRuntimeConfig,
 ): Promise<ValidationResult> {
   const start = Date.now();
 
   const prompt = buildQualityReviewPrompt(taskTitle, gitDiff, changedFileSections);
 
   try {
-    const result = await runClaude({ prompt, model, cwd });
+    const result = await runPhaseModel({
+      prompt,
+      model,
+      cwd,
+      engine: runtime?.engine,
+      provider: runtime?.provider,
+      modelId: runtime?.modelId,
+      taskType: 'review',
+    });
 
     if (!result.success) {
       return {

@@ -187,6 +187,40 @@ describe('validateTask — two-stage AI review (Phase 2a → 2b)', () => {
     expect(runAiQualityReview).toHaveBeenCalledOnce();
   });
 
+  it('forwards validation runtime overrides to both AI review phases', async () => {
+    const runtime = { engine: 'codex', provider: 'codex', modelId: 'o3' } as const;
+
+    await validateTask({
+      task: makeTask(),
+      config: ALL_ON,
+      model: 'haiku',
+      runtime,
+      cwd: '/tmp',
+    });
+
+    expect(runAiReview).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(Array),
+      expect.any(String),
+      'haiku',
+      '/tmp',
+      expect.any(Array),
+      undefined,
+      undefined,
+      undefined,
+      expect.any(Array),
+      runtime,
+    );
+    expect(runAiQualityReview).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      'haiku',
+      '/tmp',
+      expect.any(Array),
+      runtime,
+    );
+  });
+
   it('skips Phase 2b when Phase 2a spec compliance fails', async () => {
     vi.mocked(runAiReview).mockResolvedValueOnce({
       strategy: 'ai-review',

@@ -17,14 +17,25 @@ import path from 'node:path';
 
 // ── 1. maxCostPerRunUsd ───────────────────────────────────────────────────────
 
-vi.mock('../../src/executor/claude-runner.js', () => ({
-  runClaude: vi.fn().mockResolvedValue({
+vi.mock('../../src/executor/model-runner.js', () => {
+  const runPhaseModel = vi.fn().mockResolvedValue({
     success: true,
     output: 'done',
     error: undefined,
     usage: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 0, cacheWriteTokens: 0 },
     durationMs: 1000,
     costUsd: 5.0, // expensive — will trip the budget
+  });
+  return { runPhaseModel, runAbstractModel: runPhaseModel, runClaude: runPhaseModel };
+});
+vi.mock('../../src/executor/engine.js', () => ({
+  runEngine: vi.fn().mockResolvedValue({
+    success: true,
+    output: 'done',
+    error: undefined,
+    usage: { inputTokens: 100, outputTokens: 50, cacheReadTokens: 0, cacheWriteTokens: 0 },
+    durationMs: 1000,
+    costUsd: 5.0, // expensive — will trip the per-run budget in orchestrator tests
   }),
 }));
 vi.mock('../../src/executor/context-resolver.js', async (importOriginal) => {
@@ -129,7 +140,7 @@ describe('1. maxCostPerRunUsd budget guard', () => {
     const orchestrator = new Orchestrator({
       cwd: '/tmp/test',
       state: makeState(tasks),
-      config: makeConfig({ maxCostPerRunUsd: 1.0 }), // limit $1, but runClaude costs $5
+      config: makeConfig({ maxCostPerRunUsd: 1.0 }), // limit $1, but runEngine costs $5
       onEvent: (e) => events.push(e as { type: string; error?: string }),
     });
 
@@ -163,8 +174,8 @@ describe('1. maxCostPerRunUsd budget guard', () => {
 
 describe('2. Plan quality warnings', () => {
   it('warns when a task has zero acceptance criteria', async () => {
-    const { runClaude } = await import('../../src/executor/claude-runner.js');
-    vi.mocked(runClaude).mockResolvedValueOnce({
+    const { runPhaseModel } = await import('../../src/executor/model-runner.js');
+    vi.mocked(runPhaseModel).mockResolvedValueOnce({
       success: true,
       output: JSON.stringify({
         tasks: [{
@@ -176,7 +187,7 @@ describe('2. Plan quality warnings', () => {
       durationMs: 0, costUsd: 0,
     });
     // Second call (haiku verification) returns empty success
-    vi.mocked(runClaude).mockResolvedValueOnce({
+    vi.mocked(runPhaseModel).mockResolvedValueOnce({
       success: true, output: '{"task-1":[]}',
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
       durationMs: 0, costUsd: 0,
@@ -191,8 +202,8 @@ describe('2. Plan quality warnings', () => {
   });
 
   it('warns when acceptance criteria are too vague (< 15 chars)', async () => {
-    const { runClaude } = await import('../../src/executor/claude-runner.js');
-    vi.mocked(runClaude).mockResolvedValueOnce({
+    const { runPhaseModel } = await import('../../src/executor/model-runner.js');
+    vi.mocked(runPhaseModel).mockResolvedValueOnce({
       success: true,
       output: JSON.stringify({
         tasks: [{
@@ -203,7 +214,7 @@ describe('2. Plan quality warnings', () => {
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
       durationMs: 0, costUsd: 0,
     });
-    vi.mocked(runClaude).mockResolvedValueOnce({
+    vi.mocked(runPhaseModel).mockResolvedValueOnce({
       success: true, output: '{"task-1":[]}',
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
       durationMs: 0, costUsd: 0,
@@ -220,8 +231,8 @@ describe('2. Plan quality warnings', () => {
 
 describe('4. Spec coverage check', () => {
   it('warns when spec Acceptance Criteria are not covered by any task AC', async () => {
-    const { runClaude } = await import('../../src/executor/claude-runner.js');
-    vi.mocked(runClaude).mockResolvedValueOnce({
+    const { runPhaseModel } = await import('../../src/executor/model-runner.js');
+    vi.mocked(runPhaseModel).mockResolvedValueOnce({
       success: true,
       output: JSON.stringify({
         tasks: [{
@@ -233,7 +244,7 @@ describe('4. Spec coverage check', () => {
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
       durationMs: 0, costUsd: 0,
     });
-    vi.mocked(runClaude).mockResolvedValueOnce({
+    vi.mocked(runPhaseModel).mockResolvedValueOnce({
       success: true, output: '{"task-1":[]}',
       usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
       durationMs: 0, costUsd: 0,

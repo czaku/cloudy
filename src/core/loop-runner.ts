@@ -10,7 +10,7 @@
  */
 
 import { execa } from 'execa';
-import { runClaude } from '../executor/claude-runner.js';
+import { runPhaseModel } from '../executor/model-runner.js';
 import { getGitDiff } from '../git/git.js';
 import type { ClaudeModel } from './types.js';
 
@@ -194,10 +194,11 @@ export async function runLoop(opts: LoopRunnerOptions): Promise<LoopResult> {
 
     const prompt = buildLoopPrompt(goal, i, maxIterations, failureOutput, prevDiff, accumulatedLearnings);
 
-    const result = await runClaude({
+    const result = await runPhaseModel({
       prompt,
       model,
       cwd,
+      taskType: 'coding',
       onOutput: (text) =>
         onProgress?.({ type: 'claude_output', iteration: i, text }),
     });

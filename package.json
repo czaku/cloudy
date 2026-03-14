@@ -1,7 +1,7 @@
 {
   "name": "cloudy",
   "version": "0.1.0",
-  "description": "Claude Code orchestration tool - decompose goals into tasks, execute with model selection, validate with deterministic + AI checks",
+  "description": "AI orchestration tool - decompose goals into tasks, route phases across local CLIs or APIs, and validate with deterministic + AI checks",
   "type": "module",
   "bin": {
     "cloudy": "./dist/bin/cloudy.js"

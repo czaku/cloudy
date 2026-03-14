@@ -118,9 +118,22 @@ async function runFinishingWorkflow(cwd: string): Promise<void> {
 export const runCommand = new Command('run')
   .description('Execute the current plan')
   .option('--model <model>', 'Model for all phases')
+  .option('--planning-model <model>', 'Model for planning phase (used with --goal)')
   .option('--execution-model <model>', 'Model for execution phase')
+  .option('--execution-model-id <id>', 'Provider-native execution model ID (e.g. o3, codex-mini)')
   .option('--task-review-model <model>', 'Model for per-task validation')
   .option('--model-auto', 'Auto-route model per task complexity')
+  .option('--planning-engine <engine>', 'Planning engine (e.g. claude-code, codex, pi-mono)')
+  .option('--planning-provider <provider>', 'Planning provider/auth route (e.g. claude subscription, codex subscription, openai API)')
+  .option('--planning-model-id <id>', 'Provider-native planning model ID')
+  .option('--engine <engine>', 'Execution engine (e.g. claude-code, codex, pi-mono)')
+  .option('--provider <provider>', 'Execution provider/auth route (e.g. claude subscription, codex subscription, openai API)')
+  .option('--validation-engine <engine>', 'Per-task AI validation engine')
+  .option('--validation-provider <provider>', 'Per-task AI validation provider/auth route')
+  .option('--validation-model-id <id>', 'Provider-native per-task AI validation model ID')
+  .option('--review-engine <engine>', 'Holistic review / review-side prompt engine')
+  .option('--review-provider <provider>', 'Holistic review / review-side provider/auth route')
+  .option('--review-model-id <id>', 'Provider-native holistic review model ID')
   .option('--parallel', 'Enable parallel execution')
   .option('--max-parallel <n>', 'Max parallel tasks', parseInt)
   .option('--no-validate', 'Skip validation')
@@ -132,7 +145,7 @@ export const runCommand = new Command('run')
   .option('--resume', 'Show already-completed tasks and ask to confirm before re-running')
   .option('--goal <goal>', 'Create a plan for this goal and run it immediately (skips cloudy init)')
   .option('--max-retries <n>', 'Max retries per task', parseInt)
-  .option('--verbose', 'Show live Claude output for each task as it runs')
+  .option('--verbose', 'Show live agent output for each task as it runs')
   .option('--run-review-model <model>', 'Model for post-run holistic review (haiku/sonnet/opus)')
   .option('--quality-review-model <model>', 'Model for Phase 2b code quality review (default: same as --task-review-model)')
 
@@ -146,9 +159,22 @@ export const runCommand = new Command('run')
   .action(
     async (opts: {
       model?: string;
+      planningModel?: string;
       executionModel?: string;
+      executionModelId?: string;
       taskReviewModel?: string;
       qualityReviewModel?: string;
+      planningEngine?: string;
+      planningProvider?: string;
+      planningModelId?: string;
+      engine?: string;
+      provider?: string;
+      validationEngine?: string;
+      validationProvider?: string;
+      validationModelId?: string;
+      reviewEngine?: string;
+      reviewProvider?: string;
+      reviewModelId?: string;
       modelAuto?: boolean;
       parallel?: boolean;
       maxParallel?: number;
@@ -205,15 +231,24 @@ export const runCommand = new Command('run')
         .then(({ autoRegisterWithDaemon }) => autoRegisterWithDaemon(cwd))
         .catch(() => {});
 
-      // Verify a claude engine is available before doing anything else
-      try {
-        await selectViaDaemon({ provider: 'claude' });
-      } catch (err) {
-        console.error(c(red, `✖  ${err instanceof Error ? err.message : String(err)}`));
-        process.exit(1);
-      }
-
       const config = await loadConfig(cwd);
+
+      // Apply planning/review/runtime overrides before any on-the-fly planning.
+      config.models = mergeModelConfig(config.models, {
+        model: opts.model ? parseModelFlag(opts.model) : undefined,
+        planningModel: opts.planningModel
+          ? parseModelFlag(opts.planningModel)
+          : undefined,
+      });
+      if (opts.planningEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planningEngine as typeof config.engine };
+      if (opts.planningProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planningProvider };
+      if (opts.planningModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planningModelId };
+      if (opts.validationEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.validationEngine as typeof config.engine };
+      if (opts.validationProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.validationProvider };
+      if (opts.validationModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.validationModelId };
+      if (opts.reviewEngine) config.reviewRuntime = { ...config.reviewRuntime, engine: opts.reviewEngine as typeof config.engine };
+      if (opts.reviewProvider) config.reviewRuntime = { ...config.reviewRuntime, provider: opts.reviewProvider };
+      if (opts.reviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.reviewModelId };
 
       // ── Interactive model selection (when not provided via flags) ────────────
       const MODEL_OPTIONS = [
@@ -277,6 +312,10 @@ export const runCommand = new Command('run')
           config.models.planning,
           cwd,
           (text) => process.stdout.write(text),
+          undefined,
+          undefined,
+          undefined,
+          config.planningRuntime,
         );
         updatePlan(freshState, plan);
         await saveState(cwd, freshState);
@@ -292,6 +331,9 @@ export const runCommand = new Command('run')
       // Apply model overrides
       config.models = mergeModelConfig(config.models, {
         model: opts.model ? parseModelFlag(opts.model) : undefined,
+        planningModel: opts.planningModel
+          ? parseModelFlag(opts.planningModel)
+          : undefined,
         executionModel: opts.executionModel
           ? parseModelFlag(opts.executionModel)
           : undefined,
@@ -304,6 +346,18 @@ export const runCommand = new Command('run')
       });
 
       if (opts.modelAuto) config.autoModelRouting = true;
+      if (opts.engine) config.engine = opts.engine as typeof config.engine;
+      if (opts.provider) config.provider = opts.provider;
+      if (opts.executionModelId) config.executionModelId = opts.executionModelId;
+      if (opts.planningEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planningEngine as typeof config.engine };
+      if (opts.planningProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planningProvider };
+      if (opts.planningModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planningModelId };
+      if (opts.validationEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.validationEngine as typeof config.engine };
+      if (opts.validationProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.validationProvider };
+      if (opts.validationModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.validationModelId };
+      if (opts.reviewEngine) config.reviewRuntime = { ...config.reviewRuntime, engine: opts.reviewEngine as typeof config.engine };
+      if (opts.reviewProvider) config.reviewRuntime = { ...config.reviewRuntime, provider: opts.reviewProvider };
+      if (opts.reviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.reviewModelId };
       if (opts.parallel) config.parallel = true;
       if (opts.maxParallel) config.maxParallel = opts.maxParallel;
       if (opts.worktrees) config.worktrees = true;
@@ -319,6 +373,18 @@ export const runCommand = new Command('run')
           aiReview: false,
           commands: [],
         };
+      }
+
+      // Verify the requested execution engine/provider is available.
+      try {
+        await selectViaDaemon({
+          engine: config.engine,
+          provider: config.provider,
+          taskType: 'coding',
+        });
+      } catch (err) {
+        console.error(c(red, `✖  ${err instanceof Error ? err.message : String(err)}`));
+        process.exit(1);
       }
 
       // Apply review configuration
@@ -431,7 +497,7 @@ export const runCommand = new Command('run')
                 taskHeartbeat = setInterval(() => {
                   if (!taskHasOutput) {
                     const elapsed = Math.floor((Date.now() - taskStartTime) / 1000);
-                    process.stdout.write(c(dim, `  [${elapsed}s — still waiting for Claude...]\n`));
+                    process.stdout.write(c(dim, `  [${elapsed}s — still waiting for the runtime...]\n`));
                   }
                 }, 10_000);
               }
@@ -824,14 +890,23 @@ export const runCommand = new Command('run')
         if (!isNonInteractive && !opts.retry && !opts.retryFailed) {
           try {
             const { buildPlanPreflightPrompt } = await import('../../planner/prompts.js');
-            const { runClaude } = await import('../../executor/claude-runner.js');
+            const { runPhaseModel } = await import('../../executor/model-runner.js');
             const preflightPrompt = buildPlanPreflightPrompt(
               freshState.plan.goal,
               freshState.plan.tasks.filter((t) => t.status === 'pending').map((t) => ({
                 id: t.id, title: t.title, description: t.description, dependencies: t.dependencies,
               })),
             );
-            const preflightResult = await runClaude({ prompt: preflightPrompt, model: 'haiku', cwd, abortSignal: AbortSignal.timeout(30_000) });
+            const preflightResult = await runPhaseModel({
+              prompt: preflightPrompt,
+              model: 'haiku',
+              cwd,
+              engine: config.reviewRuntime?.engine,
+              provider: config.reviewRuntime?.provider,
+              modelId: config.reviewRuntime?.modelId,
+              abortSignal: AbortSignal.timeout(30_000),
+              taskType: 'review',
+            });
             if (preflightResult.success) {
               try {
                 const jsonMatch = preflightResult.output.match(/\{[\s\S]*\}/);
@@ -860,14 +935,18 @@ export const runCommand = new Command('run')
 
         const pending = freshState.plan.tasks.filter((t) => t.status === 'pending');
         const engine = config.engine ?? 'claude-code';
+        const provider = config.provider ?? 'auto';
         const executionModel = config.autoModelRouting ? 'auto' : config.models.execution;
         const parallelLabel = config.parallel ? `parallel ×${config.maxParallel}` : 'sequential';
+        const execLabel = engine === 'claude-code'
+          ? executionModel
+          : (config.executionModelId ?? 'default');
 
         if (isAgentOutput) {
-          agentLog('RUN:STARTED', `tasks=${pending.length}`, `exec=${executionModel}`, `validate=${config.models.validation}`, parallelLabel);
+          agentLog('RUN:STARTED', `tasks=${pending.length}`, `engine=${engine}`, `provider=${provider}`, `exec=${execLabel}`, `validate=${config.models.validation}`, parallelLabel);
         } else {
           console.log(`\n${c(cyan + bold, '☁️  cloudy')}  ${c(dim, '·')}  ${c(bold, `${pending.length} task${pending.length !== 1 ? 's' : ''}`)}`);
-          console.log(`    ${c(dim, `🤖 exec:${executionModel}  ·  validate:${config.models.validation}  ·  ${parallelLabel}`)}`);
+          console.log(`    ${c(dim, `🤖 ${engine}/${provider}  ·  exec:${execLabel}  ·  validate:${config.models.validation}  ·  ${parallelLabel}`)}`);
           console.log('');
         }
 

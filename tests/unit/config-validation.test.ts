@@ -22,6 +22,11 @@ describe('validateConfig', () => {
     expect(errors.some((e) => e.includes('models.execution'))).toBe(true);
   });
 
+  it('errors on invalid engine', () => {
+    const errors = validateConfig(makeConfig({ engine: 'made-up-engine' as never }));
+    expect(errors.some((e) => e.includes('engine'))).toBe(true);
+  });
+
   it('errors on invalid validation model', () => {
     const errors = validateConfig(makeConfig({ models: { ...DEFAULT_CONFIG.models, validation: 'turbo' as never } }));
     expect(errors.some((e) => e.includes('models.validation'))).toBe(true);

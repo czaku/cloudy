@@ -1,5 +1,5 @@
-import type { ClaudeModel, ValidationResult } from '../../core/types.js';
-import { runClaude } from '../../executor/claude-runner.js';
+import type { ClaudeModel, PhaseRuntimeConfig, ValidationResult } from '../../core/types.js';
+import { runPhaseModel } from '../../executor/model-runner.js';
 import { buildValidationPrompt, type PriorArtifact } from '../../planner/prompts.js';
 
 export async function runAiReview(
@@ -13,6 +13,7 @@ export async function runAiReview(
   artifactCheckPassed?: boolean,
   taskOutputArtifacts?: string[],
   commandResults?: Array<{ label: string; passed: boolean; output: string }>,
+  runtime?: PhaseRuntimeConfig,
 ): Promise<ValidationResult> {
   const start = Date.now();
 
@@ -37,7 +38,15 @@ export async function runAiReview(
   );
 
   try {
-    const result = await runClaude({ prompt, model, cwd });
+    const result = await runPhaseModel({
+      prompt,
+      model,
+      cwd,
+      engine: runtime?.engine,
+      provider: runtime?.provider,
+      modelId: runtime?.modelId,
+      taskType: 'review',
+    });
 
     if (!result.success) {
       return {

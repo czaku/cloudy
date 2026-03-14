@@ -5,8 +5,26 @@ import { ensureDir, readJson, writeJson } from '../utils/fs.js';
 import { loadGlobalConfig } from './global-config.js';
 
 const VALID_MODELS = new Set(['opus', 'sonnet', 'haiku']);
+const VALID_ENGINES = new Set([
+  'claude-code',
+  'codex',
+  'pi-mono',
+  'copilot',
+  'gemini-cli',
+  'qwen-code',
+  'amazon-q',
+  'opencode',
+  'goose',
+]);
 const VALID_APPROVAL_MODES = new Set(['never', 'always', 'on-failure']);
 const VALID_AUTO_ACTIONS = new Set(['continue', 'halt']);
+
+function validatePhaseRuntime(prefix: string, runtime: CloudyConfig['planningRuntime'], errors: string[]): void {
+  if (!runtime?.engine) return;
+  if (!VALID_ENGINES.has(runtime.engine)) {
+    errors.push(`${prefix}.engine: invalid engine "${runtime.engine}"`);
+  }
+}
 
 export function validateConfig(config: CloudyConfig): string[] {
   const errors: string[] = [];
@@ -20,6 +38,12 @@ export function validateConfig(config: CloudyConfig): string[] {
   if (!VALID_MODELS.has(config.models.validation)) {
     errors.push(`models.validation: invalid model "${config.models.validation}" (valid: opus, sonnet, haiku)`);
   }
+  if (!VALID_ENGINES.has(config.engine)) {
+    errors.push(`engine: invalid engine "${config.engine}"`);
+  }
+  validatePhaseRuntime('planningRuntime', config.planningRuntime, errors);
+  validatePhaseRuntime('validationRuntime', config.validationRuntime, errors);
+  validatePhaseRuntime('reviewRuntime', config.reviewRuntime, errors);
   if (typeof config.maxRetries !== 'number' || config.maxRetries < 0 || config.maxRetries > 10) {
     errors.push(`maxRetries: must be a number between 0 and 10 (got ${config.maxRetries})`);
   }
@@ -96,7 +120,12 @@ export async function loadConfig(cwd: string): Promise<CloudyConfig> {
     worktrees: saved.worktrees ?? effectiveDefaults.worktrees,
     runBranch: saved.runBranch ?? effectiveDefaults.runBranch,
     approval: { ...effectiveDefaults.approval, ...saved.approval },
-    engine: 'claude-code',
+    engine: saved.engine ?? effectiveDefaults.engine,
+    provider: saved.provider ?? effectiveDefaults.provider,
+    executionModelId: saved.executionModelId ?? effectiveDefaults.executionModelId,
+    planningRuntime: { ...effectiveDefaults.planningRuntime, ...saved.planningRuntime },
+    validationRuntime: { ...effectiveDefaults.validationRuntime, ...saved.validationRuntime },
+    reviewRuntime: { ...effectiveDefaults.reviewRuntime, ...saved.reviewRuntime },
     review: { ...effectiveDefaults.review, ...saved.review },
   };
 

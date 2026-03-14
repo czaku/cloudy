@@ -24,7 +24,7 @@ export const loopCommand = new Command('watch')
     'Shell command to check convergence (loop stops when it exits 0)',
   )
   .option('--max-iterations <n>', 'Maximum iterations before giving up', parseInt, 10)
-  .option('--model <model>', 'Claude model to use (opus|sonnet|haiku)')
+  .option('--model <model>', 'Abstract model to use (opus|sonnet|haiku)')
   .action(
     async (
       goal: string,
@@ -111,7 +111,7 @@ export const loopCommand = new Command('watch')
           : result.reason === 'max_iterations'
             ? `max iterations (${result.iterations}) reached`
             : result.reason === 'no_progress'
-              ? 'no progress — Claude is stuck'
+              ? 'no progress — the runtime is stuck'
               : result.error ?? result.reason;
 
         console.log(c(red, `✖  stopped: ${reason}`));

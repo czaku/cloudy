@@ -83,6 +83,21 @@ interface CCSessionStats {
   model: string | null;
 }
 
+interface RuntimeRouteConfig {
+  engine?: string;
+  provider?: string;
+  modelId?: string;
+}
+
+interface ProjectRuntimeConfig {
+  engine?: string;
+  provider?: string;
+  executionModelId?: string;
+  planningRuntime?: RuntimeRouteConfig;
+  validationRuntime?: RuntimeRouteConfig;
+  reviewRuntime?: RuntimeRouteConfig;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────────
 
 function statusColor(status: ProjectStatusSnapshot['status']): string {
@@ -121,6 +136,53 @@ async function apiPost(path: string, body: unknown): Promise<Response> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
+}
+
+async function getApiErrorMessage(response: Response): Promise<string> {
+  const body = await response.json().catch(() => null) as { error?: string } | null;
+  return body?.error ?? `${response.status} ${response.statusText}`;
+}
+
+function optionalText(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function addOptionalRuntimeField(
+  payload: Record<string, string>,
+  key: string,
+  value: string,
+): void {
+  const normalized = optionalText(value);
+  if (normalized) payload[key] = normalized;
+}
+
+function routeSummary(route?: RuntimeRouteConfig): string {
+  if (!route?.engine && !route?.provider && !route?.modelId) return 'project default';
+  const parts = [route.engine, route.provider].filter(Boolean);
+  const base = parts.length > 0 ? parts.join(' / ') : 'custom route';
+  return route.modelId ? `${base} · ${route.modelId}` : base;
+}
+
+function useProjectRuntimeConfig(projectId: string): ProjectRuntimeConfig | null {
+  const [config, setConfig] = useState<ProjectRuntimeConfig | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/projects/${projectId}/config`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data: ProjectRuntimeConfig | null) => {
+        if (!cancelled) setConfig(data);
+      })
+      .catch(() => {
+        if (!cancelled) setConfig(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [projectId]);
+
+  return config;
 }
 
 // ── Plumpy icon components ─────────────────────────────────────────────
@@ -1556,6 +1618,20 @@ circle.traffic-light-active[fill="#f59e0b"] {
 .run-advanced-body { padding: 8px 12px; display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--border); }
 .run-advanced-row { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-secondary); cursor: pointer; }
 .run-advanced-row input[type=number], .run-advanced-row select { background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 4px; padding: 2px 6px; font-size: 11px; color: var(--text-primary); }
+.runtime-field-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.runtime-field-title { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-muted); }
+.runtime-clear-btn { border: none; background: none; color: var(--text-muted); cursor: pointer; font-size: 10px; text-decoration: underline; padding: 0; }
+.runtime-hint { font-size: 11px; line-height: 1.45; color: var(--text-muted); }
+.runtime-preset-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.runtime-preset-btn { display: inline-flex; align-items: center; gap: 6px; border-radius: 999px; border: 1px solid var(--border); background: rgba(255,255,255,0.02); color: var(--text-secondary); cursor: pointer; padding: 4px 9px; font-size: 10px; }
+.runtime-preset-btn:hover { border-color: rgba(167,139,250,0.45); color: var(--text-primary); }
+.runtime-preset-btn.active { border-color: rgba(167,139,250,0.6); background: rgba(167,139,250,0.12); color: #c4b5fd; }
+.runtime-preset-meta { color: var(--text-muted); font-size: 9px; text-transform: uppercase; letter-spacing: 0.04em; }
+.inline-error-banner { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(239,68,68,0.28); background: rgba(127,29,29,0.18); }
+.inline-error-title { font-size: 11px; font-weight: 700; color: #fca5a5; margin-bottom: 2px; }
+.inline-error-body { font-size: 11px; color: #fecaca; line-height: 1.45; word-break: break-word; }
+.inline-error-action { flex-shrink: 0; border-radius: 8px; border: 1px solid rgba(248,113,113,0.4); background: rgba(255,255,255,0.03); color: #fecaca; cursor: pointer; padding: 6px 9px; font-size: 10px; }
+.inline-error-action:hover { background: rgba(248,113,113,0.08); }
 `;
 
 function injectStyles() {
@@ -1939,10 +2015,15 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
   const [selectedSpecs, setSelectedSpecs] = useState<Set<string>>(new Set());
   const [showPlanOutput, setShowPlanOutput] = useState(false);
   const [planModel, setPlanModel] = useState('sonnet');
+  const [requestError, setRequestError] = useState('');
+  const [planningEngine, setPlanningEngine] = useState('');
+  const [planningProvider, setPlanningProvider] = useState('');
+  const [planningModelId, setPlanningModelId] = useState('');
   const [chatMsgs, setChatMsgs] = useState<PlanChatMsg[]>([]);
   const [pendingQuestion, setPendingQuestion] = useState<PlanChatMsg | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const isPlanning = project.activeProcess === 'init';
+  const projectConfig = useProjectRuntimeConfig(project.id);
 
   const MAX_SPEC_FILE_BYTES = 30_000;
   const MAX_SPEC_COMBINED_BYTES = 50_000;
@@ -2075,6 +2156,11 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
     if (isPlanning) { setShowPlanOutput(true); setChatMsgs([]); setPendingQuestion(null); }
   }, [isPlanning]);
 
+  useEffect(() => {
+    if (!requestError) return;
+    setRequestError('');
+  }, [planningEngine, planningProvider, planningModelId]);
+
   // Auto-scroll chat to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -2090,14 +2176,36 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
     });
   }
 
+  function clearPlanningRuntimeOverrides() {
+    setPlanningEngine('');
+    setPlanningProvider('');
+    setPlanningModelId('');
+    setRequestError('');
+  }
+
   async function handleScope() {
     if (selectedSpecs.size === 0 || specSizeError) return;
+    setRequestError('');
     setShowPlanOutput(true);
-    await apiPost(`/api/projects/${project.id}/plan`, {
+    const runtimePayload: Record<string, string> = {};
+    addOptionalRuntimeField(runtimePayload, 'planningEngine', planningEngine);
+    addOptionalRuntimeField(runtimePayload, 'planningProvider', planningProvider);
+    addOptionalRuntimeField(runtimePayload, 'planningModelId', planningModelId);
+    const response = await apiPost(`/api/projects/${project.id}/plan`, {
       specPaths: Array.from(selectedSpecs),
       planName: planName.trim() || undefined,
       model: planModel,
-    }).catch(() => {});
+      ...runtimePayload,
+    }).catch(() => null);
+    if (!response) {
+      setRequestError('Network error while starting planning.');
+      setShowPlanOutput(false);
+      return;
+    }
+    if (!response.ok) {
+      setRequestError(await getApiErrorMessage(response));
+      setShowPlanOutput(false);
+    }
   }
 
   async function submitAnswer(answerText: string, displayText: string) {
@@ -2445,6 +2553,31 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
                 style={{ background: 'rgba(167,139,250,0.1)', color: '#a78bfa', borderColor: 'rgba(167,139,250,0.3)' }}
                 onClick={() => { setSelectedSpecs(new Set()); setPlanName(''); }} title="Clear selection">✕</button>
             </div>
+            {requestError ? (
+              <InlineErrorBanner
+                title="Planning could not start"
+                message={requestError}
+                actionLabel="Use defaults"
+                onAction={clearPlanningRuntimeOverrides}
+              />
+            ) : null}
+            <details className="run-advanced-options" style={{ marginTop: 8, width: '100%' }}>
+              <summary className="run-advanced-toggle">Planning runtime</summary>
+              <div className="run-advanced-body">
+                <RuntimeConfigFields
+                  title="Planning route"
+                  engine={planningEngine}
+                  provider={planningProvider}
+                  modelId={planningModelId}
+                  onEngineChange={setPlanningEngine}
+                  onProviderChange={setPlanningProvider}
+                  onModelIdChange={setPlanningModelId}
+                  onClear={clearPlanningRuntimeOverrides}
+                  hint="Leave blank to follow the project planning route. Presets below cover the common subscription and API paths."
+                  defaultRoute={projectConfig?.planningRuntime}
+                />
+              </div>
+            </details>
           </div>
         ) : (
           <div className="plan-action-footer">
@@ -2566,6 +2699,20 @@ const MODEL_INFO: Record<string, { dot: string; badge: string; badgeColor: strin
   },
 };
 
+interface RuntimePreset {
+  label: string;
+  meta: string;
+  engine: string;
+  provider: string;
+  modelId?: string;
+}
+
+const RUNTIME_ROUTE_PRESETS: RuntimePreset[] = [
+  { label: 'Claude Code', meta: 'subscription', engine: 'claude-code', provider: 'claude' },
+  { label: 'Codex CLI', meta: 'subscription', engine: 'codex', provider: 'codex' },
+  { label: 'OpenAI API', meta: 'via pi-mono', engine: 'pi-mono', provider: 'openai' },
+];
+
 function ModelPicker({ value, onChange, label }: { value: string; onChange: (v: string) => void; label: string }) {
   const [open, setOpen] = useState(false);
   const [dropPos, setDropPos] = useState<{ top: number; left: number; openUp: boolean } | null>(null);
@@ -2644,6 +2791,170 @@ function ModelPicker({ value, onChange, label }: { value: string; onChange: (v: 
   );
 }
 
+function InlineErrorBanner({
+  title,
+  message,
+  actionLabel,
+  onAction,
+}: {
+  title: string;
+  message: string;
+  actionLabel?: string;
+  onAction?: () => void;
+}) {
+  return (
+    <div className="inline-error-banner" role="alert">
+      <div style={{ minWidth: 0 }}>
+        <div className="inline-error-title">{title}</div>
+        <div className="inline-error-body">{message}</div>
+      </div>
+      {actionLabel && onAction ? (
+        <button className="inline-error-action" onClick={onAction}>
+          {actionLabel}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function RuntimeRouteSummaryBar({
+  routes,
+}: {
+  routes: Array<{ label: string; route?: RuntimeRouteConfig; override?: RuntimeRouteConfig | null }>;
+}) {
+  return (
+    <div className="runtime-preset-row" style={{ gap: 8 }}>
+      {routes.map(({ label, route, override }) => {
+        const active = override && (override.engine || override.provider || override.modelId)
+          ? override
+          : route;
+        const isOverride = Boolean(override && (override.engine || override.provider || override.modelId));
+        return (
+          <div
+            key={label}
+            className={`runtime-preset-btn${isOverride ? ' active' : ''}`}
+            style={{ cursor: 'default' }}
+            title={isOverride ? 'Active override' : 'Project default'}
+          >
+            <span>{label}</span>
+            <span className="runtime-preset-meta">{isOverride ? 'override' : 'default'}</span>
+            <span style={{ color: 'var(--text-muted)' }}>{routeSummary(active)}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function RuntimeConfigFields({
+  title,
+  engine,
+  provider,
+  modelId,
+  onEngineChange,
+  onProviderChange,
+  onModelIdChange,
+  onClear,
+  hint,
+  defaultRoute,
+  presets = RUNTIME_ROUTE_PRESETS,
+}: {
+  title: string;
+  engine: string;
+  provider: string;
+  modelId: string;
+  onEngineChange: (value: string) => void;
+  onProviderChange: (value: string) => void;
+  onModelIdChange: (value: string) => void;
+  onClear?: () => void;
+  hint?: string;
+  defaultRoute?: RuntimeRouteConfig;
+  presets?: RuntimePreset[];
+}) {
+  const inputStyle: React.CSSProperties = {
+    width: '100%',
+    padding: '7px 9px',
+    borderRadius: 8,
+    border: '1px solid var(--border)',
+    background: 'var(--bg-card)',
+    color: 'var(--text-primary)',
+    fontSize: 12,
+  };
+  const hasOverride = Boolean(engine || provider || modelId);
+  const activeRoute = hasOverride
+    ? routeSummary({ engine: optionalText(engine), provider: optionalText(provider), modelId: optionalText(modelId) })
+    : null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
+      <div className="runtime-field-head">
+        <div className="runtime-field-title">{title}</div>
+        {hasOverride && onClear ? (
+          <button className="runtime-clear-btn" onClick={onClear}>
+            Use defaults
+          </button>
+        ) : null}
+      </div>
+      <div className="runtime-hint">
+        {hint ?? 'Leave these blank to use the project defaults. Set both engine and provider when you want to force a specific route.'}
+      </div>
+      <div className="runtime-hint">
+        Default: <strong>{routeSummary(defaultRoute)}</strong>
+        {activeRoute ? <> · Override: <strong>{activeRoute}</strong></> : null}
+      </div>
+      <div className="runtime-preset-row">
+        {presets.map((preset) => {
+          const isActive = engine === preset.engine && provider === preset.provider && (preset.modelId ? modelId === preset.modelId : true);
+          return (
+            <button
+              key={`${title}-${preset.label}`}
+              className={`runtime-preset-btn${isActive ? ' active' : ''}`}
+              onClick={() => {
+                onEngineChange(preset.engine);
+                onProviderChange(preset.provider);
+                onModelIdChange(preset.modelId ?? '');
+              }}
+              title={`${preset.engine} + ${preset.provider}`}
+            >
+              <span>{preset.label}</span>
+              <span className="runtime-preset-meta">{preset.meta}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 8 }}>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Engine</span>
+          <input
+            style={inputStyle}
+            placeholder="claude-code, codex"
+            value={engine}
+            onChange={(e) => onEngineChange((e.target as HTMLInputElement).value)}
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Provider</span>
+          <input
+            style={inputStyle}
+            placeholder="claude, codex, openai"
+            value={provider}
+            onChange={(e) => onProviderChange((e.target as HTMLInputElement).value)}
+          />
+        </label>
+        <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Model ID</span>
+          <input
+            style={inputStyle}
+            placeholder="o3, codex-mini"
+            value={modelId}
+            onChange={(e) => onModelIdChange((e.target as HTMLInputElement).value)}
+          />
+        </label>
+      </div>
+    </div>
+  );
+}
+
 // ── RunTab ─────────────────────────────────────────────────────────────
 
 interface RunTabProps {
@@ -2710,9 +3021,19 @@ function playBeep() {
 
 function RunTab({ project }: RunTabProps) {
   const [executionModel, setExecutionModel] = useState('sonnet');
+  const [executionEngine, setExecutionEngine] = useState('');
+  const [executionProvider, setExecutionProvider] = useState('');
+  const [executionModelId, setExecutionModelId] = useState('');
   const [taskReviewModel, setTaskReviewModel] = useState('haiku');
   const [runReviewModel, setRunReviewModel] = useState('sonnet');
   const [qualityReviewModel, setQualityReviewModel] = useState('');
+  const [requestError, setRequestError] = useState('');
+  const [validationEngine, setValidationEngine] = useState('');
+  const [validationProvider, setValidationProvider] = useState('');
+  const [validationModelId, setValidationModelId] = useState('');
+  const [reviewEngine, setReviewEngine] = useState('');
+  const [reviewProvider, setReviewProvider] = useState('');
+  const [reviewModelId, setReviewModelId] = useState('');
   const [parallel, setParallel] = useState(false);
   const [maxParallel, setMaxParallel] = useState(3);
   const [worktrees, setWorktrees] = useState(false);
@@ -2739,6 +3060,7 @@ function RunTab({ project }: RunTabProps) {
   const [questionAnswer, setQuestionAnswer] = useState('');
   // Question timer countdown
   const [questionSecsLeft, setQuestionSecsLeft] = useState(0);
+  const projectConfig = useProjectRuntimeConfig(project.id);
 
   const isRunning = project.activeProcess === 'run' || project.status === 'running';
 
@@ -2811,6 +3133,21 @@ function RunTab({ project }: RunTabProps) {
       .catch(() => {});
   }, [project.id]);
 
+  useEffect(() => {
+    if (!requestError) return;
+    setRequestError('');
+  }, [
+    executionEngine,
+    executionProvider,
+    executionModelId,
+    validationEngine,
+    validationProvider,
+    validationModelId,
+    reviewEngine,
+    reviewProvider,
+    reviewModelId,
+  ]);
+
   async function fetchRunState() {
     try {
       const r = await fetch(`/api/projects/${project.id}/state`);
@@ -2882,16 +3219,90 @@ function RunTab({ project }: RunTabProps) {
     setFinishLoading(false);
   }
 
+  function buildRunRuntimePayload(): Record<string, string> {
+    const payload: Record<string, string> = {};
+    addOptionalRuntimeField(payload, 'engine', executionEngine);
+    addOptionalRuntimeField(payload, 'provider', executionProvider);
+    addOptionalRuntimeField(payload, 'executionModelId', executionModelId);
+    addOptionalRuntimeField(payload, 'validationEngine', validationEngine);
+    addOptionalRuntimeField(payload, 'validationProvider', validationProvider);
+    addOptionalRuntimeField(payload, 'validationModelId', validationModelId);
+    addOptionalRuntimeField(payload, 'reviewEngine', reviewEngine);
+    addOptionalRuntimeField(payload, 'reviewProvider', reviewProvider);
+    addOptionalRuntimeField(payload, 'reviewModelId', reviewModelId);
+    return payload;
+  }
+
+  function clearRunRuntimeOverrides() {
+    setExecutionEngine('');
+    setExecutionProvider('');
+    setExecutionModelId('');
+    setValidationEngine('');
+    setValidationProvider('');
+    setValidationModelId('');
+    setReviewEngine('');
+    setReviewProvider('');
+    setReviewModelId('');
+    setRequestError('');
+  }
+
+  const executionOverrideRoute: RuntimeRouteConfig = {
+    engine: optionalText(executionEngine),
+    provider: optionalText(executionProvider),
+    modelId: optionalText(executionModelId),
+  };
+  const validationOverrideRoute: RuntimeRouteConfig = {
+    engine: optionalText(validationEngine),
+    provider: optionalText(validationProvider),
+    modelId: optionalText(validationModelId),
+  };
+  const reviewOverrideRoute: RuntimeRouteConfig = {
+    engine: optionalText(reviewEngine),
+    provider: optionalText(reviewProvider),
+    modelId: optionalText(reviewModelId),
+  };
+
   async function handleRetryTask(taskId: string) {
     if (effectivelyRunning) return;
+    setRequestError('');
     setViewMode('progress');
-    await apiPost(`/api/projects/${project.id}/retry`, { taskId, executionModel, taskReviewModel, runReviewModel, qualityReviewModel: qualityReviewModel || undefined, worktrees: worktrees || undefined }).catch(() => {});
+    const response = await apiPost(`/api/projects/${project.id}/retry`, {
+      taskId,
+      executionModel,
+      taskReviewModel,
+      runReviewModel,
+      qualityReviewModel: qualityReviewModel || undefined,
+      worktrees: worktrees || undefined,
+      ...buildRunRuntimePayload(),
+    }).catch(() => null);
+    if (!response) {
+      setRequestError('Network error while retrying the task.');
+      return;
+    }
+    if (!response.ok) {
+      setRequestError(await getApiErrorMessage(response));
+    }
   }
 
   async function handleRetryFailed() {
     if (effectivelyRunning) return;
+    setRequestError('');
     setViewMode('progress');
-    await apiPost(`/api/projects/${project.id}/retry`, { executionModel, taskReviewModel, runReviewModel, qualityReviewModel: qualityReviewModel || undefined, worktrees: worktrees || undefined }).catch(() => {});
+    const response = await apiPost(`/api/projects/${project.id}/retry`, {
+      executionModel,
+      taskReviewModel,
+      runReviewModel,
+      qualityReviewModel: qualityReviewModel || undefined,
+      worktrees: worktrees || undefined,
+      ...buildRunRuntimePayload(),
+    }).catch(() => null);
+    if (!response) {
+      setRequestError('Network error while retrying failed tasks.');
+      return;
+    }
+    if (!response.ok) {
+      setRequestError(await getApiErrorMessage(response));
+    }
   }
 
   const chainPlanIds = new Set(chainSteps.map((s) => s.planId));
@@ -2977,8 +3388,9 @@ function RunTab({ project }: RunTabProps) {
 
   async function handleRunChain() {
     if (chainSteps.length === 0 || isRunning) return;
+    setRequestError('');
     setViewMode('progress');
-    await apiPost(`/api/projects/${project.id}/run`, {
+    const response = await apiPost(`/api/projects/${project.id}/run`, {
       planIds: chainSteps.map((s) => s.planId),
       executionModel,
       taskReviewModel,
@@ -2990,7 +3402,17 @@ function RunTab({ project }: RunTabProps) {
       maxRetries: maxRetries !== 3 ? maxRetries : undefined,
       effort: effort || undefined,
       qualityReviewModel: qualityReviewModel || undefined,
-    }).catch(() => {});
+      ...buildRunRuntimePayload(),
+    }).catch(() => null);
+    if (!response) {
+      setRequestError('Network error while starting the run.');
+      setViewMode('config');
+      return;
+    }
+    if (!response.ok) {
+      setRequestError(await getApiErrorMessage(response));
+      setViewMode('config');
+    }
   }
 
   const trafficStatus = isRunning ? 'running' : project.status === 'failed' ? 'error' : chainSteps.length > 0 ? 'completed' : 'idle';
@@ -3133,7 +3555,14 @@ function RunTab({ project }: RunTabProps) {
           <div className="run-stuck-banner">
             <span>⚠ Process ended with tasks still in progress — server will auto-reset on next connect.</span>
             <button className="run-stuck-reset-btn" onClick={async () => {
-              await apiPost(`/api/projects/${project.id}/retry`, { executionModel, taskReviewModel, runReviewModel, qualityReviewModel: qualityReviewModel || undefined, worktrees: worktrees || undefined }).catch(() => {});
+              await apiPost(`/api/projects/${project.id}/retry`, {
+                executionModel,
+                taskReviewModel,
+                runReviewModel,
+                qualityReviewModel: qualityReviewModel || undefined,
+                worktrees: worktrees || undefined,
+                ...buildRunRuntimePayload(),
+              }).catch(() => {});
               setViewMode('progress');
             }}>↺ Retry now</button>
           </div>
@@ -3233,6 +3662,16 @@ function RunTab({ project }: RunTabProps) {
 
         {/* Footer */}
         <div className="run-progress-footer">
+          {requestError ? (
+            <div style={{ flexBasis: '100%' }}>
+              <InlineErrorBanner
+                title="Run request failed"
+                message={requestError}
+                actionLabel="Use defaults"
+                onAction={clearRunRuntimeOverrides}
+              />
+            </div>
+          ) : null}
           {effectivelyRunning && (
             <button
               className="daemon-btn"
@@ -3246,6 +3685,54 @@ function RunTab({ project }: RunTabProps) {
               <ModelPicker value={taskReviewModel} onChange={setTaskReviewModel} label="Task Review" />
               <ModelPicker value={runReviewModel} onChange={setRunReviewModel} label="Run Review" />
               <ModelPicker value={qualityReviewModel} onChange={setQualityReviewModel} label="Quality Review" />
+              <details className="run-advanced-options" style={{ minWidth: 280 }}>
+                <summary className="run-advanced-toggle">Runtime</summary>
+                <div className="run-advanced-body">
+                  <RuntimeRouteSummaryBar
+                    routes={[
+                      { label: 'Execution', route: { engine: projectConfig?.engine, provider: projectConfig?.provider, modelId: projectConfig?.executionModelId }, override: executionOverrideRoute },
+                      { label: 'Validation', route: projectConfig?.validationRuntime, override: validationOverrideRoute },
+                      { label: 'Review', route: projectConfig?.reviewRuntime, override: reviewOverrideRoute },
+                    ]}
+                  />
+                  <RuntimeConfigFields
+                    title="Execution route"
+                    engine={executionEngine}
+                    provider={executionProvider}
+                    modelId={executionModelId}
+                    onEngineChange={setExecutionEngine}
+                    onProviderChange={setExecutionProvider}
+                    onModelIdChange={setExecutionModelId}
+                    onClear={clearRunRuntimeOverrides}
+                    hint="Execution defaults come from project config. Override here only when this retry needs a specific implementation route."
+                    defaultRoute={{ engine: projectConfig?.engine, provider: projectConfig?.provider, modelId: projectConfig?.executionModelId }}
+                  />
+                  <RuntimeConfigFields
+                    title="Validation route"
+                    engine={validationEngine}
+                    provider={validationProvider}
+                    modelId={validationModelId}
+                    onEngineChange={setValidationEngine}
+                    onProviderChange={setValidationProvider}
+                    onModelIdChange={setValidationModelId}
+                    onClear={clearRunRuntimeOverrides}
+                    hint="Validation can stay on the project default or be pinned to a cheaper or stricter review route."
+                    defaultRoute={projectConfig?.validationRuntime}
+                  />
+                  <RuntimeConfigFields
+                    title="Review route"
+                    engine={reviewEngine}
+                    provider={reviewProvider}
+                    modelId={reviewModelId}
+                    onEngineChange={setReviewEngine}
+                    onProviderChange={setReviewProvider}
+                    onModelIdChange={setReviewModelId}
+                    onClear={clearRunRuntimeOverrides}
+                    hint="Holistic review usually shares the validation route, but you can pin it separately for a final pass."
+                    defaultRoute={projectConfig?.reviewRuntime}
+                  />
+                </div>
+              </details>
               <button className="daemon-btn primary" onClick={handleRetryFailed}>
                 ↺ Retry failed ({failedTasks.length})
               </button>
@@ -3395,6 +3882,14 @@ function RunTab({ project }: RunTabProps) {
 
         {/* Footer with model pickers + run button */}
         <div className="chain-footer" style={{ flexDirection: 'column', gap: 8 }}>
+          {requestError ? (
+            <InlineErrorBanner
+              title="Run request failed"
+              message={requestError}
+              actionLabel="Use defaults"
+              onAction={clearRunRuntimeOverrides}
+            />
+          ) : null}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <ModelPicker value={executionModel} onChange={setExecutionModel} label="Execution" />
             <ModelPicker value={taskReviewModel} onChange={setTaskReviewModel} label="Task Review" />
@@ -3415,6 +3910,13 @@ function RunTab({ project }: RunTabProps) {
           <details className="run-advanced-options">
             <summary className="run-advanced-toggle">Advanced options</summary>
             <div className="run-advanced-body">
+              <RuntimeRouteSummaryBar
+                routes={[
+                  { label: 'Execution', route: { engine: projectConfig?.engine, provider: projectConfig?.provider, modelId: projectConfig?.executionModelId }, override: executionOverrideRoute },
+                  { label: 'Validation', route: projectConfig?.validationRuntime, override: validationOverrideRoute },
+                  { label: 'Review', route: projectConfig?.reviewRuntime, override: reviewOverrideRoute },
+                ]}
+              />
               <label className="run-advanced-row">
                 <input type="checkbox" checked={parallel} onChange={e => setParallel((e.target as HTMLInputElement).checked)} />
                 <span>Parallel task execution</span>
@@ -3444,6 +3946,42 @@ function RunTab({ project }: RunTabProps) {
                   <option value="max">max (opus only)</option>
                 </select>
               </label>
+              <RuntimeConfigFields
+                title="Execution route"
+                engine={executionEngine}
+                provider={executionProvider}
+                modelId={executionModelId}
+                onEngineChange={setExecutionEngine}
+                onProviderChange={setExecutionProvider}
+                onModelIdChange={setExecutionModelId}
+                onClear={clearRunRuntimeOverrides}
+                hint="Execution defaults come from project config. Override here only when this chain needs a specific implementation route."
+                defaultRoute={{ engine: projectConfig?.engine, provider: projectConfig?.provider, modelId: projectConfig?.executionModelId }}
+              />
+              <RuntimeConfigFields
+                title="Validation route"
+                engine={validationEngine}
+                provider={validationProvider}
+                modelId={validationModelId}
+                onEngineChange={setValidationEngine}
+                onProviderChange={setValidationProvider}
+                onModelIdChange={setValidationModelId}
+                onClear={clearRunRuntimeOverrides}
+                hint="Validation can stay on the project default or be pinned to a cheaper or stricter review route."
+                defaultRoute={projectConfig?.validationRuntime}
+              />
+              <RuntimeConfigFields
+                title="Review route"
+                engine={reviewEngine}
+                provider={reviewProvider}
+                modelId={reviewModelId}
+                onEngineChange={setReviewEngine}
+                onProviderChange={setReviewProvider}
+                onModelIdChange={setReviewModelId}
+                onClear={clearRunRuntimeOverrides}
+                hint="Holistic review usually shares the validation route, but you can pin it separately for a final pass."
+                defaultRoute={projectConfig?.reviewRuntime}
+              />
             </div>
           </details>
         </div>

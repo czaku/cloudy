@@ -1,5 +1,3 @@
-import type { ClaudeModel } from '../core/types.js';
-
 interface ModelPricing {
   inputPerMillion: number;
   outputPerMillion: number;
@@ -7,7 +5,7 @@ interface ModelPricing {
   cacheWritePerMillion: number;
 }
 
-const PRICING: Record<ClaudeModel, ModelPricing> = {
+const PRICING: Record<string, ModelPricing> = {
   opus: {
     inputPerMillion: 15,
     outputPerMillion: 75,
@@ -29,13 +27,14 @@ const PRICING: Record<ClaudeModel, ModelPricing> = {
 };
 
 export function estimateCost(
-  model: ClaudeModel,
+  model: string,
   inputTokens: number,
   outputTokens: number,
   cacheReadTokens: number,
   cacheWriteTokens: number,
 ): number {
   const p = PRICING[model];
+  if (!p) return 0;
   return (
     (inputTokens / 1_000_000) * p.inputPerMillion +
     (outputTokens / 1_000_000) * p.outputPerMillion +
@@ -44,6 +43,6 @@ export function estimateCost(
   );
 }
 
-export function getPricing(model: ClaudeModel): ModelPricing {
+export function getPricing(model: string): ModelPricing | undefined {
   return PRICING[model];
 }

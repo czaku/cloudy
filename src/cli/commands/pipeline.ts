@@ -4,12 +4,20 @@ import { Command } from 'commander';
 import { c, bold, dim, red, green, cyan, cyanBright, yellow } from '../../utils/colors.js';
 import { initLogger } from '../../utils/logger.js';
 import { CLAWDASH_DIR, RUNS_DIR } from '../../config/defaults.js';
+import { loadConfig } from '../../config/config.js';
+import { getPhaseRuntime } from '../../config/phase-runtime.js';
+import type { PhaseRuntimeConfig } from '../../core/types.js';
 
 const PIPELINE_CONTEXT_FILE = '.cloudy/pipeline-context.md';
 
-async function extractPhaseContracts(cwd: string, runDir: string, planGoal: string): Promise<string> {
+async function extractPhaseContracts(
+  cwd: string,
+  runDir: string,
+  planGoal: string,
+  runtime?: PhaseRuntimeConfig,
+): Promise<string> {
   try {
-    const { runClaude } = await import('../../executor/claude-runner.js');
+    const { runPhaseModel } = await import('../../executor/model-runner.js');
     const { getGitDiff } = await import('../../git/git.js');
 
     // Get diff from this phase using oldest checkpoint SHA
@@ -60,7 +68,15 @@ Format as markdown bullet points under these headings:
 
 Keep each bullet to one line. Omit sections that are empty.`;
 
-    const result = await runClaude({ prompt, model: 'haiku', cwd });
+    const result = await runPhaseModel({
+      prompt,
+      model: 'haiku',
+      cwd,
+      engine: runtime?.engine,
+      provider: runtime?.provider,
+      modelId: runtime?.modelId,
+      taskType: 'review',
+    });
     return result.output?.trim() ?? '';
   } catch {
     return '';
@@ -75,6 +91,15 @@ export const pipelineCommand = new Command('chain')
   .option('--run-review-model <model>', 'Post-phase holistic review model')
   .option('--planning-model <model>', 'Planning model (default: sonnet)')
   .option('--quality-review-model <model>', 'Model for Phase 2b code quality review (default: same as --task-review-model)')
+  .option('--planning-engine <engine>', 'Planning engine for all phases')
+  .option('--planning-provider <provider>', 'Planning provider/auth route for all phases (e.g. claude subscription, codex subscription, openai API)')
+  .option('--planning-model-id <id>', 'Provider-native planning model ID for all phases')
+  .option('--validation-engine <engine>', 'Per-task AI validation engine for all phases')
+  .option('--validation-provider <provider>', 'Per-task AI validation provider/auth route for all phases (e.g. claude subscription, codex subscription, openai API)')
+  .option('--validation-model-id <id>', 'Provider-native per-task AI validation model ID for all phases')
+  .option('--review-engine <engine>', 'Holistic review / review-side engine for all phases')
+  .option('--review-provider <provider>', 'Holistic review / review-side provider/auth route for all phases (e.g. claude subscription, codex subscription, openai API)')
+  .option('--review-model-id <id>', 'Provider-native holistic review model ID for all phases')
   .option('--no-auto-fix', 'Disable automatic fix-task generation from review notes')
   .option('--verbose', 'Pass --verbose to each run')
   .option('--heartbeat-interval <seconds>', 'Write status.json every N seconds during each phase', parseInt)
@@ -86,6 +111,15 @@ export const pipelineCommand = new Command('chain')
     qualityReviewModel?: string;
     runReviewModel?: string;
     planningModel?: string;
+    planningEngine?: string;
+    planningProvider?: string;
+    planningModelId?: string;
+    validationEngine?: string;
+    validationProvider?: string;
+    validationModelId?: string;
+    reviewEngine?: string;
+    reviewProvider?: string;
+    reviewModelId?: string;
     autoFix?: boolean;
     verbose?: boolean;
     heartbeatInterval?: number;
@@ -93,6 +127,16 @@ export const pipelineCommand = new Command('chain')
   }) => {
     const cwd = process.cwd();
     await initLogger(cwd);
+    const config = await loadConfig(cwd);
+    if (opts.planningEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planningEngine as typeof config.engine };
+    if (opts.planningProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planningProvider };
+    if (opts.planningModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planningModelId };
+    if (opts.validationEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.validationEngine as typeof config.engine };
+    if (opts.validationProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.validationProvider };
+    if (opts.validationModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.validationModelId };
+    if (opts.reviewEngine) config.reviewRuntime = { ...config.reviewRuntime, engine: opts.reviewEngine as typeof config.engine };
+    if (opts.reviewProvider) config.reviewRuntime = { ...config.reviewRuntime, provider: opts.reviewProvider };
+    if (opts.reviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.reviewModelId };
 
     if (opts.spec.length === 0) {
       console.error(c(red, '✖  --spec required (repeatable): cloudy chain --spec p1.md --spec p2.md'));
@@ -167,6 +211,9 @@ export const pipelineCommand = new Command('chain')
           '--no-review',
           '--yes',
           '--planning-model', planningModel,
+          ...(config.planningRuntime?.engine ? ['--planning-engine', config.planningRuntime.engine] : []),
+          ...(config.planningRuntime?.provider ? ['--planning-provider', config.planningRuntime.provider] : []),
+          ...(config.planningRuntime?.modelId ? ['--planning-model-id', config.planningRuntime.modelId] : []),
           '--run-name', runName,
         ], {
           stdio: 'inherit',
@@ -212,6 +259,12 @@ export const pipelineCommand = new Command('chain')
         '--execution-model', opts.executionModel!,
         '--task-review-model', opts.taskReviewModel!,
         '--run-review-model', opts.runReviewModel!,
+        ...(config.validationRuntime?.engine ? ['--validation-engine', config.validationRuntime.engine] : []),
+        ...(config.validationRuntime?.provider ? ['--validation-provider', config.validationRuntime.provider] : []),
+        ...(config.validationRuntime?.modelId ? ['--validation-model-id', config.validationRuntime.modelId] : []),
+        ...(config.reviewRuntime?.engine ? ['--review-engine', config.reviewRuntime.engine] : []),
+        ...(config.reviewRuntime?.provider ? ['--review-provider', config.reviewRuntime.provider] : []),
+        ...(config.reviewRuntime?.modelId ? ['--review-model-id', config.reviewRuntime.modelId] : []),
       ];
       if (opts.qualityReviewModel) runArgs.push('--quality-review-model', opts.qualityReviewModel);
       if (opts.verbose) runArgs.push('--verbose');
@@ -398,7 +451,7 @@ export const pipelineCommand = new Command('chain')
           const statePath = path.join(runDir, 'state.json');
           const stateForContracts = JSON.parse(await fs.readFile(statePath, 'utf-8'));
           const planGoal = stateForContracts.plan?.goal ?? phaseSlug;
-          const contracts = await extractPhaseContracts(cwd, runDir, planGoal);
+          const contracts = await extractPhaseContracts(cwd, runDir, planGoal, getPhaseRuntime(config, 'review'));
           if (contracts) {
             // Append to pipeline-contracts.md (cumulative archive)
             const archivePath = path.join(cwd, CLAWDASH_DIR, 'pipeline-contracts.md');

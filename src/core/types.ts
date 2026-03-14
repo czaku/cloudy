@@ -1,7 +1,42 @@
 // ── Model types ──────────────────────────────────────────────────────
 export type ClaudeModel = 'opus' | 'sonnet' | 'haiku';
 
-export type Engine = 'claude-code';
+export type Engine =
+  | 'claude-code'
+  | 'codex'
+  | 'pi-mono'
+  | 'copilot'
+  | 'gemini-cli'
+  | 'qwen-code'
+  | 'amazon-q'
+  | 'opencode'
+  | 'goose';
+
+export type Provider =
+  | 'claude'
+  | 'codex'
+  | 'anthropic'
+  | 'openai'
+  | 'github'
+  | 'copilot'
+  | 'google'
+  | 'gemini'
+  | 'qwen'
+  | 'amazon-q'
+  | 'ollama'
+  | 'openrouter'
+  | 'deepseek'
+  | 'groq'
+  | 'cerebras'
+  | 'xai'
+  | 'mistral'
+  | 'minimax'
+  | 'kimi'
+  | 'azure'
+  | 'bedrock'
+  | 'vercel'
+  | 'dashscope'
+  | string;
 
 export interface ModelConfig {
   planning: ClaudeModel;
@@ -9,6 +44,12 @@ export interface ModelConfig {
   validation: ClaudeModel;
   /** Model for Phase 2b code quality review. Defaults to `validation` if not set. */
   qualityReview?: ClaudeModel;
+}
+
+export interface PhaseRuntimeConfig {
+  engine?: Engine;
+  provider?: Provider;
+  modelId?: string;
 }
 
 // ── Task types ───────────────────────────────────────────────────────
@@ -131,7 +172,7 @@ export interface TokenUsage {
 }
 
 export interface TaskCostData {
-  model: ClaudeModel;
+  model: string;
   engine: Engine;
   phase: 'planning' | 'execution' | 'validation';
   usage: TokenUsage;
@@ -197,7 +238,12 @@ export interface CloudyConfig {
   worktrees: boolean;          // use git worktrees for parallel task isolation
   runBranch: boolean;          // create a dedicated cloudy/run-* branch before executing tasks
   approval: ApprovalConfig;
-  engine: Engine;              // execution engine (always claude-code)
+  engine: Engine;              // execution engine for task implementation
+  provider?: Provider;         // provider/auth route (e.g. claude, codex, openai)
+  executionModelId?: string;   // provider-native execution model ID (e.g. o3, codex-mini)
+  planningRuntime?: PhaseRuntimeConfig;   // provider/engine route for planning calls
+  validationRuntime?: PhaseRuntimeConfig; // provider/engine route for per-task AI validation
+  reviewRuntime?: PhaseRuntimeConfig;     // provider/engine route for holistic review and review-side prompts
   review: ReviewConfig;        // post-run holistic review configuration
   keel?: {
     slug: string

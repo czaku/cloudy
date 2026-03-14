@@ -28,6 +28,17 @@ const REVIEW_ICON: Record<string, string> = {
   failed: '✗',
 };
 
+function formatEngineBadge(engine?: string): string | null {
+  if (!engine) return null;
+  switch (engine) {
+    case 'claude-code': return 'cc';
+    case 'codex': return 'codex';
+    case 'pi-mono': return 'pi';
+    case 'copilot': return 'gh';
+    default: return engine;
+  }
+}
+
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(0)}s`;
@@ -91,7 +102,7 @@ export function TaskList({
         const cost = costByTask[task.id];
         const duration = durationByTask[task.id];
         const rawEngine = engineByTask[task.id];
-        const engineBadge = rawEngine ? 'cc' : null;
+        const engineBadge = formatEngineBadge(rawEngine);
         const engineColor = 'cyan';
 
         // Compact sub-info line (only when task has run)

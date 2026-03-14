@@ -90,18 +90,12 @@ describe('prior artifacts threaded through validation pipeline', () => {
       priorArtifacts,
     });
 
-    expect(runAiReview).toHaveBeenCalledWith(
-      expect.any(String),         // taskTitle
-      expect.any(Array),          // acceptanceCriteria
-      expect.any(String),         // gitDiff
-      expect.any(String),         // model
-      expect.any(String),         // cwd
-      expect.any(Array),          // changedFileSections
-      priorArtifacts,             // ← must be forwarded
-      undefined,                  // artifactCheckPassed (no outputArtifacts on task)
-      undefined,                  // taskOutputArtifacts (no outputArtifacts on task)
-      expect.any(Array),          // commandResults
-    );
+    const call = vi.mocked(runAiReview).mock.calls[0];
+    expect(call[6]).toEqual(priorArtifacts);
+    expect(call[7]).toBeUndefined();
+    expect(call[8]).toBeUndefined();
+    expect(call[9]).toEqual([]);
+    expect(call[10]).toBeUndefined();
   });
 
   it('passes undefined priorArtifacts when not provided', async () => {
@@ -112,18 +106,12 @@ describe('prior artifacts threaded through validation pipeline', () => {
       cwd: '/tmp',
     });
 
-    expect(runAiReview).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(Array),
-      expect.any(String),
-      expect.any(String),
-      expect.any(String),
-      expect.any(Array),
-      undefined,            // priorArtifacts is undefined when not passed
-      undefined,            // artifactCheckPassed (no outputArtifacts on task)
-      undefined,            // taskOutputArtifacts (no outputArtifacts on task)
-      expect.any(Array),   // commandResults
-    );
+    const call = vi.mocked(runAiReview).mock.calls[0];
+    expect(call[6]).toBeUndefined();
+    expect(call[7]).toBeUndefined();
+    expect(call[8]).toBeUndefined();
+    expect(call[9]).toEqual([]);
+    expect(call[10]).toBeUndefined();
   });
 
   it('passes artifact check result to runAiReview', async () => {

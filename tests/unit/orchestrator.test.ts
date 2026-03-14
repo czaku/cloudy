@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { OrchestratorEvent, ProjectState, CloudyConfig, Plan, Task } from '../../src/core/types.js';
 
 // Mock external dependencies
-vi.mock('../../src/executor/claude-runner.js', () => ({
-  runClaude: vi.fn(async ({ onOutput }: { onOutput?: (text: string) => void }) => {
+vi.mock('../../src/executor/engine.js', () => {
+  const runEngine = vi.fn(async ({ onOutput }: { onOutput?: (text: string) => void }) => {
     onOutput?.('mock output');
     return {
       success: true,
@@ -12,8 +12,9 @@ vi.mock('../../src/executor/claude-runner.js', () => ({
       durationMs: 1000,
       costUsd: 0.01,
     };
-  }),
-}));
+  });
+  return { runEngine };
+});
 
 vi.mock('../../src/executor/context-resolver.js', () => ({
   resolveContextFiles: vi.fn(async () => []),
@@ -38,6 +39,7 @@ vi.mock('../../src/git/git.js', () => ({
   isGitRepo: vi.fn(async () => false),
   commitAll: vi.fn(async () => {}),
   getChangedFiles: vi.fn(async () => []),
+  getGitDiff: vi.fn(async () => 'diff --git a/SMOKE_RESULT.md b/SMOKE_RESULT.md\n+smoke route ok'),
 }));
 
 vi.mock('../../src/core/state.js', () => ({
@@ -55,6 +57,21 @@ vi.mock('../../src/utils/logger.js', () => ({
     error: vi.fn(async () => {}),
   },
   logTaskOutput: vi.fn(async () => {}),
+}));
+
+vi.mock('../../src/reviewer.js', () => ({
+  runHolisticReview: vi.fn(async () => ({
+    verdict: 'PASS',
+    summary: 'ok',
+    criteriaResults: [],
+    issues: [],
+    conventionViolations: [],
+    suggestions: [],
+    rerunTaskIds: [],
+    costUsd: 0,
+    durationMs: 10,
+    model: 'sonnet',
+  })),
 }));
 
 function makeTask(id: string, deps: string[] = []): Task {
@@ -158,15 +175,15 @@ describe('Orchestrator', () => {
   });
 
   it('stops on task failure when ifFailed is halt', async () => {
-    const { runClaude } = await import('../../src/executor/claude-runner.js');
-    const mockedRunClaude = vi.mocked(runClaude);
+    const { runEngine } = await import('../../src/executor/engine.js');
+    const mockedRunEngine = vi.mocked(runEngine);
 
     const tasks = [
       makeTask('task-1'),
       makeTask('task-2', ['task-1']),
     ];
     // Make task-1 fail
-    mockedRunClaude.mockResolvedValueOnce({
+    mockedRunEngine.mockResolvedValueOnce({
       success: false,
       output: '',
       error: 'Execution error',
@@ -175,7 +192,7 @@ describe('Orchestrator', () => {
       costUsd: 0,
     });
     // Retry also fails
-    mockedRunClaude.mockResolvedValueOnce({
+    mockedRunEngine.mockResolvedValueOnce({
       success: false,
       output: '',
       error: 'Execution error again',
@@ -210,8 +227,8 @@ describe('Orchestrator', () => {
   });
 
   it('abort() stops execution after current task', async () => {
-    const { runClaude } = await import('../../src/executor/claude-runner.js');
-    const mockedRunClaude = vi.mocked(runClaude);
+    const { runEngine } = await import('../../src/executor/engine.js');
+    const mockedRunEngine = vi.mocked(runEngine);
 
     const tasks = [
       makeTask('task-1'),
@@ -222,7 +239,7 @@ describe('Orchestrator', () => {
     let orchestratorRef: InstanceType<typeof Orchestrator> | null = null;
 
     // First call succeeds, second call will never start because we abort
-    mockedRunClaude.mockImplementation(async ({ onOutput }) => {
+    mockedRunEngine.mockImplementation(async ({ onOutput }) => {
       onOutput?.('working...');
       // Abort after first task starts
       if (orchestratorRef && !orchestratorRef.aborted) {
@@ -302,5 +319,33 @@ describe('Orchestrator', () => {
 
     // run_completed should be last-ish
     expect(eventTypes).toContain('run_completed');
+  });
+
+  it('passes the earliest checkpoint SHA into holistic review', async () => {
+    const { createCheckpoint } = await import('../../src/git/checkpoint.js');
+    const { isGitRepo } = await import('../../src/git/git.js');
+    const { runHolisticReview } = await import('../../src/reviewer.js');
+    const mockedCreateCheckpoint = vi.mocked(createCheckpoint);
+    const mockedIsGitRepo = vi.mocked(isGitRepo);
+    const mockedRunHolisticReview = vi.mocked(runHolisticReview);
+
+    mockedIsGitRepo.mockResolvedValue(true);
+    mockedCreateCheckpoint.mockResolvedValueOnce('sha-first').mockResolvedValueOnce('sha-second');
+
+    const tasks = [makeTask('task-1'), makeTask('task-2', ['task-1'])];
+    const config = makeConfig();
+    config.review.enabled = true;
+
+    const orchestrator = new Orchestrator({
+      cwd: '/tmp/test',
+      state: makeState(tasks),
+      config,
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(mockedRunHolisticReview).toHaveBeenCalled();
+    expect(mockedRunHolisticReview.mock.calls[0]?.[4]).toBe('sha-first');
   });
 });

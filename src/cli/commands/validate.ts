@@ -4,12 +4,22 @@ import { loadState } from '../../core/state.js';
 import { validateTask, formatValidationErrors } from '../../validator/validator.js';
 import { initLogger } from '../../utils/logger.js';
 import { c, bold, dim, green, red, yellow } from '../../utils/colors.js';
+import { getPhaseRuntime } from '../../config/phase-runtime.js';
+import { selectViaDaemon } from 'omnai';
 
 export const validateCommand = new Command('check')
   .description('Re-run acceptance criteria against already-completed work')
   .argument('[taskId]', 'Task ID to validate (default: all completed tasks)')
   .option('--no-ai-review', 'Skip AI review phase, run deterministic checks only (typecheck, lint, build, test)')
-  .action(async (taskId: string | undefined, opts: { aiReview: boolean }) => {
+  .option('--validation-engine <engine>', 'Per-task AI validation engine')
+  .option('--validation-provider <provider>', 'Per-task AI validation provider/auth route (e.g. claude subscription, codex subscription, openai API)')
+  .option('--validation-model-id <id>', 'Provider-native per-task AI validation model ID')
+  .action(async (taskId: string | undefined, opts: {
+    aiReview: boolean;
+    validationEngine?: string;
+    validationProvider?: string;
+    validationModelId?: string;
+  }) => {
     const cwd = process.cwd();
     await initLogger(cwd);
 
@@ -22,6 +32,22 @@ export const validateCommand = new Command('check')
     const config = await loadConfig(cwd);
     if (!opts.aiReview) {
       config.validation.aiReview = false;
+    }
+    if (opts.validationEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.validationEngine as typeof config.engine };
+    if (opts.validationProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.validationProvider };
+    if (opts.validationModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.validationModelId };
+
+    if (config.validation.aiReview) {
+      try {
+        await selectViaDaemon({
+          engine: config.validationRuntime?.engine,
+          provider: config.validationRuntime?.provider,
+          taskType: 'review',
+        });
+      } catch (err) {
+        console.error(c(red, `✖  ${err instanceof Error ? err.message : String(err)}`));
+        process.exit(1);
+      }
     }
 
     const tasks = taskId
@@ -48,6 +74,8 @@ export const validateCommand = new Command('check')
         task,
         config: config.validation,
         model: config.models.validation,
+        qualityModel: config.models.qualityReview ?? config.models.validation,
+        runtime: getPhaseRuntime(config, 'validation'),
         cwd,
         checkpointSha: task.checkpointSha,
       });

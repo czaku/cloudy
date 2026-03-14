@@ -4,9 +4,10 @@ vi.mock('execa', () => ({
   execa: vi.fn(),
 }));
 
-vi.mock('../../src/executor/claude-runner.js', () => ({
-  runClaude: vi.fn(),
-}));
+vi.mock('../../src/executor/model-runner.js', () => {
+  const runPhaseModel = vi.fn();
+  return { runPhaseModel };
+});
 
 vi.mock('../../src/git/git.js', () => ({
   getGitDiff: vi.fn(),
@@ -80,19 +81,19 @@ describe('checkUntil', () => {
 
 describe('runLoop', () => {
   let mockExeca: ReturnType<typeof vi.fn>;
-  let mockRunClaude: ReturnType<typeof vi.fn>;
+  let mockRunPhaseModel: ReturnType<typeof vi.fn>;
   let mockGetGitDiff: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     const { execa } = await import('execa');
     mockExeca = execa as ReturnType<typeof vi.fn>;
-    const { runClaude } = await import('../../src/executor/claude-runner.js');
-    mockRunClaude = runClaude as ReturnType<typeof vi.fn>;
+    const { runPhaseModel } = await import('../../src/executor/model-runner.js');
+    mockRunPhaseModel = runPhaseModel as ReturnType<typeof vi.fn>;
     const { getGitDiff } = await import('../../src/git/git.js');
     mockGetGitDiff = getGitDiff as ReturnType<typeof vi.fn>;
 
     mockExeca.mockClear();
-    mockRunClaude.mockClear();
+    mockRunPhaseModel.mockClear();
     mockGetGitDiff.mockClear();
 
     // Default: always changing diff so no stale detection
@@ -116,7 +117,7 @@ describe('runLoop', () => {
     expect(result.reason).toBe('until_passed');
     expect(result.iterations).toBe(0);
     // Claude should NOT have been called
-    expect(mockRunClaude).not.toHaveBeenCalled();
+    expect(mockRunPhaseModel).not.toHaveBeenCalled();
   });
 
   it('runs Claude and passes when untilCommand passes after one iteration', async () => {
@@ -127,7 +128,7 @@ describe('runLoop', () => {
       if (callCount === 1) return Promise.resolve({ exitCode: 1, stdout: '', stderr: 'fail' });
       return Promise.resolve({ exitCode: 0, stdout: 'pass', stderr: '' });
     });
-    mockRunClaude.mockResolvedValue(makeClaudeSuccess());
+    mockRunPhaseModel.mockResolvedValue(makeClaudeSuccess());
 
     const { runLoop } = await import('../../src/core/loop-runner.js');
     const result = await runLoop({
@@ -140,12 +141,12 @@ describe('runLoop', () => {
 
     expect(result.succeeded).toBe(true);
     expect(result.iterations).toBe(1);
-    expect(mockRunClaude).toHaveBeenCalledTimes(1);
+    expect(mockRunPhaseModel).toHaveBeenCalledTimes(1);
   });
 
   it('returns max_iterations when untilCommand never passes', async () => {
     mockExeca.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'still failing' });
-    mockRunClaude.mockResolvedValue(makeClaudeSuccess());
+    mockRunPhaseModel.mockResolvedValue(makeClaudeSuccess());
 
     const { runLoop } = await import('../../src/core/loop-runner.js');
     const result = await runLoop({
@@ -159,12 +160,12 @@ describe('runLoop', () => {
     expect(result.succeeded).toBe(false);
     expect(result.reason).toBe('max_iterations');
     expect(result.iterations).toBe(3);
-    expect(mockRunClaude).toHaveBeenCalledTimes(3);
+    expect(mockRunPhaseModel).toHaveBeenCalledTimes(3);
   });
 
   it('returns no_progress after 2 consecutive iterations with no diff change', async () => {
     // No until command
-    mockRunClaude.mockResolvedValue(makeClaudeSuccess());
+    mockRunPhaseModel.mockResolvedValue(makeClaudeSuccess());
     // Always return the same diff — stale
     mockGetGitDiff.mockResolvedValue('same-diff-always');
 
@@ -181,12 +182,12 @@ describe('runLoop', () => {
     expect(result.succeeded).toBe(false);
     expect(result.reason).toBe('no_progress');
     // Should stop after 2 stale iterations (not run all 10)
-    expect(mockRunClaude).toHaveBeenCalledTimes(2);
+    expect(mockRunPhaseModel).toHaveBeenCalledTimes(2);
     expect(events).toContain('no_progress');
   });
 
   it('resets stale counter when progress is made', async () => {
-    mockRunClaude.mockResolvedValue(makeClaudeSuccess());
+    mockRunPhaseModel.mockResolvedValue(makeClaudeSuccess());
 
     // Iteration 1: change, iteration 2: no change, iteration 3: change, iterations 4-5: no change → stop
     let callNum = 0;
@@ -215,12 +216,12 @@ describe('runLoop', () => {
     expect(result.succeeded).toBe(false);
     expect(result.reason).toBe('no_progress');
     // Should have run 5 iterations: 1(ok), 2(stale1), 3(ok reset), 4(stale1), 5(stale2→stop)
-    expect(mockRunClaude).toHaveBeenCalledTimes(5);
+    expect(mockRunPhaseModel).toHaveBeenCalledTimes(5);
   });
 
   it('returns error when Claude fails', async () => {
     mockExeca.mockResolvedValue({ exitCode: 1, stdout: '', stderr: 'failing' });
-    mockRunClaude.mockResolvedValue(makeClaudeFailure('process killed'));
+    mockRunPhaseModel.mockResolvedValue(makeClaudeFailure('process killed'));
 
     const { runLoop } = await import('../../src/core/loop-runner.js');
     const result = await runLoop({
@@ -246,7 +247,7 @@ describe('runLoop', () => {
         stderr: '',
       });
     });
-    mockRunClaude.mockResolvedValue(makeClaudeSuccess());
+    mockRunPhaseModel.mockResolvedValue(makeClaudeSuccess());
 
     const events: string[] = [];
     const { runLoop } = await import('../../src/core/loop-runner.js');
@@ -266,7 +267,7 @@ describe('runLoop', () => {
   });
 
   it('works without an untilCommand (runs until max iterations or stale)', async () => {
-    mockRunClaude.mockResolvedValue(makeClaudeSuccess());
+    mockRunPhaseModel.mockResolvedValue(makeClaudeSuccess());
     // Always different diff — never stale
     let n = 0;
     mockGetGitDiff.mockImplementation(() => Promise.resolve(`diff-${n++}`));
@@ -281,22 +282,22 @@ describe('runLoop', () => {
 
     expect(result.succeeded).toBe(false);
     expect(result.reason).toBe('max_iterations');
-    expect(mockRunClaude).toHaveBeenCalledTimes(3);
+    expect(mockRunPhaseModel).toHaveBeenCalledTimes(3);
   });
 });
 
 // ─── LEARNINGS extraction ───────────────────────────────────────────────────
 
 describe('LEARNINGS accumulation across loop iterations', () => {
-  let mockRunClaude: ReturnType<typeof vi.fn>;
+  let mockRunPhaseModel: ReturnType<typeof vi.fn>;
   let mockGetGitDiff: ReturnType<typeof vi.fn>;
   let mockExeca: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     vi.resetModules();
-    const { runClaude } = await import('../../src/executor/claude-runner.js');
-    mockRunClaude = runClaude as ReturnType<typeof vi.fn>;
-    mockRunClaude.mockClear();
+    const { runPhaseModel } = await import('../../src/executor/model-runner.js');
+    mockRunPhaseModel = runPhaseModel as ReturnType<typeof vi.fn>;
+    mockRunPhaseModel.mockClear();
     const { getGitDiff } = await import('../../src/git/git.js');
     mockGetGitDiff = getGitDiff as ReturnType<typeof vi.fn>;
     mockGetGitDiff.mockResolvedValue('diff-1');
@@ -307,8 +308,8 @@ describe('LEARNINGS accumulation across loop iterations', () => {
 
   it('learnings from iteration 1 appear in iteration 2 prompt', async () => {
     const prompts: string[] = [];
-    // runClaude receives an object { prompt, model, cwd, onOutput }
-    mockRunClaude.mockImplementation(async (opts: { prompt: string }) => {
+    // runPhaseModel receives an object { prompt, model, cwd, onOutput }
+    mockRunPhaseModel.mockImplementation(async (opts: { prompt: string }) => {
       prompts.push(opts.prompt);
       return makeClaudeSuccess('Work done\n\n## LEARNINGS\n- Use src/ for all new files');
     });
@@ -336,7 +337,7 @@ describe('LEARNINGS accumulation across loop iterations', () => {
   it('duplicate learnings are not repeated in accumulated list', async () => {
     const prompts: string[] = [];
     const sameLearning = 'Use src/ for all new files';
-    mockRunClaude.mockImplementation(async (opts: { prompt: string }) => {
+    mockRunPhaseModel.mockImplementation(async (opts: { prompt: string }) => {
       prompts.push(opts.prompt);
       return makeClaudeSuccess(`Work done\n\n## LEARNINGS\n- ${sameLearning}`);
     });
@@ -364,7 +365,7 @@ describe('LEARNINGS accumulation across loop iterations', () => {
 
   it('prompt includes LEARNINGS instruction in first iteration', async () => {
     const prompts: string[] = [];
-    mockRunClaude.mockImplementation(async (opts: { prompt: string }) => {
+    mockRunPhaseModel.mockImplementation(async (opts: { prompt: string }) => {
       prompts.push(opts.prompt);
       return makeClaudeSuccess('done');
     });
