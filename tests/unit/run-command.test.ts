@@ -15,6 +15,7 @@ const {
   mockOrchestratorRun,
   mockOrchestratorCtor,
   mockWriteRunOutcome,
+  mockLoadKeelTaskRuntime,
 } = vi.hoisted(() => ({
   mockLoadConfig: vi.fn(),
   mockLoadState: vi.fn(),
@@ -29,6 +30,7 @@ const {
   mockOrchestratorRun: vi.fn(async () => {}),
   mockOrchestratorCtor: vi.fn(),
   mockWriteRunOutcome: vi.fn(async () => {}),
+  mockLoadKeelTaskRuntime: vi.fn(async () => null),
 }));
 
 vi.mock('../../src/config/config.js', () => ({
@@ -76,6 +78,33 @@ vi.mock('../../src/cli/commands/daemon.js', () => ({
 
 vi.mock('../../src/integrations/keel.js', () => ({
   writeRunOutcome: mockWriteRunOutcome,
+}));
+
+vi.mock('../../src/integrations/keel-task-runtime.js', () => ({
+  loadKeelTaskRuntime: mockLoadKeelTaskRuntime,
+  applyKeelTaskRuntime: (config: Record<string, unknown>, runtime: any) => {
+    if (!runtime) return config;
+    return {
+      ...config,
+      models: {
+        ...(config.models as Record<string, unknown>),
+        planning: runtime.models?.planning ?? (config.models as any)?.planning,
+        execution: runtime.models?.execution ?? (config.models as any)?.execution,
+        validation: runtime.models?.taskReview ?? (config.models as any)?.validation,
+        qualityReview: runtime.models?.qualityReview ?? (config.models as any)?.qualityReview,
+      },
+      engine: runtime.execution?.engine ?? config.engine,
+      provider: runtime.execution?.provider ?? config.provider,
+      executionModelId: runtime.execution?.modelId ?? config.executionModelId,
+      planningRuntime: { ...(config.planningRuntime as Record<string, unknown>), ...(runtime.planning ?? {}) },
+      validationRuntime: { ...(config.validationRuntime as Record<string, unknown>), ...(runtime.validation ?? {}) },
+      reviewRuntime: { ...(config.reviewRuntime as Record<string, unknown>), ...(runtime.review ?? {}) },
+      review: {
+        ...(config.review as Record<string, unknown>),
+        model: runtime.models?.runReview ?? (config.review as any)?.model,
+      },
+    };
+  },
 }));
 
 vi.mock('../../src/core/orchestrator.js', () => ({
@@ -169,6 +198,7 @@ describe('run command', () => {
     mockLoadConfig.mockResolvedValue(makeConfig());
     mockLoadState.mockResolvedValue(makeState());
     mockSelectViaDaemon.mockResolvedValue({ engine: 'codex' });
+    mockLoadKeelTaskRuntime.mockResolvedValue(null);
   });
 
   it('passes engine, provider, and execution model ID through to selection and orchestration', async () => {
@@ -231,6 +261,69 @@ describe('run command', () => {
       }),
     }));
     expect(mockOrchestratorRun).toHaveBeenCalledOnce();
+  });
+
+  it('applies keel task runtime defaults before orchestrating the run', async () => {
+    mockLoadConfig.mockResolvedValue({
+      ...makeConfig(),
+      keel: { slug: 'fitkind', taskId: 'T-029', port: 7842 },
+    });
+    mockLoadKeelTaskRuntime.mockResolvedValue({
+      models: {
+        execution: 'opus',
+        taskReview: 'sonnet',
+        runReview: 'haiku',
+      },
+      execution: {
+        engine: 'codex',
+        provider: 'codex',
+        modelId: 'o3',
+      },
+      validation: {
+        engine: 'codex',
+        provider: 'codex',
+        modelId: 'o4-mini',
+      },
+      review: {
+        engine: 'pi-mono',
+        provider: 'openai',
+        modelId: 'gpt-5',
+      },
+    });
+
+    const program = createProgram();
+    await program.parseAsync([
+      'run',
+      '--non-interactive',
+      '--execution-model', 'sonnet',
+      '--task-review-model', 'haiku',
+      '--run-review-model', 'sonnet',
+      '--no-dashboard',
+    ], { from: 'user' });
+
+    expect(mockLoadKeelTaskRuntime).toHaveBeenCalledWith(process.cwd(), 'T-029');
+    expect(mockSelectViaDaemon).toHaveBeenCalledWith({
+      engine: 'codex',
+      provider: 'codex',
+      taskType: 'coding',
+    });
+    expect(mockOrchestratorCtor).toHaveBeenCalledWith(expect.objectContaining({
+      config: expect.objectContaining({
+        engine: 'codex',
+        provider: 'codex',
+        executionModelId: 'o3',
+        validationRuntime: expect.objectContaining({
+          engine: 'codex',
+          provider: 'codex',
+          modelId: 'o4-mini',
+        }),
+        reviewRuntime: expect.objectContaining({
+          engine: 'pi-mono',
+          provider: 'openai',
+          modelId: 'gpt-5',
+        }),
+      }),
+    }));
   });
 
   it('exits non-zero when the requested engine/provider is unavailable', async () => {

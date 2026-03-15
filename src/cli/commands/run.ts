@@ -18,6 +18,7 @@ import type { OrchestratorEvent } from '../../core/types.js';
 import { notifyRunComplete, notifyRunFailed } from '../../notifications/notify.js';
 import { acquireLock } from '../../utils/lock.js';
 import { execa } from 'execa';
+import { applyKeelTaskRuntime, loadKeelTaskRuntime } from '../../integrations/keel-task-runtime.js';
 
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
@@ -272,7 +273,9 @@ export const runCommand = new Command('run')
         .then(({ autoRegisterWithDaemon }) => autoRegisterWithDaemon(cwd))
         .catch(() => {});
 
-      const config = await loadConfig(cwd);
+      const baseConfig = await loadConfig(cwd);
+      const keelTaskRuntime = await loadKeelTaskRuntime(cwd, opts.keelTask ?? baseConfig.keel?.taskId);
+      const config = applyKeelTaskRuntime(baseConfig, keelTaskRuntime);
 
       // Apply planning/review/runtime overrides before any on-the-fly planning.
       config.models = mergeModelConfig(config.models, {

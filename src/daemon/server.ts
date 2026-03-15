@@ -14,6 +14,7 @@ import { detectSpecFiles, scanClaudeCodeSessions, loadClaudeCodeMessages, comput
 import { CLAWDASH_DIR, RUNS_DIR } from '../config/defaults.js';
 import { loadConfig } from '../config/config.js';
 import { readJson, ensureDir, writeJson } from '../utils/fs.js';
+import { applyKeelTaskRuntime, loadKeelTaskRuntime } from '../integrations/keel-task-runtime.js';
 
 // ── Fed event client (lazy — cloudy works fine without fed) ──────────
 
@@ -350,10 +351,17 @@ interface RuntimePreflight {
 }
 
 interface RuntimeDefaults {
-  execution?: Pick<RunRuntimeRouteFields, 'engine' | 'provider'>;
-  planning?: Pick<RuntimeRouteFields, 'planningEngine' | 'planningProvider'>;
-  validation?: Pick<RuntimeRouteFields, 'validationEngine' | 'validationProvider'>;
-  review?: Pick<RuntimeRouteFields, 'reviewEngine' | 'reviewProvider'>;
+  execution?: Pick<RunRuntimeRouteFields, 'engine' | 'provider' | 'executionModelId'>;
+  planning?: Pick<RuntimeRouteFields, 'planningEngine' | 'planningProvider' | 'planningModelId'>;
+  validation?: Pick<RuntimeRouteFields, 'validationEngine' | 'validationProvider' | 'validationModelId'>;
+  review?: Pick<RuntimeRouteFields, 'reviewEngine' | 'reviewProvider' | 'reviewModelId'>;
+  models?: {
+    planningModel?: string;
+    executionModel?: string;
+    taskReviewModel?: string;
+    runReviewModel?: string;
+    qualityReviewModel?: string;
+  };
 }
 
 function appendOptionalFlag(args: string[], flag: string, value: string | undefined): void {
@@ -420,24 +428,47 @@ function resolveRuntimePreflight(
   };
 }
 
-async function loadRuntimeDefaults(projectPath: string): Promise<RuntimeDefaults> {
-  const config = await loadConfig(projectPath);
+async function loadRuntimeDefaults(projectPath: string, keelTaskId?: string): Promise<RuntimeDefaults> {
+  const baseConfig = await loadConfig(projectPath);
+  const keelTaskRuntime = await loadKeelTaskRuntime(projectPath, keelTaskId ?? baseConfig.keel?.taskId);
+  const config = applyKeelTaskRuntime(baseConfig, keelTaskRuntime);
+  const models = config.models ?? {
+    planning: 'sonnet',
+    execution: 'sonnet',
+    validation: 'haiku',
+  };
+  const review = config.review ?? {
+    enabled: true,
+    model: 'sonnet',
+    failBlocksRun: false,
+  };
   return {
     execution: {
       engine: config.engine,
       provider: config.provider,
+      executionModelId: config.executionModelId,
     },
     planning: {
       planningEngine: config.planningRuntime?.engine,
       planningProvider: config.planningRuntime?.provider,
+      planningModelId: config.planningRuntime?.modelId,
     },
     validation: {
       validationEngine: config.validationRuntime?.engine,
       validationProvider: config.validationRuntime?.provider,
+      validationModelId: config.validationRuntime?.modelId,
     },
     review: {
       reviewEngine: config.reviewRuntime?.engine,
       reviewProvider: config.reviewRuntime?.provider,
+      reviewModelId: config.reviewRuntime?.modelId,
+    },
+    models: {
+      planningModel: models.planning,
+      executionModel: models.execution,
+      taskReviewModel: models.validation,
+      runReviewModel: review.model,
+      qualityReviewModel: models.qualityReview,
     },
   };
 }
@@ -1416,9 +1447,10 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           planningEngine?: string;
           planningProvider?: string;
           planningModelId?: string;
+          keelTask?: string;
         };
+        const runtimeDefaults = await loadRuntimeDefaults(meta.path, body.keelTask);
         try {
-          const runtimeDefaults = await loadRuntimeDefaults(meta.path);
           await preflightRuntime(resolveRuntimePreflight(
             'planning',
             {
@@ -1538,8 +1570,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           keelSlug?: string;
           keelTask?: string;
         };
+        const runtimeDefaults = await loadRuntimeDefaults(meta.path, body.keelTask);
         try {
-          const runtimeDefaults = await loadRuntimeDefaults(meta.path);
           await preflightRuntime(resolveRuntimePreflight(
             'coding',
             {
@@ -1574,9 +1606,9 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
           return;
         }
-        const execModel = body.executionModel ?? 'sonnet';
-        const taskReviewModel = body.taskReviewModel ?? 'haiku';
-        const runReviewModel = body.runReviewModel ?? 'sonnet';
+        const execModel = body.executionModel ?? runtimeDefaults.models?.executionModel ?? 'sonnet';
+        const taskReviewModel = body.taskReviewModel ?? runtimeDefaults.models?.taskReviewModel ?? 'haiku';
+        const runReviewModel = body.runReviewModel ?? runtimeDefaults.models?.runReviewModel ?? 'sonnet';
 
         const extraArgs = buildRunRuntimeArgs(body);
         if (body.parallel) { extraArgs.push('--parallel'); }
@@ -1636,8 +1668,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           keelSlug?: string;
           keelTask?: string;
         };
+        const runtimeDefaults = await loadRuntimeDefaults(meta.path, body.keelTask);
         try {
-          const runtimeDefaults = await loadRuntimeDefaults(meta.path);
           await preflightRuntime(resolveRuntimePreflight(
             'planning',
             {
@@ -1685,13 +1717,17 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           ...buildReviewRuntimeArgs(body),
         ];
         const modelArgs: string[] = [
-          '--execution-model', body.executionModel ?? 'sonnet',
-          '--planning-model', body.planningModel ?? 'sonnet',
-          '--task-review-model', body.taskReviewModel ?? 'haiku',
-          '--run-review-model', body.runReviewModel ?? 'sonnet',
+          '--execution-model', body.executionModel ?? runtimeDefaults.models?.executionModel ?? 'sonnet',
+          '--planning-model', body.planningModel ?? runtimeDefaults.models?.planningModel ?? 'sonnet',
+          '--task-review-model', body.taskReviewModel ?? runtimeDefaults.models?.taskReviewModel ?? 'haiku',
+          '--run-review-model', body.runReviewModel ?? runtimeDefaults.models?.runReviewModel ?? 'sonnet',
+        ];
+        const keelArgs = [
+          ...(body.keelSlug ? ['--keel-slug', body.keelSlug] : []),
+          ...(body.keelTask ? ['--keel-task', body.keelTask] : []),
         ];
         spawnCloudyProcess(projectId, meta.path, 'chain', [
-          'chain', ...specArgs, ...modelArgs, ...runtimeArgs,
+          'chain', ...specArgs, ...modelArgs, ...runtimeArgs, ...keelArgs,
         ]);
         sendJson(res, 200, { ok: true, started: true });
       } catch (err) {
@@ -1807,8 +1843,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           reviewProvider?: string;
           reviewModelId?: string;
         };
+        const runtimeDefaults = await loadRuntimeDefaults(meta.path);
         try {
-          const runtimeDefaults = await loadRuntimeDefaults(meta.path);
           await preflightRuntime(resolveRuntimePreflight(
             'coding',
             {
@@ -1843,9 +1879,9 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
           return;
         }
-        const execModel = body.executionModel ?? 'sonnet';
-        const taskReviewModel = body.taskReviewModel ?? 'haiku';
-        const runReviewModel = body.runReviewModel ?? 'sonnet';
+        const execModel = body.executionModel ?? runtimeDefaults.models?.executionModel ?? 'sonnet';
+        const taskReviewModel = body.taskReviewModel ?? runtimeDefaults.models?.taskReviewModel ?? 'haiku';
+        const runReviewModel = body.runReviewModel ?? runtimeDefaults.models?.runReviewModel ?? 'sonnet';
         const retryArgs = body.taskId ? ['--retry', body.taskId] : ['--retry-failed'];
 
         const extraArgs = buildRunRuntimeArgs(body);

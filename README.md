@@ -682,6 +682,36 @@ cloudy config --set keel.taskId=T-007
 cloudy config --set keel.port=7842
 ```
 
+### Task-level runtime defaults from Keel
+
+You can also put Cloudy runtime preferences directly on a Keel task. When `--keel-task` is set, Cloudy reads `keel/tasks/<task>.json` from the project and uses its `cloudy` block as the default runtime for that task.
+
+```json
+{
+  "id": "T-029",
+  "title": "Notifications inbox + route correction",
+  "cloudy": {
+    "models": {
+      "planning": "sonnet",
+      "execution": "sonnet",
+      "taskReview": "haiku",
+      "runReview": "sonnet",
+      "qualityReview": "haiku"
+    },
+    "planning": { "engine": "codex", "provider": "codex", "modelId": "o3-mini" },
+    "execution": { "engine": "codex", "provider": "codex", "modelId": "o3" },
+    "validation": { "engine": "codex", "provider": "codex", "modelId": "o4-mini" },
+    "review": { "engine": "pi-mono", "provider": "openai", "modelId": "gpt-5" }
+  }
+}
+```
+
+Precedence is:
+
+1. CLI / daemon request flags
+2. Keel task `cloudy` block
+3. `.cloudy/config.json`
+
 ### What gets written
 
 **On success** — sets keel task status to `done`, appends a note:

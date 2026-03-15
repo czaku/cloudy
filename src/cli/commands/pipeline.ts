@@ -7,6 +7,7 @@ import { CLAWDASH_DIR, RUNS_DIR } from '../../config/defaults.js';
 import { loadConfig } from '../../config/config.js';
 import { getPhaseRuntime } from '../../config/phase-runtime.js';
 import type { PhaseRuntimeConfig } from '../../core/types.js';
+import { applyKeelTaskRuntime, loadKeelTaskRuntime } from '../../integrations/keel-task-runtime.js';
 
 const PIPELINE_CONTEXT_FILE = '.cloudy/pipeline-context.md';
 
@@ -100,6 +101,8 @@ export const pipelineCommand = new Command('chain')
   .option('--review-engine <engine>', 'Holistic review / review-side engine for all phases')
   .option('--review-provider <provider>', 'Holistic review / review-side provider/auth route for all phases (e.g. claude subscription, codex subscription, openai API)')
   .option('--review-model-id <id>', 'Provider-native holistic review model ID for all phases')
+  .option('--keel-slug <slug>', 'Keel project slug to write outcomes back to')
+  .option('--keel-task <id>', 'Keel task ID to read runtime defaults from and update on completion')
   .option('--no-auto-fix', 'Disable automatic fix-task generation from review notes')
   .option('--verbose', 'Pass --verbose to each run')
   .option('--heartbeat-interval <seconds>', 'Write status.json every N seconds during each phase', parseInt)
@@ -120,6 +123,8 @@ export const pipelineCommand = new Command('chain')
     reviewEngine?: string;
     reviewProvider?: string;
     reviewModelId?: string;
+    keelSlug?: string;
+    keelTask?: string;
     autoFix?: boolean;
     verbose?: boolean;
     heartbeatInterval?: number;
@@ -127,7 +132,9 @@ export const pipelineCommand = new Command('chain')
   }) => {
     const cwd = process.cwd();
     await initLogger(cwd);
-    const config = await loadConfig(cwd);
+    const baseConfig = await loadConfig(cwd);
+    const keelTaskRuntime = await loadKeelTaskRuntime(cwd, opts.keelTask ?? baseConfig.keel?.taskId);
+    const config = applyKeelTaskRuntime(baseConfig, keelTaskRuntime);
     if (opts.planningEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planningEngine as typeof config.engine };
     if (opts.planningProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planningProvider };
     if (opts.planningModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planningModelId };
@@ -144,15 +151,15 @@ export const pipelineCommand = new Command('chain')
     }
 
     const missing: string[] = [];
-    if (!opts.executionModel) missing.push('--execution-model');
-    if (!opts.taskReviewModel) missing.push('--task-review-model');
-    if (!opts.runReviewModel) missing.push('--run-review-model');
+    if (!opts.executionModel && !config.models.execution) missing.push('--execution-model');
+    if (!opts.taskReviewModel && !config.models.validation) missing.push('--task-review-model');
+    if (!opts.runReviewModel && !config.review.model) missing.push('--run-review-model');
     if (missing.length > 0) {
       console.error(c(red, `✖  pipeline requires: ${missing.join(', ')}`));
       process.exit(1);
     }
 
-    const planningModel = opts.planningModel ?? 'sonnet';
+    const planningModel = opts.planningModel ?? config.models.planning ?? 'sonnet';
     // opts.autoFix is true by default (commander inverts --no-auto-fix)
     const autoFix = opts.autoFix !== false;
 
@@ -256,15 +263,17 @@ export const pipelineCommand = new Command('chain')
         cloudyBin,
         'run',
         '--non-interactive',
-        '--execution-model', opts.executionModel!,
-        '--task-review-model', opts.taskReviewModel!,
-        '--run-review-model', opts.runReviewModel!,
+        '--execution-model', opts.executionModel ?? config.models.execution,
+        '--task-review-model', opts.taskReviewModel ?? config.models.validation,
+        '--run-review-model', opts.runReviewModel ?? config.review.model,
         ...(config.validationRuntime?.engine ? ['--validation-engine', config.validationRuntime.engine] : []),
         ...(config.validationRuntime?.provider ? ['--validation-provider', config.validationRuntime.provider] : []),
         ...(config.validationRuntime?.modelId ? ['--validation-model-id', config.validationRuntime.modelId] : []),
         ...(config.reviewRuntime?.engine ? ['--review-engine', config.reviewRuntime.engine] : []),
         ...(config.reviewRuntime?.provider ? ['--review-provider', config.reviewRuntime.provider] : []),
         ...(config.reviewRuntime?.modelId ? ['--review-model-id', config.reviewRuntime.modelId] : []),
+        ...(opts.keelSlug ?? config.keel?.slug ? ['--keel-slug', opts.keelSlug ?? config.keel?.slug ?? ''] : []),
+        ...(opts.keelTask ?? config.keel?.taskId ? ['--keel-task', opts.keelTask ?? config.keel?.taskId ?? ''] : []),
       ];
       if (opts.qualityReviewModel) runArgs.push('--quality-review-model', opts.qualityReviewModel);
       if (opts.verbose) runArgs.push('--verbose');
