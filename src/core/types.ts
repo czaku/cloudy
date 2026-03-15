@@ -246,10 +246,10 @@ export interface CloudyConfig {
   reviewRuntime?: PhaseRuntimeConfig;     // provider/engine route for holistic review and review-side prompts
   review: ReviewConfig;        // post-run holistic review configuration
   keel?: {
-    slug: string
-    taskId?: string
-    port?: number     // default 7842
-  }
+    slug: string;
+    taskId?: string;
+    port?: number;     // default 7842
+  };
 }
 
 // ── State types ──────────────────────────────────────────────────────

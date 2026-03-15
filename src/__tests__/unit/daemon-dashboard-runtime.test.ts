@@ -29,6 +29,8 @@ describe('daemon dashboard runtime routing controls', () => {
     expect(source).toContain("addOptionalRuntimeField(payload, 'reviewEngine', reviewEngine)");
     expect(source).toContain("addOptionalRuntimeField(payload, 'reviewProvider', reviewProvider)");
     expect(source).toContain("addOptionalRuntimeField(payload, 'reviewModelId', reviewModelId)");
+    expect(source).toContain("addOptionalRuntimeField(payload, 'keelSlug', keelSlug)");
+    expect(source).toContain("addOptionalRuntimeField(payload, 'keelTask', keelTask)");
   });
 
   it('renders runtime controls in both planning and run flows', () => {
@@ -50,5 +52,10 @@ describe('daemon dashboard runtime routing controls', () => {
     expect(source).toContain('Claude Code');
     expect(source).toContain('Codex CLI');
     expect(source).toContain('OpenAI API');
+  });
+
+  it('renders keel routing fields in the run flows', () => {
+    expect(source).toContain('Keel slug');
+    expect(source).toContain('Keel task');
   });
 });

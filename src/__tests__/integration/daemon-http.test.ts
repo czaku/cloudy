@@ -556,6 +556,8 @@ describe('runtime routing via daemon HTTP', () => {
       executionModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
+      keelSlug: 'fitkind',
+      keelTask: 'T-77',
       engine: 'codex',
       provider: 'codex',
       executionModelId: 'o3',
@@ -575,6 +577,10 @@ describe('runtime routing via daemon HTTP', () => {
     expect(argv).toContain('run');
     expect(argv).toContain('--engine');
     expect(argv).toContain('codex');
+    expect(argv).toContain('--keel-slug');
+    expect(argv).toContain('fitkind');
+    expect(argv).toContain('--keel-task');
+    expect(argv).toContain('T-77');
     expect(argv).toContain('--provider');
     expect(argv).toContain('--execution-model-id');
     expect(argv).toContain('o3');
@@ -655,6 +661,8 @@ describe('runtime routing via daemon HTTP', () => {
       executionModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
+      keelSlug: 'fitkind',
+      keelTask: 'T-88',
       engine: 'codex',
       provider: 'codex',
       executionModelId: 'o3',
@@ -674,6 +682,10 @@ describe('runtime routing via daemon HTTP', () => {
     expect(argv).toContain('run');
     expect(argv).toContain('--retry');
     expect(argv).toContain('task-7');
+    expect(argv).toContain('--keel-slug');
+    expect(argv).toContain('fitkind');
+    expect(argv).toContain('--keel-task');
+    expect(argv).toContain('T-88');
     expect(argv).toContain('--engine');
     expect(argv).toContain('codex');
     expect(argv).toContain('--validation-engine');

@@ -62,6 +62,9 @@ export function validateConfig(config: CloudyConfig): string[] {
   if (typeof config.approval.timeoutSec !== 'number' || config.approval.timeoutSec < 10) {
     errors.push(`approval.timeoutSec: must be at least 10 seconds (got ${config.approval.timeoutSec})`);
   }
+  if (config.keel?.port !== undefined && (!Number.isInteger(config.keel.port) || config.keel.port <= 0 || config.keel.port > 65535)) {
+    errors.push(`keel.port: must be an integer between 1 and 65535 (got ${config.keel.port})`);
+  }
 
   return errors;
 }
@@ -127,6 +130,7 @@ export async function loadConfig(cwd: string): Promise<CloudyConfig> {
     validationRuntime: { ...effectiveDefaults.validationRuntime, ...saved.validationRuntime },
     reviewRuntime: { ...effectiveDefaults.reviewRuntime, ...saved.reviewRuntime },
     review: { ...effectiveDefaults.review, ...saved.review },
+    keel: saved.keel ?? effectiveDefaults.keel,
   };
 
   const errors = validateConfig(config);

@@ -194,6 +194,11 @@ describe('daemon server runtime flag forwarding', () => {
     expect(source).toContain('--execution-model-id');
   });
 
+  it('forwards keel flags for daemon run and retry requests', () => {
+    expect(source).toContain('--keel-slug');
+    expect(source).toContain('--keel-task');
+  });
+
   it('forwards validation and review runtime flags for run and chain requests', () => {
     expect(source).toContain('--validation-engine');
     expect(source).toContain('--validation-provider');

@@ -37,6 +37,7 @@ export const DEFAULT_CONFIG: CloudyConfig = {
   validationRuntime: {},
   reviewRuntime: {},
   review: { enabled: true, model: 'opus', failBlocksRun: false },
+  keel: undefined,
 };
 
 export const CLAWDASH_DIR = '.cloudy';

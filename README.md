@@ -676,19 +676,25 @@ cloudy run spec.md --keel-slug myproject --keel-task T-007
 }
 ```
 
+```bash
+cloudy config --set keel.slug=myproject
+cloudy config --set keel.taskId=T-007
+cloudy config --set keel.port=7842
+```
+
 ### What gets written
 
 **On success** — sets keel task status to `done`, appends a note:
 ```
-Run completed. Tasks: 5 done, 0 failed. Cost: $0.0312. Spec: feature.md.
+Cloudy run run-2026-03-15-1230-myproject completed successfully. 5 task(s) completed. 0 task(s) failed.
 ```
 
-**On failure** — sets keel task status to `blocked`, appends a note with the top error, and drafts a `proposed` Decision record with the failure context for future reference.
+**On failure** — sets keel task status to `blocked`, appends a note with the top error, and drafts a `proposed` Decision record with the failure context for future reference. A run with failed tasks, an abort, or a blocked holistic review is written back as failure.
 
 ### Requirements
 
-- Keel dashboard running at `http://localhost:7842` (preferred — used automatically when available)
-- Or: `keel` CLI on your PATH (fallback)
+- Keel dashboard API running at `http://127.0.0.1:7842` by default
+- Or set `keel.port` / `--keel-slug` / `--keel-task` to target a different local dashboard port
 
 ---
 

@@ -14,6 +14,7 @@ const {
   mockAutoRegisterWithDaemon,
   mockOrchestratorRun,
   mockOrchestratorCtor,
+  mockWriteRunOutcome,
 } = vi.hoisted(() => ({
   mockLoadConfig: vi.fn(),
   mockLoadState: vi.fn(),
@@ -27,6 +28,7 @@ const {
   mockAutoRegisterWithDaemon: vi.fn(async () => {}),
   mockOrchestratorRun: vi.fn(async () => {}),
   mockOrchestratorCtor: vi.fn(),
+  mockWriteRunOutcome: vi.fn(async () => {}),
 }));
 
 vi.mock('../../src/config/config.js', () => ({
@@ -70,6 +72,10 @@ vi.mock('execa', () => ({
 vi.mock('../../src/cli/commands/daemon.js', () => ({
   daemonCommand: new Command('daemon'),
   autoRegisterWithDaemon: mockAutoRegisterWithDaemon,
+}));
+
+vi.mock('../../src/integrations/keel.js', () => ({
+  writeRunOutcome: mockWriteRunOutcome,
 }));
 
 vi.mock('../../src/core/orchestrator.js', () => ({
@@ -117,10 +123,11 @@ function makeConfig() {
     provider: 'claude',
     executionModelId: undefined,
     review: { enabled: false, model: 'sonnet', failBlocksRun: false },
+    keel: undefined,
   };
 }
 
-function makeState() {
+function makeState(taskStatus: 'pending' | 'completed' | 'failed' = 'pending') {
   return {
     version: 1,
     plan: {
@@ -133,7 +140,7 @@ function makeState() {
           acceptanceCriteria: ['It works'],
           dependencies: [],
           contextPatterns: [],
-          status: 'pending',
+          status: taskStatus,
           retries: 0,
           maxRetries: 1,
           ifFailed: 'halt',
@@ -152,6 +159,7 @@ function makeState() {
       byPhase: {},
       byModel: {},
     },
+    startedAt: '2025-01-01T00:00:00Z',
   };
 }
 
@@ -249,5 +257,64 @@ describe('run command', () => {
 
     exit.mockRestore();
     stderr.mockRestore();
+  });
+
+  it('writes a successful keel outcome when the run completes with no failed tasks', async () => {
+    const state = makeState('completed');
+    mockLoadConfig.mockResolvedValue({
+      ...makeConfig(),
+      keel: { slug: 'fitkind', taskId: 'T-7', port: 9000 },
+    });
+    mockLoadState.mockResolvedValue(state);
+
+    const program = createProgram();
+    await program.parseAsync([
+      'run',
+      '--non-interactive',
+      '--execution-model', 'sonnet',
+      '--task-review-model', 'haiku',
+      '--run-review-model', 'sonnet',
+      '--no-dashboard',
+    ], { from: 'user' });
+
+    expect(mockWriteRunOutcome).toHaveBeenCalledWith(
+      { slug: 'fitkind', taskId: 'T-7', port: 9000 },
+      expect.objectContaining({
+        success: true,
+        tasksDone: 1,
+        tasksFailed: 0,
+      }),
+      process.cwd(),
+    );
+  });
+
+  it('writes a failed keel outcome when tasks failed even if orchestration did not throw', async () => {
+    const state = makeState('failed');
+    mockLoadConfig.mockResolvedValue({
+      ...makeConfig(),
+      keel: { slug: 'fitkind', taskId: 'T-9', port: 7842 },
+    });
+    mockLoadState.mockResolvedValue(state);
+
+    const program = createProgram();
+    await program.parseAsync([
+      'run',
+      '--non-interactive',
+      '--execution-model', 'sonnet',
+      '--task-review-model', 'haiku',
+      '--run-review-model', 'sonnet',
+      '--no-dashboard',
+    ], { from: 'user' });
+
+    expect(mockWriteRunOutcome).toHaveBeenCalledWith(
+      { slug: 'fitkind', taskId: 'T-9', port: 7842 },
+      expect.objectContaining({
+        success: false,
+        tasksDone: 0,
+        tasksFailed: 1,
+        topError: '1 task(s) failed during the run.',
+      }),
+      process.cwd(),
+    );
   });
 });

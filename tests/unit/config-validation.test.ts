@@ -101,4 +101,11 @@ describe('validateConfig', () => {
     }));
     expect(errors.length).toBeGreaterThanOrEqual(2);
   });
+
+  it('errors on invalid keel port', () => {
+    const errors = validateConfig(makeConfig({
+      keel: { slug: 'fitkind', port: 70000 },
+    }));
+    expect(errors.some((e) => e.includes('keel.port'))).toBe(true);
+  });
 });

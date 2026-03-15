@@ -63,6 +63,18 @@ export const configCommand = new Command('config')
       } else if (parts[0] === 'reviewRuntime' && parts[1]) {
         (config.reviewRuntime ??= {});
         (config.reviewRuntime as Record<string, string | undefined>)[parts[1]] = value;
+      } else if (parts[0] === 'keel' && parts[1]) {
+        config.keel ??= { slug: '' };
+        if (parts[1] === 'port') {
+          config.keel.port = parseInt(value, 10);
+        } else if (parts[1] === 'slug') {
+          config.keel.slug = value;
+        } else if (parts[1] === 'taskId') {
+          config.keel.taskId = value;
+        } else {
+          console.error(`Unknown keel key "${parts[1]}".`);
+          process.exit(1);
+        }
       } else if (key === 'maxCostPerTaskUsd') {
         config.maxCostPerTaskUsd = parseFloat(value);
       } else if (key === 'worktrees') {
@@ -114,6 +126,7 @@ export const configCommand = new Command('config')
     console.log(`  planningRuntime:     ${JSON.stringify(config.planningRuntime ?? {})}`);
     console.log(`  validationRuntime:   ${JSON.stringify(config.validationRuntime ?? {})}`);
     console.log(`  reviewRuntime:       ${JSON.stringify(config.reviewRuntime ?? {})}`);
+    console.log(`  keel:                ${config.keel ? JSON.stringify(config.keel) : '(disabled)'}`);
     console.log(`  maxRetries:          ${config.maxRetries}`);
     console.log(`  parallel:            ${config.parallel}`);
     console.log(`  maxParallel:         ${config.maxParallel}`);

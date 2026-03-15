@@ -339,6 +339,8 @@ interface RunRuntimeRouteFields extends RuntimeRouteFields {
   engine?: string;
   provider?: string;
   executionModelId?: string;
+  keelSlug?: string;
+  keelTask?: string;
 }
 
 interface RuntimePreflight {
@@ -387,6 +389,8 @@ function buildRunRuntimeArgs(runtime: RunRuntimeRouteFields): string[] {
   appendOptionalFlag(args, '--engine', runtime.engine);
   appendOptionalFlag(args, '--provider', runtime.provider);
   appendOptionalFlag(args, '--execution-model-id', runtime.executionModelId);
+  appendOptionalFlag(args, '--keel-slug', runtime.keelSlug);
+  appendOptionalFlag(args, '--keel-task', runtime.keelTask);
   args.push(
     ...buildPlanningRuntimeArgs(runtime),
     ...buildValidationRuntimeArgs(runtime),
@@ -1531,6 +1535,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           reviewEngine?: string;
           reviewProvider?: string;
           reviewModelId?: string;
+          keelSlug?: string;
+          keelTask?: string;
         };
         try {
           const runtimeDefaults = await loadRuntimeDefaults(meta.path);
@@ -1627,6 +1633,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           reviewEngine?: string;
           reviewProvider?: string;
           reviewModelId?: string;
+          keelSlug?: string;
+          keelTask?: string;
         };
         try {
           const runtimeDefaults = await loadRuntimeDefaults(meta.path);

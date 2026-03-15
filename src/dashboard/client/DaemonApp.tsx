@@ -96,6 +96,11 @@ interface ProjectRuntimeConfig {
   planningRuntime?: RuntimeRouteConfig;
   validationRuntime?: RuntimeRouteConfig;
   reviewRuntime?: RuntimeRouteConfig;
+  keel?: {
+    slug?: string;
+    taskId?: string;
+    port?: number;
+  };
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -3034,6 +3039,8 @@ function RunTab({ project }: RunTabProps) {
   const [reviewEngine, setReviewEngine] = useState('');
   const [reviewProvider, setReviewProvider] = useState('');
   const [reviewModelId, setReviewModelId] = useState('');
+  const [keelSlug, setKeelSlug] = useState('');
+  const [keelTask, setKeelTask] = useState('');
   const [parallel, setParallel] = useState(false);
   const [maxParallel, setMaxParallel] = useState(3);
   const [worktrees, setWorktrees] = useState(false);
@@ -3061,6 +3068,11 @@ function RunTab({ project }: RunTabProps) {
   // Question timer countdown
   const [questionSecsLeft, setQuestionSecsLeft] = useState(0);
   const projectConfig = useProjectRuntimeConfig(project.id);
+
+  useEffect(() => {
+    setKeelSlug(projectConfig?.keel?.slug ?? '');
+    setKeelTask(projectConfig?.keel?.taskId ?? '');
+  }, [projectConfig?.keel?.slug, projectConfig?.keel?.taskId]);
 
   const isRunning = project.activeProcess === 'run' || project.status === 'running';
 
@@ -3230,6 +3242,8 @@ function RunTab({ project }: RunTabProps) {
     addOptionalRuntimeField(payload, 'reviewEngine', reviewEngine);
     addOptionalRuntimeField(payload, 'reviewProvider', reviewProvider);
     addOptionalRuntimeField(payload, 'reviewModelId', reviewModelId);
+    addOptionalRuntimeField(payload, 'keelSlug', keelSlug);
+    addOptionalRuntimeField(payload, 'keelTask', keelTask);
     return payload;
   }
 
@@ -3243,6 +3257,8 @@ function RunTab({ project }: RunTabProps) {
     setReviewEngine('');
     setReviewProvider('');
     setReviewModelId('');
+    setKeelSlug(projectConfig?.keel?.slug ?? '');
+    setKeelTask(projectConfig?.keel?.taskId ?? '');
     setRequestError('');
   }
 
@@ -3695,6 +3711,22 @@ function RunTab({ project }: RunTabProps) {
                       { label: 'Review', route: projectConfig?.reviewRuntime, override: reviewOverrideRoute },
                     ]}
                   />
+                  <label className="run-advanced-row">
+                    <span>Keel slug</span>
+                    <input
+                      value={keelSlug}
+                      onChange={(e) => setKeelSlug((e.target as HTMLInputElement).value)}
+                      placeholder={projectConfig?.keel?.slug ?? 'disabled'}
+                    />
+                  </label>
+                  <label className="run-advanced-row">
+                    <span>Keel task</span>
+                    <input
+                      value={keelTask}
+                      onChange={(e) => setKeelTask((e.target as HTMLInputElement).value)}
+                      placeholder={projectConfig?.keel?.taskId ?? 'optional'}
+                    />
+                  </label>
                   <RuntimeConfigFields
                     title="Execution route"
                     engine={executionEngine}
@@ -3917,6 +3949,22 @@ function RunTab({ project }: RunTabProps) {
                   { label: 'Review', route: projectConfig?.reviewRuntime, override: reviewOverrideRoute },
                 ]}
               />
+              <label className="run-advanced-row">
+                <span>Keel slug</span>
+                <input
+                  value={keelSlug}
+                  onChange={(e) => setKeelSlug((e.target as HTMLInputElement).value)}
+                  placeholder={projectConfig?.keel?.slug ?? 'disabled'}
+                />
+              </label>
+              <label className="run-advanced-row">
+                <span>Keel task</span>
+                <input
+                  value={keelTask}
+                  onChange={(e) => setKeelTask((e.target as HTMLInputElement).value)}
+                  placeholder={projectConfig?.keel?.taskId ?? 'optional'}
+                />
+              </label>
               <label className="run-advanced-row">
                 <input type="checkbox" checked={parallel} onChange={e => setParallel((e.target as HTMLInputElement).checked)} />
                 <span>Parallel task execution</span>
