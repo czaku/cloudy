@@ -22,6 +22,7 @@ export async function runAiQualityReview(
       engine: runtime?.engine,
       provider: runtime?.provider,
       modelId: runtime?.modelId,
+      effort: runtime?.effort,
       taskType: 'review',
     });
 

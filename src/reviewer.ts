@@ -328,6 +328,7 @@ export async function runHolisticReview(
     engine: runtime?.engine,
     provider: runtime?.provider,
     modelId: runtime?.modelId,
+    effort: runtime?.effort,
     onOutput,
     taskType: 'review',
   });

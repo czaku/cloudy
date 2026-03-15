@@ -86,9 +86,8 @@ export async function createPlan(
     onOutput,
     abortSignal,
     taskType: 'planning',
-    // Use 'high' effort for planning — enables extended thinking on capable models,
-    // leading to better dependency graphs and acceptance criteria.
-    effort: model === 'haiku' ? 'medium' : 'high',
+    // Keep the existing default unless the runtime explicitly overrides it.
+    effort: runtime?.effort ?? (model === 'haiku' ? 'medium' : 'high'),
   });
 
   const timeoutPromise = new Promise<never>((_, reject) =>
@@ -223,6 +222,7 @@ Respond with ONLY a JSON object mapping every task ID to its complete (corrected
       engine: runtime?.engine,
       provider: runtime?.provider,
       modelId: runtime?.modelId,
+      effort: runtime?.effort,
       taskType: 'planning',
     });
   } catch (err) {

@@ -1,5 +1,6 @@
 // ── Model types ──────────────────────────────────────────────────────
 export type ClaudeModel = 'opus' | 'sonnet' | 'haiku';
+export type ThinkingEffort = 'low' | 'medium' | 'high' | 'max';
 
 export type Engine =
   | 'claude-code'
@@ -50,6 +51,7 @@ export interface PhaseRuntimeConfig {
   engine?: Engine;
   provider?: Provider;
   modelId?: string;
+  effort?: ThinkingEffort;
 }
 
 // ── Task types ───────────────────────────────────────────────────────
@@ -241,6 +243,7 @@ export interface CloudyConfig {
   engine: Engine;              // execution engine for task implementation
   provider?: Provider;         // provider/auth route (e.g. claude, codex, openai)
   executionModelId?: string;   // provider-native execution model ID (e.g. o3, codex-mini)
+  executionEffort?: ThinkingEffort; // execution thinking budget (CLI --effort overrides)
   planningRuntime?: PhaseRuntimeConfig;   // provider/engine route for planning calls
   validationRuntime?: PhaseRuntimeConfig; // provider/engine route for per-task AI validation
   reviewRuntime?: PhaseRuntimeConfig;     // provider/engine route for holistic review and review-side prompts

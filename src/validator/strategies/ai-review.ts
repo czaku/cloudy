@@ -45,6 +45,7 @@ export async function runAiReview(
       engine: runtime?.engine,
       provider: runtime?.provider,
       modelId: runtime?.modelId,
+      effort: runtime?.effort,
       taskType: 'review',
     });
 

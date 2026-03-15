@@ -18,11 +18,15 @@ const VALID_ENGINES = new Set([
 ]);
 const VALID_APPROVAL_MODES = new Set(['never', 'always', 'on-failure']);
 const VALID_AUTO_ACTIONS = new Set(['continue', 'halt']);
+const VALID_EFFORTS = new Set(['low', 'medium', 'high', 'max']);
 
 function validatePhaseRuntime(prefix: string, runtime: CloudyConfig['planningRuntime'], errors: string[]): void {
-  if (!runtime?.engine) return;
-  if (!VALID_ENGINES.has(runtime.engine)) {
+  if (!runtime) return;
+  if (runtime.engine && !VALID_ENGINES.has(runtime.engine)) {
     errors.push(`${prefix}.engine: invalid engine "${runtime.engine}"`);
+  }
+  if (runtime.effort && !VALID_EFFORTS.has(runtime.effort)) {
+    errors.push(`${prefix}.effort: invalid effort "${runtime.effort}"`);
   }
 }
 
@@ -40,6 +44,9 @@ export function validateConfig(config: CloudyConfig): string[] {
   }
   if (!VALID_ENGINES.has(config.engine)) {
     errors.push(`engine: invalid engine "${config.engine}"`);
+  }
+  if (config.executionEffort && !VALID_EFFORTS.has(config.executionEffort)) {
+    errors.push(`executionEffort: invalid effort "${config.executionEffort}"`);
   }
   validatePhaseRuntime('planningRuntime', config.planningRuntime, errors);
   validatePhaseRuntime('validationRuntime', config.validationRuntime, errors);
@@ -126,6 +133,7 @@ export async function loadConfig(cwd: string): Promise<CloudyConfig> {
     engine: saved.engine ?? effectiveDefaults.engine,
     provider: saved.provider ?? effectiveDefaults.provider,
     executionModelId: saved.executionModelId ?? effectiveDefaults.executionModelId,
+    executionEffort: saved.executionEffort ?? effectiveDefaults.executionEffort,
     planningRuntime: { ...effectiveDefaults.planningRuntime, ...saved.planningRuntime },
     validationRuntime: { ...effectiveDefaults.validationRuntime, ...saved.validationRuntime },
     reviewRuntime: { ...effectiveDefaults.reviewRuntime, ...saved.reviewRuntime },

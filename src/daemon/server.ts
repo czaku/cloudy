@@ -328,18 +328,22 @@ interface RuntimeRouteFields {
   planningEngine?: string;
   planningProvider?: string;
   planningModelId?: string;
+  planningEffort?: string;
   validationEngine?: string;
   validationProvider?: string;
   validationModelId?: string;
+  validationEffort?: string;
   reviewEngine?: string;
   reviewProvider?: string;
   reviewModelId?: string;
+  reviewEffort?: string;
 }
 
 interface RunRuntimeRouteFields extends RuntimeRouteFields {
   engine?: string;
   provider?: string;
   executionModelId?: string;
+  effort?: string;
   keelSlug?: string;
   keelTask?: string;
 }
@@ -351,10 +355,10 @@ interface RuntimePreflight {
 }
 
 interface RuntimeDefaults {
-  execution?: Pick<RunRuntimeRouteFields, 'engine' | 'provider' | 'executionModelId'>;
-  planning?: Pick<RuntimeRouteFields, 'planningEngine' | 'planningProvider' | 'planningModelId'>;
-  validation?: Pick<RuntimeRouteFields, 'validationEngine' | 'validationProvider' | 'validationModelId'>;
-  review?: Pick<RuntimeRouteFields, 'reviewEngine' | 'reviewProvider' | 'reviewModelId'>;
+  execution?: Pick<RunRuntimeRouteFields, 'engine' | 'provider' | 'executionModelId' | 'effort'>;
+  planning?: Pick<RuntimeRouteFields, 'planningEngine' | 'planningProvider' | 'planningModelId' | 'planningEffort'>;
+  validation?: Pick<RuntimeRouteFields, 'validationEngine' | 'validationProvider' | 'validationModelId' | 'validationEffort'>;
+  review?: Pick<RuntimeRouteFields, 'reviewEngine' | 'reviewProvider' | 'reviewModelId' | 'reviewEffort'>;
   models?: {
     planningModel?: string;
     executionModel?: string;
@@ -373,6 +377,7 @@ function buildPlanningRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   appendOptionalFlag(args, '--planning-engine', runtime.planningEngine);
   appendOptionalFlag(args, '--planning-provider', runtime.planningProvider);
   appendOptionalFlag(args, '--planning-model-id', runtime.planningModelId);
+  appendOptionalFlag(args, '--planning-effort', runtime.planningEffort);
   return args;
 }
 
@@ -381,6 +386,7 @@ function buildValidationRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   appendOptionalFlag(args, '--validation-engine', runtime.validationEngine);
   appendOptionalFlag(args, '--validation-provider', runtime.validationProvider);
   appendOptionalFlag(args, '--validation-model-id', runtime.validationModelId);
+  appendOptionalFlag(args, '--validation-effort', runtime.validationEffort);
   return args;
 }
 
@@ -389,6 +395,7 @@ function buildReviewRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   appendOptionalFlag(args, '--review-engine', runtime.reviewEngine);
   appendOptionalFlag(args, '--review-provider', runtime.reviewProvider);
   appendOptionalFlag(args, '--review-model-id', runtime.reviewModelId);
+  appendOptionalFlag(args, '--review-effort', runtime.reviewEffort);
   return args;
 }
 
@@ -397,6 +404,7 @@ function buildRunRuntimeArgs(runtime: RunRuntimeRouteFields): string[] {
   appendOptionalFlag(args, '--engine', runtime.engine);
   appendOptionalFlag(args, '--provider', runtime.provider);
   appendOptionalFlag(args, '--execution-model-id', runtime.executionModelId);
+  appendOptionalFlag(args, '--effort', runtime.effort);
   appendOptionalFlag(args, '--keel-slug', runtime.keelSlug);
   appendOptionalFlag(args, '--keel-task', runtime.keelTask);
   args.push(
@@ -447,21 +455,25 @@ async function loadRuntimeDefaults(projectPath: string, keelTaskId?: string): Pr
       engine: config.engine,
       provider: config.provider,
       executionModelId: config.executionModelId,
+      effort: config.executionEffort,
     },
     planning: {
       planningEngine: config.planningRuntime?.engine,
       planningProvider: config.planningRuntime?.provider,
       planningModelId: config.planningRuntime?.modelId,
+      planningEffort: config.planningRuntime?.effort,
     },
     validation: {
       validationEngine: config.validationRuntime?.engine,
       validationProvider: config.validationRuntime?.provider,
       validationModelId: config.validationRuntime?.modelId,
+      validationEffort: config.validationRuntime?.effort,
     },
     review: {
       reviewEngine: config.reviewRuntime?.engine,
       reviewProvider: config.reviewRuntime?.provider,
       reviewModelId: config.reviewRuntime?.modelId,
+      reviewEffort: config.reviewRuntime?.effort,
     },
     models: {
       planningModel: models.planning,
@@ -878,7 +890,7 @@ async function streamChatMessage(
   ];
   // Default to skip permissions in dashboard chat (trusted local env). Can be toggled off per-message.
   if (opts.skipPermissions !== false) args.push('--dangerously-skip-permissions');
-  if (opts.effort && ['low', 'medium', 'high'].includes(opts.effort)) {
+  if (opts.effort && ['low', 'medium', 'high', 'max'].includes(opts.effort)) {
     args.push('--effort', opts.effort);
   }
   if (opts.maxBudgetUsd && opts.maxBudgetUsd > 0) {
@@ -1447,6 +1459,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           planningEngine?: string;
           planningProvider?: string;
           planningModelId?: string;
+          planningEffort?: string;
           keelTask?: string;
         };
         const runtimeDefaults = await loadRuntimeDefaults(meta.path, body.keelTask);
@@ -1561,12 +1574,15 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           planningEngine?: string;
           planningProvider?: string;
           planningModelId?: string;
+          planningEffort?: string;
           validationEngine?: string;
           validationProvider?: string;
           validationModelId?: string;
+          validationEffort?: string;
           reviewEngine?: string;
           reviewProvider?: string;
           reviewModelId?: string;
+          reviewEffort?: string;
           keelSlug?: string;
           keelTask?: string;
         };
@@ -1659,12 +1675,15 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           planningEngine?: string;
           planningProvider?: string;
           planningModelId?: string;
+          planningEffort?: string;
           validationEngine?: string;
           validationProvider?: string;
           validationModelId?: string;
+          validationEffort?: string;
           reviewEngine?: string;
           reviewProvider?: string;
           reviewModelId?: string;
+          reviewEffort?: string;
           keelSlug?: string;
           keelTask?: string;
         };
@@ -1836,12 +1855,15 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           planningEngine?: string;
           planningProvider?: string;
           planningModelId?: string;
+          planningEffort?: string;
           validationEngine?: string;
           validationProvider?: string;
           validationModelId?: string;
+          validationEffort?: string;
           reviewEngine?: string;
           reviewProvider?: string;
           reviewModelId?: string;
+          reviewEffort?: string;
         };
         const runtimeDefaults = await loadRuntimeDefaults(meta.path);
         try {

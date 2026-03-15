@@ -95,12 +95,16 @@ export const pipelineCommand = new Command('chain')
   .option('--planning-engine <engine>', 'Planning engine for all phases')
   .option('--planning-provider <provider>', 'Planning provider/auth route for all phases (e.g. claude subscription, codex subscription, openai API)')
   .option('--planning-model-id <id>', 'Provider-native planning model ID for all phases')
+  .option('--planning-effort <level>', 'Planning effort for all phases: low|medium|high|max')
   .option('--validation-engine <engine>', 'Per-task AI validation engine for all phases')
   .option('--validation-provider <provider>', 'Per-task AI validation provider/auth route for all phases (e.g. claude subscription, codex subscription, openai API)')
   .option('--validation-model-id <id>', 'Provider-native per-task AI validation model ID for all phases')
+  .option('--validation-effort <level>', 'Per-task AI validation effort for all phases: low|medium|high|max')
   .option('--review-engine <engine>', 'Holistic review / review-side engine for all phases')
   .option('--review-provider <provider>', 'Holistic review / review-side provider/auth route for all phases (e.g. claude subscription, codex subscription, openai API)')
   .option('--review-model-id <id>', 'Provider-native holistic review model ID for all phases')
+  .option('--review-effort <level>', 'Holistic review effort for all phases: low|medium|high|max')
+  .option('--effort <level>', 'Execution effort for all phases: low|medium|high|max')
   .option('--keel-slug <slug>', 'Keel project slug to write outcomes back to')
   .option('--keel-task <id>', 'Keel task ID to read runtime defaults from and update on completion')
   .option('--no-auto-fix', 'Disable automatic fix-task generation from review notes')
@@ -117,12 +121,16 @@ export const pipelineCommand = new Command('chain')
     planningEngine?: string;
     planningProvider?: string;
     planningModelId?: string;
+    planningEffort?: string;
     validationEngine?: string;
     validationProvider?: string;
     validationModelId?: string;
+    validationEffort?: string;
     reviewEngine?: string;
     reviewProvider?: string;
     reviewModelId?: string;
+    reviewEffort?: string;
+    effort?: string;
     keelSlug?: string;
     keelTask?: string;
     autoFix?: boolean;
@@ -138,12 +146,16 @@ export const pipelineCommand = new Command('chain')
     if (opts.planningEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planningEngine as typeof config.engine };
     if (opts.planningProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planningProvider };
     if (opts.planningModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planningModelId };
+    if (opts.planningEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planningEffort as any };
     if (opts.validationEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.validationEngine as typeof config.engine };
     if (opts.validationProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.validationProvider };
     if (opts.validationModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.validationModelId };
+    if (opts.validationEffort) config.validationRuntime = { ...config.validationRuntime, effort: opts.validationEffort as any };
     if (opts.reviewEngine) config.reviewRuntime = { ...config.reviewRuntime, engine: opts.reviewEngine as typeof config.engine };
     if (opts.reviewProvider) config.reviewRuntime = { ...config.reviewRuntime, provider: opts.reviewProvider };
     if (opts.reviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.reviewModelId };
+    if (opts.reviewEffort) config.reviewRuntime = { ...config.reviewRuntime, effort: opts.reviewEffort as any };
+    if (opts.effort) config.executionEffort = opts.effort as typeof config.executionEffort;
 
     if (opts.spec.length === 0) {
       console.error(c(red, '✖  --spec required (repeatable): cloudy chain --spec p1.md --spec p2.md'));
@@ -221,6 +233,7 @@ export const pipelineCommand = new Command('chain')
           ...(config.planningRuntime?.engine ? ['--planning-engine', config.planningRuntime.engine] : []),
           ...(config.planningRuntime?.provider ? ['--planning-provider', config.planningRuntime.provider] : []),
           ...(config.planningRuntime?.modelId ? ['--planning-model-id', config.planningRuntime.modelId] : []),
+          ...(config.planningRuntime?.effort ? ['--planning-effort', config.planningRuntime.effort] : []),
           '--run-name', runName,
         ], {
           stdio: 'inherit',
@@ -266,12 +279,15 @@ export const pipelineCommand = new Command('chain')
         '--execution-model', opts.executionModel ?? config.models.execution,
         '--task-review-model', opts.taskReviewModel ?? config.models.validation,
         '--run-review-model', opts.runReviewModel ?? config.review.model,
+        ...(config.executionEffort ? ['--effort', config.executionEffort] : []),
         ...(config.validationRuntime?.engine ? ['--validation-engine', config.validationRuntime.engine] : []),
         ...(config.validationRuntime?.provider ? ['--validation-provider', config.validationRuntime.provider] : []),
         ...(config.validationRuntime?.modelId ? ['--validation-model-id', config.validationRuntime.modelId] : []),
+        ...(config.validationRuntime?.effort ? ['--validation-effort', config.validationRuntime.effort] : []),
         ...(config.reviewRuntime?.engine ? ['--review-engine', config.reviewRuntime.engine] : []),
         ...(config.reviewRuntime?.provider ? ['--review-provider', config.reviewRuntime.provider] : []),
         ...(config.reviewRuntime?.modelId ? ['--review-model-id', config.reviewRuntime.modelId] : []),
+        ...(config.reviewRuntime?.effort ? ['--review-effort', config.reviewRuntime.effort] : []),
         ...(opts.keelSlug ?? config.keel?.slug ? ['--keel-slug', opts.keelSlug ?? config.keel?.slug ?? ''] : []),
         ...(opts.keelTask ?? config.keel?.taskId ? ['--keel-task', opts.keelTask ?? config.keel?.taskId ?? ''] : []),
       ];

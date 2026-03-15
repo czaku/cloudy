@@ -437,6 +437,7 @@ export class Orchestrator {
         provider: this.config.provider,
         claudeModel: this.config.models.execution,
         modelId: this.config.executionModelId,
+        effort: this.config.executionEffort,
         cwd: this.cwd,
         onOutput: (text) => this.onEvent({ type: 'task_output', taskId: 'wrap-up', text }),
         abortSignal: this.abortController.signal,
@@ -548,6 +549,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
         engine: reviewRuntime.engine,
         provider: reviewRuntime.provider,
         modelId: reviewRuntime.modelId,
+        effort: reviewRuntime.effort,
         taskType: 'review',
       });
       if (result.success && result.output?.trim()) {
@@ -874,6 +876,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           provider,
           modelId: this.config.executionModelId,
           claudeModel: executionModel,
+          effort: this.config.executionEffort,
           cwd: taskCwd,
           onOutput: (text) => {
             _lastOutputMs = Date.now(); // reset silence timer on any stdout activity

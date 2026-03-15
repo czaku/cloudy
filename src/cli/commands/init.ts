@@ -117,6 +117,7 @@ export const initCommand = new Command('plan')
   .option('--planning-engine <engine>', 'Planning engine (e.g. claude-code, codex, pi-mono)')
   .option('--planning-provider <provider>', 'Planning provider/auth route (e.g. claude subscription, codex subscription, openai API)')
   .option('--planning-model-id <id>', 'Provider-native planning model ID')
+  .option('--planning-effort <level>', 'Planning effort: low|medium|high|max')
   .option('--spec <file>', 'Spec/PRD file (repeatable: --spec A --spec B)', (v: string, prev: string[]) => [...prev, v], [] as string[])
   .option('--no-review', 'Auto-approve the generated plan without interactive review')
   .option('--yes', 'Skip "Run now?" confirmation and proceed automatically')
@@ -131,6 +132,7 @@ export const initCommand = new Command('plan')
     planningEngine?: string;
     planningProvider?: string;
     planningModelId?: string;
+    planningEffort?: string;
     spec: string[];
     review: boolean;
     verbose?: boolean;
@@ -158,6 +160,7 @@ export const initCommand = new Command('plan')
     if (opts.planningEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planningEngine as typeof config.engine };
     if (opts.planningProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planningProvider };
     if (opts.planningModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planningModelId };
+    if (opts.planningEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planningEffort as any };
 
     // ── Spec file(s) ──────────────────────────────────────────────────────────
     let specContent: string | undefined;

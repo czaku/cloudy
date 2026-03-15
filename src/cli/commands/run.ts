@@ -168,14 +168,17 @@ export const runCommand = new Command('run')
   .option('--planning-engine <engine>', 'Planning engine (e.g. claude-code, codex, pi-mono)')
   .option('--planning-provider <provider>', 'Planning provider/auth route (e.g. claude subscription, codex subscription, openai API)')
   .option('--planning-model-id <id>', 'Provider-native planning model ID')
+  .option('--planning-effort <level>', 'Planning effort: low|medium|high|max')
   .option('--engine <engine>', 'Execution engine (e.g. claude-code, codex, pi-mono)')
   .option('--provider <provider>', 'Execution provider/auth route (e.g. claude subscription, codex subscription, openai API)')
   .option('--validation-engine <engine>', 'Per-task AI validation engine')
   .option('--validation-provider <provider>', 'Per-task AI validation provider/auth route')
   .option('--validation-model-id <id>', 'Provider-native per-task AI validation model ID')
+  .option('--validation-effort <level>', 'Per-task AI validation effort: low|medium|high|max')
   .option('--review-engine <engine>', 'Holistic review / review-side prompt engine')
   .option('--review-provider <provider>', 'Holistic review / review-side provider/auth route')
   .option('--review-model-id <id>', 'Provider-native holistic review model ID')
+  .option('--review-effort <level>', 'Holistic review effort: low|medium|high|max')
   .option('--parallel', 'Enable parallel execution')
   .option('--max-parallel <n>', 'Max parallel tasks', parseInt)
   .option('--no-validate', 'Skip validation')
@@ -209,14 +212,17 @@ export const runCommand = new Command('run')
       planningEngine?: string;
       planningProvider?: string;
       planningModelId?: string;
+      planningEffort?: string;
       engine?: string;
       provider?: string;
       validationEngine?: string;
       validationProvider?: string;
       validationModelId?: string;
+      validationEffort?: string;
       reviewEngine?: string;
       reviewProvider?: string;
       reviewModelId?: string;
+      reviewEffort?: string;
       modelAuto?: boolean;
       parallel?: boolean;
       maxParallel?: number;
@@ -235,6 +241,7 @@ export const runCommand = new Command('run')
       nonInteractive?: boolean;
       agentOutput?: boolean;
       worktrees?: boolean;
+      effort?: string;
       keelSlug?: string;
       keelTask?: string;
     }) => {
@@ -287,12 +294,15 @@ export const runCommand = new Command('run')
       if (opts.planningEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planningEngine as typeof config.engine };
       if (opts.planningProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planningProvider };
       if (opts.planningModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planningModelId };
+      if (opts.planningEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planningEffort as any };
       if (opts.validationEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.validationEngine as typeof config.engine };
       if (opts.validationProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.validationProvider };
       if (opts.validationModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.validationModelId };
+      if (opts.validationEffort) config.validationRuntime = { ...config.validationRuntime, effort: opts.validationEffort as any };
       if (opts.reviewEngine) config.reviewRuntime = { ...config.reviewRuntime, engine: opts.reviewEngine as typeof config.engine };
       if (opts.reviewProvider) config.reviewRuntime = { ...config.reviewRuntime, provider: opts.reviewProvider };
       if (opts.reviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.reviewModelId };
+      if (opts.reviewEffort) config.reviewRuntime = { ...config.reviewRuntime, effort: opts.reviewEffort as any };
 
       // ── Interactive model selection (when not provided via flags) ────────────
       const MODEL_OPTIONS = [
@@ -396,15 +406,19 @@ export const runCommand = new Command('run')
       if (opts.planningEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planningEngine as typeof config.engine };
       if (opts.planningProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planningProvider };
       if (opts.planningModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planningModelId };
+      if (opts.planningEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planningEffort as any };
       if (opts.validationEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.validationEngine as typeof config.engine };
       if (opts.validationProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.validationProvider };
       if (opts.validationModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.validationModelId };
+      if (opts.validationEffort) config.validationRuntime = { ...config.validationRuntime, effort: opts.validationEffort as any };
       if (opts.reviewEngine) config.reviewRuntime = { ...config.reviewRuntime, engine: opts.reviewEngine as typeof config.engine };
       if (opts.reviewProvider) config.reviewRuntime = { ...config.reviewRuntime, provider: opts.reviewProvider };
       if (opts.reviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.reviewModelId };
+      if (opts.reviewEffort) config.reviewRuntime = { ...config.reviewRuntime, effort: opts.reviewEffort as any };
       if (opts.parallel) config.parallel = true;
       if (opts.maxParallel) config.maxParallel = opts.maxParallel;
       if (opts.worktrees) config.worktrees = true;
+      if (opts.effort) config.executionEffort = opts.effort as typeof config.executionEffort;
       if (opts.maxRetries !== undefined) config.maxRetries = opts.maxRetries;
       if (!opts.dashboard) config.dashboard = false; // --no-dashboard for headless CI
 
@@ -948,6 +962,7 @@ export const runCommand = new Command('run')
               engine: config.reviewRuntime?.engine,
               provider: config.reviewRuntime?.provider,
               modelId: config.reviewRuntime?.modelId,
+              effort: config.reviewRuntime?.effort,
               abortSignal: AbortSignal.timeout(30_000),
               taskType: 'review',
             });

@@ -54,6 +54,8 @@ export const configCommand = new Command('config')
         config.provider = value;
       } else if (key === 'executionModelId') {
         config.executionModelId = value;
+      } else if (key === 'executionEffort') {
+        config.executionEffort = value as typeof config.executionEffort;
       } else if (parts[0] === 'planningRuntime' && parts[1]) {
         (config.planningRuntime ??= {});
         (config.planningRuntime as Record<string, string | undefined>)[parts[1]] = value;
@@ -123,6 +125,7 @@ export const configCommand = new Command('config')
     console.log(`  engine:              ${config.engine}`);
     console.log(`  provider:            ${config.provider ?? '(auto)'}`);
     console.log(`  executionModelId:    ${config.executionModelId ?? '(engine default)'}`);
+    console.log(`  executionEffort:     ${config.executionEffort ?? '(engine default)'}`);
     console.log(`  planningRuntime:     ${JSON.stringify(config.planningRuntime ?? {})}`);
     console.log(`  validationRuntime:   ${JSON.stringify(config.validationRuntime ?? {})}`);
     console.log(`  reviewRuntime:       ${JSON.stringify(config.reviewRuntime ?? {})}`);
