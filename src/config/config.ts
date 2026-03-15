@@ -20,6 +20,30 @@ const VALID_APPROVAL_MODES = new Set(['never', 'always', 'on-failure']);
 const VALID_AUTO_ACTIONS = new Set(['continue', 'halt']);
 const VALID_EFFORTS = new Set(['low', 'medium', 'high', 'max']);
 
+type ExternalModelConfig = {
+  plan?: CloudyConfig['models']['planning'];
+  build?: CloudyConfig['models']['execution'];
+  taskReview?: CloudyConfig['models']['validation'];
+  qualityReview?: CloudyConfig['models']['qualityReview'];
+  runReview?: CloudyConfig['review']['model'];
+};
+
+type ExternalCloudyConfig = Omit<
+  Partial<CloudyConfig>,
+  'models' | 'engine' | 'provider' | 'executionModelId' | 'executionEffort' | 'planningRuntime' | 'validationRuntime' | 'reviewRuntime'
+> & {
+  models?: ExternalModelConfig;
+  buildEngine?: CloudyConfig['engine'];
+  buildProvider?: CloudyConfig['provider'];
+  buildModelId?: CloudyConfig['executionModelId'];
+  buildEffort?: CloudyConfig['executionEffort'];
+  planRuntime?: CloudyConfig['planningRuntime'];
+  taskReviewRuntime?: CloudyConfig['validationRuntime'];
+  runReviewRuntime?: CloudyConfig['reviewRuntime'];
+};
+
+export type { ExternalCloudyConfig };
+
 function validatePhaseRuntime(prefix: string, runtime: CloudyConfig['planningRuntime'], errors: string[]): void {
   if (!runtime) return;
   if (runtime.engine && !VALID_ENGINES.has(runtime.engine)) {
@@ -34,23 +58,23 @@ export function validateConfig(config: CloudyConfig): string[] {
   const errors: string[] = [];
 
   if (!VALID_MODELS.has(config.models.planning)) {
-    errors.push(`models.planning: invalid model "${config.models.planning}" (valid: opus, sonnet, haiku)`);
+    errors.push(`models.plan: invalid model "${config.models.planning}" (valid: opus, sonnet, haiku)`);
   }
   if (!VALID_MODELS.has(config.models.execution)) {
-    errors.push(`models.execution: invalid model "${config.models.execution}" (valid: opus, sonnet, haiku)`);
+    errors.push(`models.build: invalid model "${config.models.execution}" (valid: opus, sonnet, haiku)`);
   }
   if (!VALID_MODELS.has(config.models.validation)) {
-    errors.push(`models.validation: invalid model "${config.models.validation}" (valid: opus, sonnet, haiku)`);
+    errors.push(`models.taskReview: invalid model "${config.models.validation}" (valid: opus, sonnet, haiku)`);
   }
   if (!VALID_ENGINES.has(config.engine)) {
-    errors.push(`engine: invalid engine "${config.engine}"`);
+    errors.push(`buildEngine: invalid engine "${config.engine}"`);
   }
   if (config.executionEffort && !VALID_EFFORTS.has(config.executionEffort)) {
-    errors.push(`executionEffort: invalid effort "${config.executionEffort}"`);
+    errors.push(`buildEffort: invalid effort "${config.executionEffort}"`);
   }
-  validatePhaseRuntime('planningRuntime', config.planningRuntime, errors);
-  validatePhaseRuntime('validationRuntime', config.validationRuntime, errors);
-  validatePhaseRuntime('reviewRuntime', config.reviewRuntime, errors);
+  validatePhaseRuntime('planRuntime', config.planningRuntime, errors);
+  validatePhaseRuntime('taskReviewRuntime', config.validationRuntime, errors);
+  validatePhaseRuntime('runReviewRuntime', config.reviewRuntime, errors);
   if (typeof config.maxRetries !== 'number' || config.maxRetries < 0 || config.maxRetries > 10) {
     errors.push(`maxRetries: must be a number between 0 and 10 (got ${config.maxRetries})`);
   }
@@ -80,6 +104,46 @@ function configPath(cwd: string): string {
   return path.join(cwd, CLAWDASH_DIR, CONFIG_FILE);
 }
 
+export function toExternalConfig(config: CloudyConfig): ExternalCloudyConfig {
+  return {
+    models: {
+      plan: config.models.planning,
+      build: config.models.execution,
+      taskReview: config.models.validation,
+      qualityReview: config.models.qualityReview,
+      runReview: config.review.model,
+    },
+    validation: config.validation,
+    maxRetries: config.maxRetries,
+    parallel: config.parallel,
+    maxParallel: config.maxParallel,
+    retryDelaySec: config.retryDelaySec,
+    taskTimeoutMs: config.taskTimeoutMs,
+    autoModelRouting: config.autoModelRouting,
+    dashboard: config.dashboard,
+    dashboardPort: config.dashboardPort,
+    notifications: config.notifications,
+    contextBudgetTokens: config.contextBudgetTokens,
+    contextBudgetMode: config.contextBudgetMode,
+    preflightCommands: config.preflightCommands,
+    baselineTestCommand: config.baselineTestCommand,
+    maxCostPerTaskUsd: config.maxCostPerTaskUsd,
+    maxCostPerRunUsd: config.maxCostPerRunUsd,
+    worktrees: config.worktrees,
+    runBranch: config.runBranch,
+    approval: config.approval,
+    buildEngine: config.engine,
+    buildProvider: config.provider,
+    buildModelId: config.executionModelId,
+    buildEffort: config.executionEffort,
+    planRuntime: config.planningRuntime,
+    taskReviewRuntime: config.validationRuntime,
+    runReviewRuntime: config.reviewRuntime,
+    review: config.review,
+    keel: config.keel,
+  };
+}
+
 export async function loadConfig(cwd: string): Promise<CloudyConfig> {
   // Load global defaults first, then layer project config on top
   const globalCfg = await loadGlobalConfig().catch(() => null);
@@ -103,11 +167,18 @@ export async function loadConfig(cwd: string): Promise<CloudyConfig> {
   } : { ...DEFAULT_CONFIG };
 
   const filePath = configPath(cwd);
-  const saved = await readJson<Partial<CloudyConfig>>(filePath);
+  const saved = await readJson<ExternalCloudyConfig>(filePath);
   if (!saved) return effectiveDefaults;
 
+  const savedModels = saved.models ?? {};
   const config: CloudyConfig = {
-    models: { ...effectiveDefaults.models, ...saved.models },
+    models: {
+      ...effectiveDefaults.models,
+      planning: savedModels.plan ?? effectiveDefaults.models.planning,
+      execution: savedModels.build ?? effectiveDefaults.models.execution,
+      validation: savedModels.taskReview ?? effectiveDefaults.models.validation,
+      qualityReview: savedModels.qualityReview ?? effectiveDefaults.models.qualityReview,
+    },
     validation: {
       ...effectiveDefaults.validation,
       ...saved.validation,
@@ -130,14 +201,18 @@ export async function loadConfig(cwd: string): Promise<CloudyConfig> {
     worktrees: saved.worktrees ?? effectiveDefaults.worktrees,
     runBranch: saved.runBranch ?? effectiveDefaults.runBranch,
     approval: { ...effectiveDefaults.approval, ...saved.approval },
-    engine: saved.engine ?? effectiveDefaults.engine,
-    provider: saved.provider ?? effectiveDefaults.provider,
-    executionModelId: saved.executionModelId ?? effectiveDefaults.executionModelId,
-    executionEffort: saved.executionEffort ?? effectiveDefaults.executionEffort,
-    planningRuntime: { ...effectiveDefaults.planningRuntime, ...saved.planningRuntime },
-    validationRuntime: { ...effectiveDefaults.validationRuntime, ...saved.validationRuntime },
-    reviewRuntime: { ...effectiveDefaults.reviewRuntime, ...saved.reviewRuntime },
-    review: { ...effectiveDefaults.review, ...saved.review },
+    engine: saved.buildEngine ?? effectiveDefaults.engine,
+    provider: saved.buildProvider ?? effectiveDefaults.provider,
+    executionModelId: saved.buildModelId ?? effectiveDefaults.executionModelId,
+    executionEffort: saved.buildEffort ?? effectiveDefaults.executionEffort,
+    planningRuntime: { ...effectiveDefaults.planningRuntime, ...saved.planRuntime },
+    validationRuntime: { ...effectiveDefaults.validationRuntime, ...saved.taskReviewRuntime },
+    reviewRuntime: { ...effectiveDefaults.reviewRuntime, ...saved.runReviewRuntime },
+    review: {
+      ...effectiveDefaults.review,
+      ...saved.review,
+      model: savedModels.runReview ?? effectiveDefaults.review.model,
+    },
     keel: saved.keel ?? effectiveDefaults.keel,
   };
 
@@ -154,5 +229,5 @@ export async function saveConfig(
   config: CloudyConfig,
 ): Promise<void> {
   await ensureDir(path.join(cwd, CLAWDASH_DIR));
-  await writeJson(configPath(cwd), config);
+  await writeJson(configPath(cwd), toExternalConfig(config));
 }

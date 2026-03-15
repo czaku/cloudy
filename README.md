@@ -477,19 +477,19 @@ cloudy run --build-engine pi-mono --build-provider openai --build-model-id gpt-4
 Persist execution defaults in config:
 
 ```bash
-cloudy config --set engine=codex
-cloudy config --set provider=codex
-cloudy config --set executionModelId=o3
+cloudy config --set buildEngine=codex
+cloudy config --set buildProvider=codex
+cloudy config --set buildModelId=o3
 ```
 
 Persist phase-specific runtimes:
 
 ```bash
-cloudy config --set planningRuntime.engine=codex
-cloudy config --set planningRuntime.provider=codex
-cloudy config --set planningRuntime.modelId=o3-mini
-cloudy config --set validationRuntime.engine=codex
-cloudy config --set reviewRuntime.engine=codex
+cloudy config --set planRuntime.engine=codex
+cloudy config --set planRuntime.provider=codex
+cloudy config --set planRuntime.modelId=o3-mini
+cloudy config --set taskReviewRuntime.engine=codex
+cloudy config --set runReviewRuntime.engine=codex
 ```
 
 ---
@@ -507,9 +507,9 @@ cloudy run --build-model sonnet --task-review-model haiku --run-review-model opu
 cloudy run --model-auto
 
 # Persist defaults
-cloudy config --set models.execution=sonnet
-cloudy config --set models.validation=haiku
-cloudy config --set review.model=opus
+cloudy config --set models.build=sonnet
+cloudy config --set models.taskReview=haiku
+cloudy config --set models.runReview=opus
 ```
 
 | Phase | Flag | Default | Notes |
@@ -735,24 +735,26 @@ Full config reference (`.cloudy/config.json`):
 ```json
 {
   "models": {
-    "planning": "sonnet",
-    "execution": "sonnet",
-    "validation": "haiku"
+    "plan": "sonnet",
+    "build": "sonnet",
+    "taskReview": "haiku",
+    "runReview": "opus"
   },
-  "engine": "claude-code",
-  "provider": "claude",
-  "executionModelId": "",
-  "planningRuntime": {
+  "buildEngine": "claude-code",
+  "buildProvider": "claude",
+  "buildModelId": "",
+  "buildEffort": "high",
+  "planRuntime": {
     "engine": "codex",
     "provider": "codex",
     "modelId": "o3-mini"
   },
-  "validationRuntime": {
+  "taskReviewRuntime": {
     "engine": "claude-code",
     "provider": "claude",
     "modelId": "claude-sonnet-4-6"
   },
-  "reviewRuntime": {
+  "runReviewRuntime": {
     "engine": "pi-mono",
     "provider": "openai",
     "modelId": "gpt-5"
@@ -789,8 +791,6 @@ Full config reference (`.cloudy/config.json`):
   }
 }
 ```
-
-Internal config keys remain `engine` / `provider` / `executionModelId` for the build route, plus `planningRuntime`, `validationRuntime`, and `reviewRuntime` for the other phases. The external CLI, dashboard, and daemon API use `plan`, `build`, `task-review`, and `run-review`.
 
 ---
 

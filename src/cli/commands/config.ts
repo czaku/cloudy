@@ -1,12 +1,40 @@
 import { Command } from 'commander';
-import { loadConfig, saveConfig } from '../../config/config.js';
+import { loadConfig, saveConfig, toExternalConfig } from '../../config/config.js';
 import { isValidModel } from '../../config/model-config.js';
 import type { ClaudeModel } from '../../core/types.js';
+
+function setPhaseModel(config: Awaited<ReturnType<typeof loadConfig>>, phase: string, value: string): void {
+  if (!isValidModel(value)) {
+    console.error(`Invalid model "${value}". Use opus, sonnet, or haiku.`);
+    process.exit(1);
+  }
+
+  switch (phase) {
+    case 'plan':
+      config.models.planning = value as ClaudeModel;
+      return;
+    case 'build':
+      config.models.execution = value as ClaudeModel;
+      return;
+    case 'taskReview':
+      config.models.validation = value as ClaudeModel;
+      return;
+    case 'qualityReview':
+      config.models.qualityReview = value as ClaudeModel;
+      return;
+    case 'runReview':
+      config.review.model = value as ClaudeModel;
+      return;
+    default:
+      console.error(`Unknown model phase "${phase}". Use plan, build, taskReview, qualityReview, or runReview.`);
+      process.exit(1);
+  }
+}
 
 export const configCommand = new Command('config')
   .description('View or update project configuration')
   .option('--json', 'Output as JSON')
-  .option('--set <key=value>', 'Set a config value (e.g., models.execution=opus)')
+  .option('--set <key=value>', 'Set a config value (e.g., models.build=opus)')
   .action(async (opts: { json?: boolean; set?: string }) => {
     const cwd = process.cwd();
     const config = await loadConfig(cwd);
@@ -20,17 +48,7 @@ export const configCommand = new Command('config')
 
       const parts = key.split('.');
       if (parts[0] === 'models' && parts[1]) {
-        const phase = parts[1] as keyof typeof config.models;
-        if (phase in config.models) {
-          if (!isValidModel(value)) {
-            console.error(`Invalid model "${value}". Use opus, sonnet, or haiku.`);
-            process.exit(1);
-          }
-          config.models[phase] = value as ClaudeModel;
-        } else {
-          console.error(`Unknown model phase "${phase}".`);
-          process.exit(1);
-        }
+        setPhaseModel(config, parts[1], value);
       } else if (parts[0] === 'validation' && parts[1]) {
         if (parts[1] === 'commands') {
           // Append a command: --set validation.commands=npm test
@@ -48,21 +66,21 @@ export const configCommand = new Command('config')
         }
       } else if (key === 'contextBudgetTokens') {
         config.contextBudgetTokens = parseInt(value, 10);
-      } else if (key === 'engine') {
+      } else if (key === 'buildEngine') {
         config.engine = value as typeof config.engine;
-      } else if (key === 'provider') {
+      } else if (key === 'buildProvider') {
         config.provider = value;
-      } else if (key === 'executionModelId') {
+      } else if (key === 'buildModelId') {
         config.executionModelId = value;
-      } else if (key === 'executionEffort') {
+      } else if (key === 'buildEffort') {
         config.executionEffort = value as typeof config.executionEffort;
-      } else if (parts[0] === 'planningRuntime' && parts[1]) {
+      } else if (parts[0] === 'planRuntime' && parts[1]) {
         (config.planningRuntime ??= {});
         (config.planningRuntime as Record<string, string | undefined>)[parts[1]] = value;
-      } else if (parts[0] === 'validationRuntime' && parts[1]) {
+      } else if (parts[0] === 'taskReviewRuntime' && parts[1]) {
         (config.validationRuntime ??= {});
         (config.validationRuntime as Record<string, string | undefined>)[parts[1]] = value;
-      } else if (parts[0] === 'reviewRuntime' && parts[1]) {
+      } else if (parts[0] === 'runReviewRuntime' && parts[1]) {
         (config.reviewRuntime ??= {});
         (config.reviewRuntime as Record<string, string | undefined>)[parts[1]] = value;
       } else if (parts[0] === 'keel' && parts[1]) {
@@ -106,15 +124,16 @@ export const configCommand = new Command('config')
     }
 
     if (opts.json) {
-      console.log(JSON.stringify(config, null, 2));
+      console.log(JSON.stringify(toExternalConfig(config), null, 2));
       return;
     }
 
     console.log('\n=== Configuration ===');
     console.log('\nModels:');
-    console.log(`  planning:   ${config.models.planning}`);
-    console.log(`  execution:  ${config.models.execution}`);
-    console.log(`  validation: ${config.models.validation}`);
+    console.log(`  plan:        ${config.models.planning}`);
+    console.log(`  build:       ${config.models.execution}`);
+    console.log(`  taskReview:  ${config.models.validation}`);
+    console.log(`  runReview:   ${config.review.model}`);
     console.log('\nValidation:');
     console.log(`  typecheck: ${config.validation.typecheck}`);
     console.log(`  lint:      ${config.validation.lint}`);
@@ -122,13 +141,13 @@ export const configCommand = new Command('config')
     console.log(`  test:      ${config.validation.test}`);
     console.log(`  aiReview:  ${config.validation.aiReview}`);
     console.log('\nExecution:');
-    console.log(`  engine:              ${config.engine}`);
-    console.log(`  provider:            ${config.provider ?? '(auto)'}`);
-    console.log(`  executionModelId:    ${config.executionModelId ?? '(engine default)'}`);
-    console.log(`  executionEffort:     ${config.executionEffort ?? '(engine default)'}`);
-    console.log(`  planningRuntime:     ${JSON.stringify(config.planningRuntime ?? {})}`);
-    console.log(`  validationRuntime:   ${JSON.stringify(config.validationRuntime ?? {})}`);
-    console.log(`  reviewRuntime:       ${JSON.stringify(config.reviewRuntime ?? {})}`);
+    console.log(`  buildEngine:         ${config.engine}`);
+    console.log(`  buildProvider:       ${config.provider ?? '(auto)'}`);
+    console.log(`  buildModelId:        ${config.executionModelId ?? '(engine default)'}`);
+    console.log(`  buildEffort:         ${config.executionEffort ?? '(engine default)'}`);
+    console.log(`  planRuntime:         ${JSON.stringify(config.planningRuntime ?? {})}`);
+    console.log(`  taskReviewRuntime:   ${JSON.stringify(config.validationRuntime ?? {})}`);
+    console.log(`  runReviewRuntime:    ${JSON.stringify(config.reviewRuntime ?? {})}`);
     console.log(`  keel:                ${config.keel ? JSON.stringify(config.keel) : '(disabled)'}`);
     console.log(`  maxRetries:          ${config.maxRetries}`);
     console.log(`  parallel:            ${config.parallel}`);

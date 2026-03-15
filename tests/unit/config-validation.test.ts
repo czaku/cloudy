@@ -14,22 +14,22 @@ describe('validateConfig', () => {
 
   it('errors on invalid planning model', () => {
     const errors = validateConfig(makeConfig({ models: { ...DEFAULT_CONFIG.models, planning: 'gpt-4' as never } }));
-    expect(errors.some((e) => e.includes('models.planning'))).toBe(true);
+    expect(errors.some((e) => e.includes('models.plan'))).toBe(true);
   });
 
   it('errors on invalid execution model', () => {
     const errors = validateConfig(makeConfig({ models: { ...DEFAULT_CONFIG.models, execution: 'gemini' as never } }));
-    expect(errors.some((e) => e.includes('models.execution'))).toBe(true);
+    expect(errors.some((e) => e.includes('models.build'))).toBe(true);
   });
 
   it('errors on invalid engine', () => {
     const errors = validateConfig(makeConfig({ engine: 'made-up-engine' as never }));
-    expect(errors.some((e) => e.includes('engine'))).toBe(true);
+    expect(errors.some((e) => e.includes('buildEngine'))).toBe(true);
   });
 
   it('errors on invalid validation model', () => {
     const errors = validateConfig(makeConfig({ models: { ...DEFAULT_CONFIG.models, validation: 'turbo' as never } }));
-    expect(errors.some((e) => e.includes('models.validation'))).toBe(true);
+    expect(errors.some((e) => e.includes('models.taskReview'))).toBe(true);
   });
 
   it('errors on negative maxRetries', () => {
