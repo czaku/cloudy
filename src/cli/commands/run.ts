@@ -25,6 +25,47 @@ function formatDuration(ms: number): string {
   return `${Math.round(ms / 60000)}m`;
 }
 
+function summarizeKeelOutcome(
+  tasks: Array<{ status: string }>,
+  state: { costSummary: { totalEstimatedUsd: number }; startedAt?: string },
+  opts: { keelSlug?: string; keelTask?: string },
+  config: { keel?: { slug: string; taskId?: string; port?: number }; review: { failBlocksRun?: boolean } },
+  orchestratorAborted: boolean,
+  reviewVerdict?: 'PASS' | 'PASS_WITH_NOTES' | 'FAIL',
+  error?: string,
+) {
+  const tasksDone = tasks.filter((t) => t.status === 'completed').length;
+  const tasksFailed = tasks.filter((t) => t.status === 'failed').length;
+  const success =
+    !error &&
+    !orchestratorAborted &&
+    tasksFailed === 0 &&
+    !(config.review.failBlocksRun && reviewVerdict === 'FAIL');
+
+  const topError =
+    error ??
+    (orchestratorAborted ? 'Run aborted.' : undefined) ??
+    (tasksFailed > 0 ? `${tasksFailed} task(s) failed during the run.` : undefined) ??
+    (config.review.failBlocksRun && reviewVerdict === 'FAIL' ? 'Holistic review failed.' : undefined);
+
+  return {
+    enabled: Boolean(opts.keelSlug ?? config.keel?.slug),
+    ctx: {
+      slug: opts.keelSlug ?? config.keel?.slug ?? '',
+      taskId: opts.keelTask ?? config.keel?.taskId,
+      port: config.keel?.port ?? 7842,
+    },
+    outcome: {
+      success,
+      tasksDone,
+      tasksFailed,
+      topError,
+      costUsd: state.costSummary.totalEstimatedUsd,
+      durationMs: state.startedAt ? Date.now() - new Date(state.startedAt).getTime() : 0,
+    },
+  };
+}
+
 /**
  * Present finishing options after a successful run: merge, PR, keep, or discard.
  * Inspired by the superpowers finishing-a-development-branch skill.
@@ -1009,20 +1050,20 @@ export const runCommand = new Command('run')
 
             // Re-run recovery is now handled automatically inside the orchestrator
 
-            // Keel write-back (success)
-            const keelSlug = opts.keelSlug ?? config.keel?.slug;
-            if (keelSlug) {
+            const keel = summarizeKeelOutcome(
+              freshState.plan!.tasks,
+              freshState,
+              opts,
+              config,
+              orchestrator.aborted,
+              lastReviewResult?.verdict,
+            );
+            if (keel.enabled) {
               const { writeRunOutcome } = await import('../../integrations/keel.js');
-              const keelCtx = { slug: keelSlug, taskId: opts.keelTask ?? config.keel?.taskId, port: config.keel?.port ?? 7842 };
-              const tasksDone = freshState.plan!.tasks.filter((t) => t.status === 'completed').length;
-              const tasksFailed = freshState.plan!.tasks.filter((t) => t.status === 'failed').length;
-              await writeRunOutcome(keelCtx, {
-                success: true,
-                tasksDone,
-                tasksFailed,
-                costUsd: freshState.costSummary.totalEstimatedUsd,
-                durationMs: freshState.startedAt ? Date.now() - new Date(freshState.startedAt).getTime() : 0,
-              }, cwd).catch(() => {});
+              await writeRunOutcome(keel.ctx, keel.outcome, cwd).catch((writeErr) => {
+                const writeMsg = writeErr instanceof Error ? writeErr.message : String(writeErr);
+                void log.warn(`[keel] Run write-back failed: ${writeMsg}`);
+              });
             }
 
             // #8 — block exit when review says FAIL
@@ -1034,6 +1075,22 @@ export const runCommand = new Command('run')
             // Finishing workflow — present branch options when all tasks completed
             if (!isNonInteractive && completedCount > 0) {
               await runFinishingWorkflow(cwd);
+            }
+          } else {
+            const keel = summarizeKeelOutcome(
+              freshState.plan?.tasks ?? [],
+              freshState,
+              opts,
+              config,
+              true,
+              lastReviewResult?.verdict,
+            );
+            if (keel.enabled) {
+              const { writeRunOutcome } = await import('../../integrations/keel.js');
+              await writeRunOutcome(keel.ctx, keel.outcome, cwd).catch((writeErr) => {
+                const writeMsg = writeErr instanceof Error ? writeErr.message : String(writeErr);
+                void log.warn(`[keel] Abort write-back failed: ${writeMsg}`);
+              });
             }
           }
         } catch (err) {
@@ -1048,21 +1105,21 @@ export const runCommand = new Command('run')
           );
           void notifyRunFailed(errMsg, config.notifications);
 
-          // Keel write-back (failure)
-          const keelSlug = opts.keelSlug ?? config.keel?.slug;
-          if (keelSlug) {
+          const keel = summarizeKeelOutcome(
+            freshState?.plan?.tasks ?? [],
+            freshState,
+            opts,
+            config,
+            false,
+            lastReviewResult?.verdict,
+            errMsg,
+          );
+          if (keel.enabled) {
             const { writeRunOutcome } = await import('../../integrations/keel.js');
-            const keelCtx = { slug: keelSlug, taskId: opts.keelTask ?? config.keel?.taskId, port: config.keel?.port ?? 7842 };
-            const tasksDone = freshState?.plan?.tasks.filter((t) => t.status === 'completed').length ?? 0;
-            const tasksFailed = freshState?.plan?.tasks.filter((t) => t.status === 'failed').length ?? 0;
-            await writeRunOutcome(keelCtx, {
-              success: false,
-              tasksDone,
-              tasksFailed,
-              topError: errMsg,
-              costUsd: freshState?.costSummary?.totalEstimatedUsd ?? 0,
-              durationMs: freshState?.startedAt ? Date.now() - new Date(freshState.startedAt).getTime() : 0,
-            }, cwd).catch(() => {});
+            await writeRunOutcome(keel.ctx, keel.outcome, cwd).catch((writeErr) => {
+              const writeMsg = writeErr instanceof Error ? writeErr.message : String(writeErr);
+              void log.warn(`[keel] Failure write-back failed: ${writeMsg}`);
+            });
           }
         }
       }
