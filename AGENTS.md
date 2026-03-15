@@ -1,5 +1,17 @@
 # cloudy
 
+## Screenshot Storage
+
+Save every screenshot to `~/Desktop/screenshots/{project-name}/`.
+Use the git repo name for `{project-name}`:
+
+```bash
+export PROJECT_SCREENSHOT_DIR=~/Desktop/screenshots/$(basename "$(git rev-parse --show-toplevel)")
+mkdir -p "$PROJECT_SCREENSHOT_DIR"
+```
+
+Do not keep proof or review screenshots in `/tmp`.
+
 ## What This Is
 `cloudy` is the orchestration layer that turns a goal into a dependency-ordered task graph, routes work through local or API-backed runtimes via `omnai`, validates results, and serves a dashboard.
 
