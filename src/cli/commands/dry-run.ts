@@ -93,7 +93,7 @@ async function printCostEstimate(
 export const dryRunCommand = new Command('preview')
   .description('Preview what would execute without running')
   .option('--model <model>', 'Model for all phases')
-  .option('--execution-model <model>', 'Model for execution phase')
+  .option('--build-model <model>', 'Model for build phase')
   .option('--task-review-model <model>', 'Model for per-task validation')
   .option('--parallel', 'Enable parallel execution')
   .option('--only-task <id>', 'Preview only this task and its transitive dependencies')
@@ -102,7 +102,7 @@ export const dryRunCommand = new Command('preview')
   .action(
     async (opts: {
       model?: string;
-      executionModel?: string;
+      buildModel?: string;
       taskReviewModel?: string;
       parallel?: boolean;
       onlyTask?: string;
@@ -126,8 +126,8 @@ export const dryRunCommand = new Command('preview')
       const config = await loadConfig(cwd);
       config.models = mergeModelConfig(config.models, {
         model: opts.model ? parseModelFlag(opts.model) : undefined,
-        executionModel: opts.executionModel
-          ? parseModelFlag(opts.executionModel)
+        executionModel: opts.buildModel
+          ? parseModelFlag(opts.buildModel)
           : undefined,
         taskReviewModel: opts.taskReviewModel
           ? parseModelFlag(opts.taskReviewModel)

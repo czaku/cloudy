@@ -91,13 +91,13 @@ interface RuntimeRouteConfig {
 }
 
 interface ProjectRuntimeConfig {
-  engine?: string;
-  provider?: string;
-  executionModelId?: string;
-  executionEffort?: string;
-  planningRuntime?: RuntimeRouteConfig;
-  validationRuntime?: RuntimeRouteConfig;
-  reviewRuntime?: RuntimeRouteConfig;
+  buildEngine?: string;
+  buildProvider?: string;
+  buildModelId?: string;
+  buildEffort?: string;
+  planRuntime?: RuntimeRouteConfig;
+  taskReviewRuntime?: RuntimeRouteConfig;
+  runReviewRuntime?: RuntimeRouteConfig;
   keel?: {
     slug?: string;
     taskId?: string;
@@ -2024,10 +2024,10 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
   const [showPlanOutput, setShowPlanOutput] = useState(false);
   const [planModel, setPlanModel] = useState('sonnet');
   const [requestError, setRequestError] = useState('');
-  const [planningEngine, setPlanningEngine] = useState('');
-  const [planningProvider, setPlanningProvider] = useState('');
-  const [planningModelId, setPlanningModelId] = useState('');
-  const [planningEffort, setPlanningEffort] = useState('');
+  const [planEngine, setPlanEngine] = useState('');
+  const [planProvider, setPlanProvider] = useState('');
+  const [planModelId, setPlanModelId] = useState('');
+  const [planEffort, setPlanEffort] = useState('');
   const [chatMsgs, setChatMsgs] = useState<PlanChatMsg[]>([]);
   const [pendingQuestion, setPendingQuestion] = useState<PlanChatMsg | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -2168,7 +2168,7 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
   useEffect(() => {
     if (!requestError) return;
     setRequestError('');
-  }, [planningEngine, planningProvider, planningModelId, planningEffort]);
+  }, [planEngine, planProvider, planModelId, planEffort]);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
@@ -2186,10 +2186,10 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
   }
 
   function clearPlanningRuntimeOverrides() {
-    setPlanningEngine('');
-    setPlanningProvider('');
-    setPlanningModelId('');
-    setPlanningEffort('');
+    setPlanEngine('');
+    setPlanProvider('');
+    setPlanModelId('');
+    setPlanEffort('');
     setRequestError('');
   }
 
@@ -2198,14 +2198,14 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
     setRequestError('');
     setShowPlanOutput(true);
     const runtimePayload: Record<string, string> = {};
-    addOptionalRuntimeField(runtimePayload, 'planningEngine', planningEngine);
-    addOptionalRuntimeField(runtimePayload, 'planningProvider', planningProvider);
-    addOptionalRuntimeField(runtimePayload, 'planningModelId', planningModelId);
-    addOptionalRuntimeField(runtimePayload, 'planningEffort', planningEffort);
+    addOptionalRuntimeField(runtimePayload, 'planEngine', planEngine);
+    addOptionalRuntimeField(runtimePayload, 'planProvider', planProvider);
+    addOptionalRuntimeField(runtimePayload, 'planModelId', planModelId);
+    addOptionalRuntimeField(runtimePayload, 'planEffort', planEffort);
     const response = await apiPost(`/api/projects/${project.id}/plan`, {
       specPaths: Array.from(selectedSpecs),
       planName: planName.trim() || undefined,
-      model: planModel,
+      planModel,
       ...runtimePayload,
     }).catch(() => null);
     if (!response) {
@@ -2573,21 +2573,21 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
               />
             ) : null}
             <details className="run-advanced-options" style={{ marginTop: 8, width: '100%' }}>
-              <summary className="run-advanced-toggle">Planning runtime</summary>
+              <summary className="run-advanced-toggle">Plan route</summary>
               <div className="run-advanced-body">
                 <RuntimeConfigFields
                   title="Planning route"
-                  engine={planningEngine}
-                  provider={planningProvider}
-                  modelId={planningModelId}
-                  effort={planningEffort}
+                  engine={planEngine}
+                  provider={planProvider}
+                  modelId={planModelId}
+                  effort={planEffort}
                   onEngineChange={setPlanningEngine}
                   onProviderChange={setPlanningProvider}
                   onModelIdChange={setPlanningModelId}
                   onEffortChange={setPlanningEffort}
                   onClear={clearPlanningRuntimeOverrides}
                   hint="Leave blank to follow the project planning route. Presets below cover the common subscription and API paths."
-                  defaultRoute={projectConfig?.planningRuntime}
+                  defaultRoute={projectConfig?.planRuntime}
                 />
               </div>
             </details>
@@ -3052,23 +3052,23 @@ function playBeep() {
 }
 
 function RunTab({ project }: RunTabProps) {
-  const [executionModel, setExecutionModel] = useState('sonnet');
-  const [executionEngine, setExecutionEngine] = useState('');
-  const [executionProvider, setExecutionProvider] = useState('');
-  const [executionModelId, setExecutionModelId] = useState('');
-  const [executionEffort, setExecutionEffort] = useState('');
+  const [buildModel, setBuildModel] = useState('sonnet');
+  const [buildEngine, setBuildEngine] = useState('');
+  const [buildProvider, setBuildProvider] = useState('');
+  const [buildModelId, setBuildModelId] = useState('');
+  const [buildEffort, setBuildEffort] = useState('');
   const [taskReviewModel, setTaskReviewModel] = useState('haiku');
   const [runReviewModel, setRunReviewModel] = useState('sonnet');
   const [qualityReviewModel, setQualityReviewModel] = useState('');
   const [requestError, setRequestError] = useState('');
-  const [validationEngine, setValidationEngine] = useState('');
-  const [validationProvider, setValidationProvider] = useState('');
-  const [validationModelId, setValidationModelId] = useState('');
-  const [validationEffort, setValidationEffort] = useState('');
-  const [reviewEngine, setReviewEngine] = useState('');
-  const [reviewProvider, setReviewProvider] = useState('');
-  const [reviewModelId, setReviewModelId] = useState('');
-  const [reviewEffort, setReviewEffort] = useState('');
+  const [taskReviewEngine, setTaskReviewEngine] = useState('');
+  const [taskReviewProvider, setTaskReviewProvider] = useState('');
+  const [taskReviewModelId, setTaskReviewModelId] = useState('');
+  const [taskReviewEffort, setTaskReviewEffort] = useState('');
+  const [runReviewEngine, setRunReviewEngine] = useState('');
+  const [runReviewProvider, setRunReviewProvider] = useState('');
+  const [runReviewModelId, setRunReviewModelId] = useState('');
+  const [runReviewEffort, setRunReviewEffort] = useState('');
   const [keelSlug, setKeelSlug] = useState('');
   const [keelTask, setKeelTask] = useState('');
   const [parallel, setParallel] = useState(false);
@@ -3179,18 +3179,18 @@ function RunTab({ project }: RunTabProps) {
     if (!requestError) return;
     setRequestError('');
   }, [
-    executionEngine,
-    executionProvider,
-    executionModelId,
-    executionEffort,
-    validationEngine,
-    validationProvider,
-    validationModelId,
-    validationEffort,
-    reviewEngine,
-    reviewProvider,
-    reviewModelId,
-    reviewEffort,
+    buildEngine,
+    buildProvider,
+    buildModelId,
+    buildEffort,
+    taskReviewEngine,
+    taskReviewProvider,
+    taskReviewModelId,
+    taskReviewEffort,
+    runReviewEngine,
+    runReviewProvider,
+    runReviewModelId,
+    runReviewEffort,
   ]);
 
   async function fetchRunState() {
@@ -3266,58 +3266,58 @@ function RunTab({ project }: RunTabProps) {
 
   function buildRunRuntimePayload(): Record<string, string> {
     const payload: Record<string, string> = {};
-    addOptionalRuntimeField(payload, 'engine', executionEngine);
-    addOptionalRuntimeField(payload, 'provider', executionProvider);
-    addOptionalRuntimeField(payload, 'executionModelId', executionModelId);
-    addOptionalRuntimeField(payload, 'effort', executionEffort || effort);
-    addOptionalRuntimeField(payload, 'validationEngine', validationEngine);
-    addOptionalRuntimeField(payload, 'validationProvider', validationProvider);
-    addOptionalRuntimeField(payload, 'validationModelId', validationModelId);
-    addOptionalRuntimeField(payload, 'validationEffort', validationEffort);
-    addOptionalRuntimeField(payload, 'reviewEngine', reviewEngine);
-    addOptionalRuntimeField(payload, 'reviewProvider', reviewProvider);
-    addOptionalRuntimeField(payload, 'reviewModelId', reviewModelId);
-    addOptionalRuntimeField(payload, 'reviewEffort', reviewEffort);
+    addOptionalRuntimeField(payload, 'buildEngine', buildEngine);
+    addOptionalRuntimeField(payload, 'buildProvider', buildProvider);
+    addOptionalRuntimeField(payload, 'buildModelId', buildModelId);
+    addOptionalRuntimeField(payload, 'buildEffort', buildEffort || effort);
+    addOptionalRuntimeField(payload, 'taskReviewEngine', taskReviewEngine);
+    addOptionalRuntimeField(payload, 'taskReviewProvider', taskReviewProvider);
+    addOptionalRuntimeField(payload, 'taskReviewModelId', taskReviewModelId);
+    addOptionalRuntimeField(payload, 'taskReviewEffort', taskReviewEffort);
+    addOptionalRuntimeField(payload, 'runReviewEngine', runReviewEngine);
+    addOptionalRuntimeField(payload, 'runReviewProvider', runReviewProvider);
+    addOptionalRuntimeField(payload, 'runReviewModelId', runReviewModelId);
+    addOptionalRuntimeField(payload, 'runReviewEffort', runReviewEffort);
     addOptionalRuntimeField(payload, 'keelSlug', keelSlug);
     addOptionalRuntimeField(payload, 'keelTask', keelTask);
     return payload;
   }
 
   function clearRunRuntimeOverrides() {
-    setExecutionEngine('');
-    setExecutionProvider('');
-    setExecutionModelId('');
-    setExecutionEffort('');
-    setValidationEngine('');
-    setValidationProvider('');
-    setValidationModelId('');
-    setValidationEffort('');
-    setReviewEngine('');
-    setReviewProvider('');
-    setReviewModelId('');
-    setReviewEffort('');
+    setBuildEngine('');
+    setBuildProvider('');
+    setBuildModelId('');
+    setBuildEffort('');
+    setTaskReviewEngine('');
+    setTaskReviewProvider('');
+    setTaskReviewModelId('');
+    setTaskReviewEffort('');
+    setRunReviewEngine('');
+    setRunReviewProvider('');
+    setRunReviewModelId('');
+    setRunReviewEffort('');
     setKeelSlug(projectConfig?.keel?.slug ?? '');
     setKeelTask(projectConfig?.keel?.taskId ?? '');
     setRequestError('');
   }
 
-  const executionOverrideRoute: RuntimeRouteConfig = {
-    engine: optionalText(executionEngine),
-    provider: optionalText(executionProvider),
-    modelId: optionalText(executionModelId),
-    effort: optionalText(executionEffort || effort),
+  const buildOverrideRoute: RuntimeRouteConfig = {
+    engine: optionalText(buildEngine),
+    provider: optionalText(buildProvider),
+    modelId: optionalText(buildModelId),
+    effort: optionalText(buildEffort || effort),
   };
-  const validationOverrideRoute: RuntimeRouteConfig = {
-    engine: optionalText(validationEngine),
-    provider: optionalText(validationProvider),
-    modelId: optionalText(validationModelId),
-    effort: optionalText(validationEffort),
+  const taskReviewOverrideRoute: RuntimeRouteConfig = {
+    engine: optionalText(taskReviewEngine),
+    provider: optionalText(taskReviewProvider),
+    modelId: optionalText(taskReviewModelId),
+    effort: optionalText(taskReviewEffort),
   };
-  const reviewOverrideRoute: RuntimeRouteConfig = {
-    engine: optionalText(reviewEngine),
-    provider: optionalText(reviewProvider),
-    modelId: optionalText(reviewModelId),
-    effort: optionalText(reviewEffort),
+  const runReviewOverrideRoute: RuntimeRouteConfig = {
+    engine: optionalText(runReviewEngine),
+    provider: optionalText(runReviewProvider),
+    modelId: optionalText(runReviewModelId),
+    effort: optionalText(runReviewEffort),
   };
 
   async function handleRetryTask(taskId: string) {
@@ -3326,7 +3326,7 @@ function RunTab({ project }: RunTabProps) {
     setViewMode('progress');
     const response = await apiPost(`/api/projects/${project.id}/retry`, {
       taskId,
-      executionModel,
+      buildModel,
       taskReviewModel,
       runReviewModel,
       qualityReviewModel: qualityReviewModel || undefined,
@@ -3347,7 +3347,7 @@ function RunTab({ project }: RunTabProps) {
     setRequestError('');
     setViewMode('progress');
     const response = await apiPost(`/api/projects/${project.id}/retry`, {
-      executionModel,
+      buildModel,
       taskReviewModel,
       runReviewModel,
       qualityReviewModel: qualityReviewModel || undefined,
@@ -3450,7 +3450,7 @@ function RunTab({ project }: RunTabProps) {
     setViewMode('progress');
     const response = await apiPost(`/api/projects/${project.id}/run`, {
       planIds: chainSteps.map((s) => s.planId),
-      executionModel,
+      buildModel,
       taskReviewModel,
       runReviewModel,
       parallel: parallel || undefined,
@@ -3614,9 +3614,9 @@ function RunTab({ project }: RunTabProps) {
             <span>⚠ Process ended with tasks still in progress — server will auto-reset on next connect.</span>
             <button className="run-stuck-reset-btn" onClick={async () => {
               await apiPost(`/api/projects/${project.id}/retry`, {
-                executionModel,
-                taskReviewModel,
-                runReviewModel,
+      buildModel,
+      taskReviewModel,
+      runReviewModel,
                 qualityReviewModel: qualityReviewModel || undefined,
                 worktrees: worktrees || undefined,
                 ...buildRunRuntimePayload(),
@@ -3739,7 +3739,7 @@ function RunTab({ project }: RunTabProps) {
           )}
           {!effectivelyRunning && failedTasks.length > 0 && (
             <>
-              <ModelPicker value={executionModel} onChange={setExecutionModel} label="Execution" />
+              <ModelPicker value={buildModel} onChange={setBuildModel} label="Build" />
               <ModelPicker value={taskReviewModel} onChange={setTaskReviewModel} label="Task Review" />
               <ModelPicker value={runReviewModel} onChange={setRunReviewModel} label="Run Review" />
               <ModelPicker value={qualityReviewModel} onChange={setQualityReviewModel} label="Quality Review" />
@@ -3748,9 +3748,9 @@ function RunTab({ project }: RunTabProps) {
                 <div className="run-advanced-body">
                   <RuntimeRouteSummaryBar
                     routes={[
-                      { label: 'Execution', route: { engine: projectConfig?.engine, provider: projectConfig?.provider, modelId: projectConfig?.executionModelId }, override: executionOverrideRoute },
-                      { label: 'Validation', route: projectConfig?.validationRuntime, override: validationOverrideRoute },
-                      { label: 'Review', route: projectConfig?.reviewRuntime, override: reviewOverrideRoute },
+                      { label: 'Build', route: { engine: projectConfig?.buildEngine, provider: projectConfig?.buildProvider, modelId: projectConfig?.buildModelId, effort: projectConfig?.buildEffort }, override: buildOverrideRoute },
+                      { label: 'Task Review', route: projectConfig?.taskReviewRuntime, override: taskReviewOverrideRoute },
+                      { label: 'Run Review', route: projectConfig?.runReviewRuntime, override: runReviewOverrideRoute },
                     ]}
                   />
                   <label className="run-advanced-row">
@@ -3770,46 +3770,46 @@ function RunTab({ project }: RunTabProps) {
                     />
                   </label>
                   <RuntimeConfigFields
-                    title="Execution route"
-                    engine={executionEngine}
-                    provider={executionProvider}
-                    modelId={executionModelId}
-                    effort={executionEffort || effort}
+                    title="Build route"
+                    engine={buildEngine}
+                    provider={buildProvider}
+                    modelId={buildModelId}
+                    effort={buildEffort || effort}
                     onEngineChange={setExecutionEngine}
                     onProviderChange={setExecutionProvider}
                     onModelIdChange={setExecutionModelId}
                     onEffortChange={(value) => { setExecutionEffort(value); setEffort(value); }}
                     onClear={clearRunRuntimeOverrides}
                     hint="Execution defaults come from project config. Override here only when this retry needs a specific implementation route."
-                    defaultRoute={{ engine: projectConfig?.engine, provider: projectConfig?.provider, modelId: projectConfig?.executionModelId, effort: projectConfig?.executionEffort }}
+                    defaultRoute={{ engine: projectConfig?.buildEngine, provider: projectConfig?.buildProvider, modelId: projectConfig?.buildModelId, effort: projectConfig?.buildEffort }}
                   />
                   <RuntimeConfigFields
-                    title="Validation route"
-                    engine={validationEngine}
-                    provider={validationProvider}
-                    modelId={validationModelId}
-                    effort={validationEffort}
+                    title="Task-review route"
+                    engine={taskReviewEngine}
+                    provider={taskReviewProvider}
+                    modelId={taskReviewModelId}
+                    effort={taskReviewEffort}
                     onEngineChange={setValidationEngine}
                     onProviderChange={setValidationProvider}
                     onModelIdChange={setValidationModelId}
                     onEffortChange={setValidationEffort}
                     onClear={clearRunRuntimeOverrides}
                     hint="Validation can stay on the project default or be pinned to a cheaper or stricter review route."
-                    defaultRoute={projectConfig?.validationRuntime}
+                    defaultRoute={projectConfig?.taskReviewRuntime}
                   />
                   <RuntimeConfigFields
-                    title="Review route"
-                    engine={reviewEngine}
-                    provider={reviewProvider}
-                    modelId={reviewModelId}
-                    effort={reviewEffort}
+                    title="Run-review route"
+                    engine={runReviewEngine}
+                    provider={runReviewProvider}
+                    modelId={runReviewModelId}
+                    effort={runReviewEffort}
                     onEngineChange={setReviewEngine}
                     onProviderChange={setReviewProvider}
                     onModelIdChange={setReviewModelId}
                     onEffortChange={setReviewEffort}
                     onClear={clearRunRuntimeOverrides}
                     hint="Holistic review usually shares the validation route, but you can pin it separately for a final pass."
-                    defaultRoute={projectConfig?.reviewRuntime}
+                    defaultRoute={projectConfig?.runReviewRuntime}
                   />
                 </div>
               </details>
@@ -3971,7 +3971,7 @@ function RunTab({ project }: RunTabProps) {
             />
           ) : null}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-            <ModelPicker value={executionModel} onChange={setExecutionModel} label="Execution" />
+            <ModelPicker value={buildModel} onChange={setBuildModel} label="Build" />
             <ModelPicker value={taskReviewModel} onChange={setTaskReviewModel} label="Task Review" />
             <ModelPicker value={runReviewModel} onChange={setRunReviewModel} label="Run Review" />
             <ModelPicker value={qualityReviewModel} onChange={setQualityReviewModel} label="Quality Review" />
@@ -3992,9 +3992,9 @@ function RunTab({ project }: RunTabProps) {
             <div className="run-advanced-body">
               <RuntimeRouteSummaryBar
                 routes={[
-                  { label: 'Execution', route: { engine: projectConfig?.engine, provider: projectConfig?.provider, modelId: projectConfig?.executionModelId }, override: executionOverrideRoute },
-                  { label: 'Validation', route: projectConfig?.validationRuntime, override: validationOverrideRoute },
-                  { label: 'Review', route: projectConfig?.reviewRuntime, override: reviewOverrideRoute },
+                  { label: 'Build', route: { engine: projectConfig?.buildEngine, provider: projectConfig?.buildProvider, modelId: projectConfig?.buildModelId, effort: projectConfig?.buildEffort }, override: buildOverrideRoute },
+                  { label: 'Task Review', route: projectConfig?.taskReviewRuntime, override: taskReviewOverrideRoute },
+                  { label: 'Run Review', route: projectConfig?.runReviewRuntime, override: runReviewOverrideRoute },
                 ]}
               />
               <label className="run-advanced-row">
@@ -4034,7 +4034,7 @@ function RunTab({ project }: RunTabProps) {
               </label>
               <label className="run-advanced-row">
                 <span>Thinking effort</span>
-                <select value={executionEffort || effort} onChange={e => { const value = (e.target as HTMLSelectElement).value; setEffort(value); setExecutionEffort(value); }}>
+                <select value={buildEffort || effort} onChange={e => { const value = (e.target as HTMLSelectElement).value; setEffort(value); setBuildEffort(value); }}>
                   <option value="">default</option>
                   <option value="low">low</option>
                   <option value="medium">medium</option>
@@ -4043,46 +4043,46 @@ function RunTab({ project }: RunTabProps) {
                 </select>
               </label>
               <RuntimeConfigFields
-                title="Execution route"
-                engine={executionEngine}
-                provider={executionProvider}
-                modelId={executionModelId}
-                effort={executionEffort || effort}
+                title="Build route"
+                engine={buildEngine}
+                provider={buildProvider}
+                modelId={buildModelId}
+                effort={buildEffort || effort}
                 onEngineChange={setExecutionEngine}
                 onProviderChange={setExecutionProvider}
                 onModelIdChange={setExecutionModelId}
                 onEffortChange={(value) => { setExecutionEffort(value); setEffort(value); }}
                 onClear={clearRunRuntimeOverrides}
                 hint="Execution defaults come from project config. Override here only when this chain needs a specific implementation route."
-                defaultRoute={{ engine: projectConfig?.engine, provider: projectConfig?.provider, modelId: projectConfig?.executionModelId, effort: projectConfig?.executionEffort }}
+                defaultRoute={{ engine: projectConfig?.buildEngine, provider: projectConfig?.buildProvider, modelId: projectConfig?.buildModelId, effort: projectConfig?.buildEffort }}
               />
               <RuntimeConfigFields
-                title="Validation route"
-                engine={validationEngine}
-                provider={validationProvider}
-                modelId={validationModelId}
-                effort={validationEffort}
+                title="Task-review route"
+                engine={taskReviewEngine}
+                provider={taskReviewProvider}
+                modelId={taskReviewModelId}
+                effort={taskReviewEffort}
                 onEngineChange={setValidationEngine}
                 onProviderChange={setValidationProvider}
                 onModelIdChange={setValidationModelId}
                 onEffortChange={setValidationEffort}
                 onClear={clearRunRuntimeOverrides}
                 hint="Validation can stay on the project default or be pinned to a cheaper or stricter review route."
-                defaultRoute={projectConfig?.validationRuntime}
+                defaultRoute={projectConfig?.taskReviewRuntime}
               />
               <RuntimeConfigFields
-                title="Review route"
-                engine={reviewEngine}
-                provider={reviewProvider}
-                modelId={reviewModelId}
-                effort={reviewEffort}
+                title="Run-review route"
+                engine={runReviewEngine}
+                provider={runReviewProvider}
+                modelId={runReviewModelId}
+                effort={runReviewEffort}
                 onEngineChange={setReviewEngine}
                 onProviderChange={setReviewProvider}
                 onModelIdChange={setReviewModelId}
                 onEffortChange={setReviewEffort}
                 onClear={clearRunRuntimeOverrides}
                 hint="Holistic review usually shares the validation route, but you can pin it separately for a final pass."
-                defaultRoute={projectConfig?.reviewRuntime}
+                defaultRoute={projectConfig?.runReviewRuntime}
               />
             </div>
           </details>

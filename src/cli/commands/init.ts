@@ -113,11 +113,11 @@ export const initCommand = new Command('plan')
   .description('Decompose a goal into tasks using the configured planning runtime')
   .argument('[goal]', 'The project goal to decompose into tasks')
   .option('--model <model>', 'Model for all phases')
-  .option('--planning-model <model>', 'Model for planning phase')
-  .option('--planning-engine <engine>', 'Planning engine (e.g. claude-code, codex, pi-mono)')
-  .option('--planning-provider <provider>', 'Planning provider/auth route (e.g. claude subscription, codex subscription, openai API)')
-  .option('--planning-model-id <id>', 'Provider-native planning model ID')
-  .option('--planning-effort <level>', 'Planning effort: low|medium|high|max')
+  .option('--plan-model <model>', 'Model for plan phase')
+  .option('--plan-engine <engine>', 'Plan engine (e.g. claude-code, codex, pi-mono)')
+  .option('--plan-provider <provider>', 'Plan provider/auth route (e.g. claude subscription, codex subscription, openai API)')
+  .option('--plan-model-id <id>', 'Provider-native plan model ID')
+  .option('--plan-effort <level>', 'Plan effort: low|medium|high|max')
   .option('--spec <file>', 'Spec/PRD file (repeatable: --spec A --spec B)', (v: string, prev: string[]) => [...prev, v], [] as string[])
   .option('--no-review', 'Auto-approve the generated plan without interactive review')
   .option('--yes', 'Skip "Run now?" confirmation and proceed automatically')
@@ -128,11 +128,11 @@ export const initCommand = new Command('plan')
   .option('--brainstorm', 'Show 2-3 candidate approaches before planning (interactive only, skipped for simple goals)')
   .action(async (goalArg: string | undefined, opts: {
     model?: string;
-    planningModel?: string;
-    planningEngine?: string;
-    planningProvider?: string;
-    planningModelId?: string;
-    planningEffort?: string;
+    planModel?: string;
+    planEngine?: string;
+    planProvider?: string;
+    planModelId?: string;
+    planEffort?: string;
     spec: string[];
     review: boolean;
     verbose?: boolean;
@@ -157,10 +157,10 @@ export const initCommand = new Command('plan')
     p.intro(`${c(cyan + bold, '☁️  cloudy plan')}  ${c(bold, projectName)}  ${c(dim, cwd)}`);
 
     const config = await loadConfig(cwd);
-    if (opts.planningEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planningEngine as typeof config.engine };
-    if (opts.planningProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planningProvider };
-    if (opts.planningModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planningModelId };
-    if (opts.planningEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planningEffort as any };
+    if (opts.planEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planEngine as typeof config.engine };
+    if (opts.planProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planProvider };
+    if (opts.planModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planModelId };
+    if (opts.planEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planEffort as any };
 
     // ── Spec file(s) ──────────────────────────────────────────────────────────
     let specContent: string | undefined;
@@ -273,8 +273,8 @@ export const initCommand = new Command('plan')
     // ── Planning model ────────────────────────────────────────────────────────
     let planningModel = opts.model
       ? parseModelFlag(opts.model)
-      : opts.planningModel
-        ? parseModelFlag(opts.planningModel)
+      : opts.planModel
+        ? parseModelFlag(opts.planModel)
         : undefined;
 
     if (!planningModel) {

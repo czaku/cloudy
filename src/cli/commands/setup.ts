@@ -96,8 +96,8 @@ export const setupCommand = new Command('setup')
   .option('--non-interactive', 'Apply defaults without prompting (useful in CI)')
   .option('--global', 'Configure global defaults (stored in ~/.cloudy/config.json)')
   // Model flags for non-interactive mode
-  .option('--planning-model <model>',          'Planning model')
-  .option('--execution-model <model>',         'Execution model')
+  .option('--plan-model <model>',              'Plan model')
+  .option('--build-model <model>',             'Build model')
   .option('--task-review-model <model>',       'Per-task validation model')
   .option('--run-review-model <model>',        'Post-run holistic review model')
   .option('--questions-model <model>',         'Model for auto-answering planning questions')
@@ -121,8 +121,8 @@ export const setupCommand = new Command('setup')
   .action(async (opts: {
     nonInteractive?: boolean;
     global?: boolean;
-    planningModel?: string;
-    executionModel?: string;
+    planModel?: string;
+    buildModel?: string;
     taskReviewModel?: string;
     runReviewModel?: string;
     questionsModel?: string;
@@ -147,8 +147,8 @@ export const setupCommand = new Command('setup')
 
     if (opts.nonInteractive) {
       // Apply any flags that were passed
-      if (opts.planningModel)    config.models.planning   = parseModelFlag(opts.planningModel) as ClaudeModel;
-      if (opts.executionModel)   config.models.execution  = parseModelFlag(opts.executionModel) as ClaudeModel;
+      if (opts.planModel)        config.models.planning   = parseModelFlag(opts.planModel) as ClaudeModel;
+      if (opts.buildModel)       config.models.execution  = parseModelFlag(opts.buildModel) as ClaudeModel;
       if (opts.taskReviewModel)  config.models.validation = parseModelFlag(opts.taskReviewModel) as ClaudeModel;
       if (opts.runReviewModel)   config.review.model      = parseModelFlag(opts.runReviewModel) as ClaudeModel;
       if (opts.typecheck  !== undefined) config.validation.typecheck  = opts.typecheck  === 'true';

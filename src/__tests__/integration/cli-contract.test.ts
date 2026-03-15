@@ -96,8 +96,8 @@ describe('CLI contract', () => {
 
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain('Usage: cloudy run');
-    expect(result.stdout).toContain('--engine');
-    expect(result.stdout).toContain('--planning-engine');
+    expect(result.stdout).toContain('--build-engine');
+    expect(result.stdout).toContain('--plan-engine');
     expect(result.stderr).toBe('');
     expect(await cloudyDirExists(cwd)).toBe(false);
   }));

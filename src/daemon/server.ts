@@ -325,25 +325,25 @@ function getRunningProcess(projectId: string, type?: ActiveProcess['type']): Act
 }
 
 interface RuntimeRouteFields {
-  planningEngine?: string;
-  planningProvider?: string;
-  planningModelId?: string;
-  planningEffort?: string;
-  validationEngine?: string;
-  validationProvider?: string;
-  validationModelId?: string;
-  validationEffort?: string;
-  reviewEngine?: string;
-  reviewProvider?: string;
-  reviewModelId?: string;
-  reviewEffort?: string;
+  planEngine?: string;
+  planProvider?: string;
+  planModelId?: string;
+  planEffort?: string;
+  taskReviewEngine?: string;
+  taskReviewProvider?: string;
+  taskReviewModelId?: string;
+  taskReviewEffort?: string;
+  runReviewEngine?: string;
+  runReviewProvider?: string;
+  runReviewModelId?: string;
+  runReviewEffort?: string;
 }
 
 interface RunRuntimeRouteFields extends RuntimeRouteFields {
-  engine?: string;
-  provider?: string;
-  executionModelId?: string;
-  effort?: string;
+  buildEngine?: string;
+  buildProvider?: string;
+  buildModelId?: string;
+  buildEffort?: string;
   keelSlug?: string;
   keelTask?: string;
 }
@@ -355,13 +355,13 @@ interface RuntimePreflight {
 }
 
 interface RuntimeDefaults {
-  execution?: Pick<RunRuntimeRouteFields, 'engine' | 'provider' | 'executionModelId' | 'effort'>;
-  planning?: Pick<RuntimeRouteFields, 'planningEngine' | 'planningProvider' | 'planningModelId' | 'planningEffort'>;
-  validation?: Pick<RuntimeRouteFields, 'validationEngine' | 'validationProvider' | 'validationModelId' | 'validationEffort'>;
-  review?: Pick<RuntimeRouteFields, 'reviewEngine' | 'reviewProvider' | 'reviewModelId' | 'reviewEffort'>;
+  build?: Pick<RunRuntimeRouteFields, 'buildEngine' | 'buildProvider' | 'buildModelId' | 'buildEffort'>;
+  plan?: Pick<RuntimeRouteFields, 'planEngine' | 'planProvider' | 'planModelId' | 'planEffort'>;
+  taskReview?: Pick<RuntimeRouteFields, 'taskReviewEngine' | 'taskReviewProvider' | 'taskReviewModelId' | 'taskReviewEffort'>;
+  runReview?: Pick<RuntimeRouteFields, 'runReviewEngine' | 'runReviewProvider' | 'runReviewModelId' | 'runReviewEffort'>;
   models?: {
-    planningModel?: string;
-    executionModel?: string;
+    planModel?: string;
+    buildModel?: string;
     taskReviewModel?: string;
     runReviewModel?: string;
     qualityReviewModel?: string;
@@ -374,37 +374,37 @@ function appendOptionalFlag(args: string[], flag: string, value: string | undefi
 
 function buildPlanningRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   const args: string[] = [];
-  appendOptionalFlag(args, '--planning-engine', runtime.planningEngine);
-  appendOptionalFlag(args, '--planning-provider', runtime.planningProvider);
-  appendOptionalFlag(args, '--planning-model-id', runtime.planningModelId);
-  appendOptionalFlag(args, '--planning-effort', runtime.planningEffort);
+  appendOptionalFlag(args, '--plan-engine', runtime.planEngine);
+  appendOptionalFlag(args, '--plan-provider', runtime.planProvider);
+  appendOptionalFlag(args, '--plan-model-id', runtime.planModelId);
+  appendOptionalFlag(args, '--plan-effort', runtime.planEffort);
   return args;
 }
 
 function buildValidationRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   const args: string[] = [];
-  appendOptionalFlag(args, '--validation-engine', runtime.validationEngine);
-  appendOptionalFlag(args, '--validation-provider', runtime.validationProvider);
-  appendOptionalFlag(args, '--validation-model-id', runtime.validationModelId);
-  appendOptionalFlag(args, '--validation-effort', runtime.validationEffort);
+  appendOptionalFlag(args, '--task-review-engine', runtime.taskReviewEngine);
+  appendOptionalFlag(args, '--task-review-provider', runtime.taskReviewProvider);
+  appendOptionalFlag(args, '--task-review-model-id', runtime.taskReviewModelId);
+  appendOptionalFlag(args, '--task-review-effort', runtime.taskReviewEffort);
   return args;
 }
 
 function buildReviewRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   const args: string[] = [];
-  appendOptionalFlag(args, '--review-engine', runtime.reviewEngine);
-  appendOptionalFlag(args, '--review-provider', runtime.reviewProvider);
-  appendOptionalFlag(args, '--review-model-id', runtime.reviewModelId);
-  appendOptionalFlag(args, '--review-effort', runtime.reviewEffort);
+  appendOptionalFlag(args, '--run-review-engine', runtime.runReviewEngine);
+  appendOptionalFlag(args, '--run-review-provider', runtime.runReviewProvider);
+  appendOptionalFlag(args, '--run-review-model-id', runtime.runReviewModelId);
+  appendOptionalFlag(args, '--run-review-effort', runtime.runReviewEffort);
   return args;
 }
 
 function buildRunRuntimeArgs(runtime: RunRuntimeRouteFields): string[] {
   const args: string[] = [];
-  appendOptionalFlag(args, '--engine', runtime.engine);
-  appendOptionalFlag(args, '--provider', runtime.provider);
-  appendOptionalFlag(args, '--execution-model-id', runtime.executionModelId);
-  appendOptionalFlag(args, '--effort', runtime.effort);
+  appendOptionalFlag(args, '--build-engine', runtime.buildEngine);
+  appendOptionalFlag(args, '--build-provider', runtime.buildProvider);
+  appendOptionalFlag(args, '--build-model-id', runtime.buildModelId);
+  appendOptionalFlag(args, '--build-effort', runtime.buildEffort);
   appendOptionalFlag(args, '--keel-slug', runtime.keelSlug);
   appendOptionalFlag(args, '--keel-task', runtime.keelTask);
   args.push(
@@ -451,33 +451,33 @@ async function loadRuntimeDefaults(projectPath: string, keelTaskId?: string): Pr
     failBlocksRun: false,
   };
   return {
-    execution: {
-      engine: config.engine,
-      provider: config.provider,
-      executionModelId: config.executionModelId,
-      effort: config.executionEffort,
+    build: {
+      buildEngine: config.engine,
+      buildProvider: config.provider,
+      buildModelId: config.executionModelId,
+      buildEffort: config.executionEffort,
     },
-    planning: {
-      planningEngine: config.planningRuntime?.engine,
-      planningProvider: config.planningRuntime?.provider,
-      planningModelId: config.planningRuntime?.modelId,
-      planningEffort: config.planningRuntime?.effort,
+    plan: {
+      planEngine: config.planningRuntime?.engine,
+      planProvider: config.planningRuntime?.provider,
+      planModelId: config.planningRuntime?.modelId,
+      planEffort: config.planningRuntime?.effort,
     },
-    validation: {
-      validationEngine: config.validationRuntime?.engine,
-      validationProvider: config.validationRuntime?.provider,
-      validationModelId: config.validationRuntime?.modelId,
-      validationEffort: config.validationRuntime?.effort,
+    taskReview: {
+      taskReviewEngine: config.validationRuntime?.engine,
+      taskReviewProvider: config.validationRuntime?.provider,
+      taskReviewModelId: config.validationRuntime?.modelId,
+      taskReviewEffort: config.validationRuntime?.effort,
     },
-    review: {
-      reviewEngine: config.reviewRuntime?.engine,
-      reviewProvider: config.reviewRuntime?.provider,
-      reviewModelId: config.reviewRuntime?.modelId,
-      reviewEffort: config.reviewRuntime?.effort,
+    runReview: {
+      runReviewEngine: config.reviewRuntime?.engine,
+      runReviewProvider: config.reviewRuntime?.provider,
+      runReviewModelId: config.reviewRuntime?.modelId,
+      runReviewEffort: config.reviewRuntime?.effort,
     },
     models: {
-      planningModel: models.planning,
-      executionModel: models.execution,
+      planModel: models.planning,
+      buildModel: models.execution,
       taskReviewModel: models.validation,
       runReviewModel: review.model,
       qualityReviewModel: models.qualityReview,
@@ -1318,7 +1318,17 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       if (!meta) { send404(res); return; }
       try {
         const config = await loadConfig(meta.path);
-        sendJson(res, 200, config);
+        const runtime = await loadRuntimeDefaults(meta.path);
+        sendJson(res, 200, {
+          buildEngine: runtime.build?.buildEngine,
+          buildProvider: runtime.build?.buildProvider,
+          buildModelId: runtime.build?.buildModelId,
+          buildEffort: runtime.build?.buildEffort,
+          planRuntime: runtime.plan,
+          taskReviewRuntime: runtime.taskReview,
+          runReviewRuntime: runtime.runReview,
+          keel: config.keel,
+        });
       } catch (err) {
         sendJson(res, 500, { error: String(err) });
       }
@@ -1454,12 +1464,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         const body = await parseBody(req) as {
           specPaths?: string[];
           planName?: string;
-          model?: string;
+          planModel?: string;
           planIds?: string[];
-          planningEngine?: string;
-          planningProvider?: string;
-          planningModelId?: string;
-          planningEffort?: string;
+          planEngine?: string;
+          planProvider?: string;
+          planModelId?: string;
+          planEffort?: string;
           keelTask?: string;
         };
         const runtimeDefaults = await loadRuntimeDefaults(meta.path, body.keelTask);
@@ -1467,12 +1477,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           await preflightRuntime(resolveRuntimePreflight(
             'planning',
             {
-              engine: body.planningEngine,
-              provider: body.planningProvider,
+              engine: body.planEngine,
+              provider: body.planProvider,
             },
             {
-              engine: runtimeDefaults.planning?.planningEngine,
-              provider: runtimeDefaults.planning?.planningProvider,
+              engine: runtimeDefaults.plan?.planEngine,
+              provider: runtimeDefaults.plan?.planProvider,
             },
           ));
         } catch (err) {
@@ -1507,7 +1517,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
         const specArgs: string[] = [];
         for (const sp of specPaths) specArgs.push('--spec', sp);
-        const modelArg = body.model ? ['--model', body.model] : ['--model', 'sonnet'];
+        const modelArg = body.planModel ? ['--plan-model', body.planModel] : ['--plan-model', 'sonnet'];
         const runtimeArgs = buildPlanningRuntimeArgs(body);
         // Generate a stable run-name so scope exits immediately after saving the plan
         // (--run-name triggers pipeline-mode exit, preventing scope from auto-spawning cloudy run)
@@ -1557,7 +1567,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       }
       try {
         const body = await parseBody(req) as {
-          executionModel?: string;
+          buildModel?: string;
           taskReviewModel?: string;
           runReviewModel?: string;
           qualityReviewModel?: string;
@@ -1566,23 +1576,23 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           maxParallel?: number;
           noValidate?: boolean;
           maxRetries?: number;
-          effort?: string;
+          buildEffort?: string;
           worktrees?: boolean;
-          engine?: string;
-          provider?: string;
-          executionModelId?: string;
-          planningEngine?: string;
-          planningProvider?: string;
-          planningModelId?: string;
-          planningEffort?: string;
-          validationEngine?: string;
-          validationProvider?: string;
-          validationModelId?: string;
-          validationEffort?: string;
-          reviewEngine?: string;
-          reviewProvider?: string;
-          reviewModelId?: string;
-          reviewEffort?: string;
+          buildEngine?: string;
+          buildProvider?: string;
+          buildModelId?: string;
+          planEngine?: string;
+          planProvider?: string;
+          planModelId?: string;
+          planEffort?: string;
+          taskReviewEngine?: string;
+          taskReviewProvider?: string;
+          taskReviewModelId?: string;
+          taskReviewEffort?: string;
+          runReviewEngine?: string;
+          runReviewProvider?: string;
+          runReviewModelId?: string;
+          runReviewEffort?: string;
           keelSlug?: string;
           keelTask?: string;
         };
@@ -1591,38 +1601,41 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           await preflightRuntime(resolveRuntimePreflight(
             'coding',
             {
-              engine: body.engine,
-              provider: body.provider,
-            },
-            runtimeDefaults.execution,
-          ));
-          await preflightRuntime(resolveRuntimePreflight(
-            'review',
-            {
-              engine: body.validationEngine,
-              provider: body.validationProvider,
+              engine: body.buildEngine,
+              provider: body.buildProvider,
             },
             {
-              engine: runtimeDefaults.validation?.validationEngine,
-              provider: runtimeDefaults.validation?.validationProvider,
+              engine: runtimeDefaults.build?.buildEngine,
+              provider: runtimeDefaults.build?.buildProvider,
             },
           ));
           await preflightRuntime(resolveRuntimePreflight(
             'review',
             {
-              engine: body.reviewEngine,
-              provider: body.reviewProvider,
+              engine: body.taskReviewEngine,
+              provider: body.taskReviewProvider,
             },
             {
-              engine: runtimeDefaults.review?.reviewEngine,
-              provider: runtimeDefaults.review?.reviewProvider,
+              engine: runtimeDefaults.taskReview?.taskReviewEngine,
+              provider: runtimeDefaults.taskReview?.taskReviewProvider,
+            },
+          ));
+          await preflightRuntime(resolveRuntimePreflight(
+            'review',
+            {
+              engine: body.runReviewEngine,
+              provider: body.runReviewProvider,
+            },
+            {
+              engine: runtimeDefaults.runReview?.runReviewEngine,
+              provider: runtimeDefaults.runReview?.runReviewProvider,
             },
           ));
         } catch (err) {
           sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
           return;
         }
-        const execModel = body.executionModel ?? runtimeDefaults.models?.executionModel ?? 'sonnet';
+        const execModel = body.buildModel ?? runtimeDefaults.models?.buildModel ?? 'sonnet';
         const taskReviewModel = body.taskReviewModel ?? runtimeDefaults.models?.taskReviewModel ?? 'haiku';
         const runReviewModel = body.runReviewModel ?? runtimeDefaults.models?.runReviewModel ?? 'sonnet';
 
@@ -1631,7 +1644,6 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         if (body.maxParallel) { extraArgs.push('--max-parallel', String(body.maxParallel)); }
         if (body.noValidate) { extraArgs.push('--no-validate'); }
         if (body.maxRetries) { extraArgs.push('--max-retries', String(body.maxRetries)); }
-        if (body.effort) { extraArgs.push('--effort', body.effort); }
         if (body.qualityReviewModel) { extraArgs.push('--quality-review-model', body.qualityReviewModel); }
         if (body.worktrees) { extraArgs.push('--worktrees'); }
 
@@ -1642,7 +1654,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           'run',
           '--non-interactive',
           '--agent-output',
-          '--execution-model', execModel,
+          '--build-model', execModel,
           '--task-review-model', taskReviewModel,
           '--run-review-model', runReviewModel,
           '--heartbeat-interval', '5',
@@ -1668,22 +1680,22 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       try {
         const body = await parseBody(req) as {
           specPaths?: string[];
-          executionModel?: string;
-          planningModel?: string;
+          buildModel?: string;
+          planModel?: string;
           taskReviewModel?: string;
           runReviewModel?: string;
-          planningEngine?: string;
-          planningProvider?: string;
-          planningModelId?: string;
-          planningEffort?: string;
-          validationEngine?: string;
-          validationProvider?: string;
-          validationModelId?: string;
-          validationEffort?: string;
-          reviewEngine?: string;
-          reviewProvider?: string;
-          reviewModelId?: string;
-          reviewEffort?: string;
+          planEngine?: string;
+          planProvider?: string;
+          planModelId?: string;
+          planEffort?: string;
+          taskReviewEngine?: string;
+          taskReviewProvider?: string;
+          taskReviewModelId?: string;
+          taskReviewEffort?: string;
+          runReviewEngine?: string;
+          runReviewProvider?: string;
+          runReviewModelId?: string;
+          runReviewEffort?: string;
           keelSlug?: string;
           keelTask?: string;
         };
@@ -1692,34 +1704,34 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           await preflightRuntime(resolveRuntimePreflight(
             'planning',
             {
-              engine: body.planningEngine,
-              provider: body.planningProvider,
+              engine: body.planEngine,
+              provider: body.planProvider,
             },
             {
-              engine: runtimeDefaults.planning?.planningEngine,
-              provider: runtimeDefaults.planning?.planningProvider,
-            },
-          ));
-          await preflightRuntime(resolveRuntimePreflight(
-            'review',
-            {
-              engine: body.validationEngine,
-              provider: body.validationProvider,
-            },
-            {
-              engine: runtimeDefaults.validation?.validationEngine,
-              provider: runtimeDefaults.validation?.validationProvider,
+              engine: runtimeDefaults.plan?.planEngine,
+              provider: runtimeDefaults.plan?.planProvider,
             },
           ));
           await preflightRuntime(resolveRuntimePreflight(
             'review',
             {
-              engine: body.reviewEngine,
-              provider: body.reviewProvider,
+              engine: body.taskReviewEngine,
+              provider: body.taskReviewProvider,
             },
             {
-              engine: runtimeDefaults.review?.reviewEngine,
-              provider: runtimeDefaults.review?.reviewProvider,
+              engine: runtimeDefaults.taskReview?.taskReviewEngine,
+              provider: runtimeDefaults.taskReview?.taskReviewProvider,
+            },
+          ));
+          await preflightRuntime(resolveRuntimePreflight(
+            'review',
+            {
+              engine: body.runReviewEngine,
+              provider: body.runReviewProvider,
+            },
+            {
+              engine: runtimeDefaults.runReview?.runReviewEngine,
+              provider: runtimeDefaults.runReview?.runReviewProvider,
             },
           ));
         } catch (err) {
@@ -1736,8 +1748,8 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           ...buildReviewRuntimeArgs(body),
         ];
         const modelArgs: string[] = [
-          '--execution-model', body.executionModel ?? runtimeDefaults.models?.executionModel ?? 'sonnet',
-          '--planning-model', body.planningModel ?? runtimeDefaults.models?.planningModel ?? 'sonnet',
+          '--build-model', body.buildModel ?? runtimeDefaults.models?.buildModel ?? 'sonnet',
+          '--plan-model', body.planModel ?? runtimeDefaults.models?.planModel ?? 'sonnet',
           '--task-review-model', body.taskReviewModel ?? runtimeDefaults.models?.taskReviewModel ?? 'haiku',
           '--run-review-model', body.runReviewModel ?? runtimeDefaults.models?.runReviewModel ?? 'sonnet',
         ];
@@ -1839,7 +1851,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       try {
         const body = await parseBody(req) as {
           taskId?: string;
-          executionModel?: string;
+          buildModel?: string;
           taskReviewModel?: string;
           runReviewModel?: string;
           qualityReviewModel?: string;
@@ -1847,61 +1859,64 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           maxParallel?: number;
           noValidate?: boolean;
           maxRetries?: number;
-          effort?: string;
+          buildEffort?: string;
           worktrees?: boolean;
-          engine?: string;
-          provider?: string;
-          executionModelId?: string;
-          planningEngine?: string;
-          planningProvider?: string;
-          planningModelId?: string;
-          planningEffort?: string;
-          validationEngine?: string;
-          validationProvider?: string;
-          validationModelId?: string;
-          validationEffort?: string;
-          reviewEngine?: string;
-          reviewProvider?: string;
-          reviewModelId?: string;
-          reviewEffort?: string;
+          buildEngine?: string;
+          buildProvider?: string;
+          buildModelId?: string;
+          planEngine?: string;
+          planProvider?: string;
+          planModelId?: string;
+          planEffort?: string;
+          taskReviewEngine?: string;
+          taskReviewProvider?: string;
+          taskReviewModelId?: string;
+          taskReviewEffort?: string;
+          runReviewEngine?: string;
+          runReviewProvider?: string;
+          runReviewModelId?: string;
+          runReviewEffort?: string;
         };
         const runtimeDefaults = await loadRuntimeDefaults(meta.path);
         try {
           await preflightRuntime(resolveRuntimePreflight(
             'coding',
             {
-              engine: body.engine,
-              provider: body.provider,
-            },
-            runtimeDefaults.execution,
-          ));
-          await preflightRuntime(resolveRuntimePreflight(
-            'review',
-            {
-              engine: body.validationEngine,
-              provider: body.validationProvider,
+              engine: body.buildEngine,
+              provider: body.buildProvider,
             },
             {
-              engine: runtimeDefaults.validation?.validationEngine,
-              provider: runtimeDefaults.validation?.validationProvider,
+              engine: runtimeDefaults.build?.buildEngine,
+              provider: runtimeDefaults.build?.buildProvider,
             },
           ));
           await preflightRuntime(resolveRuntimePreflight(
             'review',
             {
-              engine: body.reviewEngine,
-              provider: body.reviewProvider,
+              engine: body.taskReviewEngine,
+              provider: body.taskReviewProvider,
             },
             {
-              engine: runtimeDefaults.review?.reviewEngine,
-              provider: runtimeDefaults.review?.reviewProvider,
+              engine: runtimeDefaults.taskReview?.taskReviewEngine,
+              provider: runtimeDefaults.taskReview?.taskReviewProvider,
+            },
+          ));
+          await preflightRuntime(resolveRuntimePreflight(
+            'review',
+            {
+              engine: body.runReviewEngine,
+              provider: body.runReviewProvider,
+            },
+            {
+              engine: runtimeDefaults.runReview?.runReviewEngine,
+              provider: runtimeDefaults.runReview?.runReviewProvider,
             },
           ));
         } catch (err) {
           sendJson(res, 400, { error: err instanceof Error ? err.message : String(err) });
           return;
         }
-        const execModel = body.executionModel ?? runtimeDefaults.models?.executionModel ?? 'sonnet';
+        const execModel = body.buildModel ?? runtimeDefaults.models?.buildModel ?? 'sonnet';
         const taskReviewModel = body.taskReviewModel ?? runtimeDefaults.models?.taskReviewModel ?? 'haiku';
         const runReviewModel = body.runReviewModel ?? runtimeDefaults.models?.runReviewModel ?? 'sonnet';
         const retryArgs = body.taskId ? ['--retry', body.taskId] : ['--retry-failed'];
@@ -1911,13 +1926,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         if (body.maxParallel) { extraArgs.push('--max-parallel', String(body.maxParallel)); }
         if (body.noValidate) { extraArgs.push('--no-validate'); }
         if (body.maxRetries) { extraArgs.push('--max-retries', String(body.maxRetries)); }
-        if (body.effort) { extraArgs.push('--effort', body.effort); }
         if (body.qualityReviewModel) { extraArgs.push('--quality-review-model', body.qualityReviewModel); }
         if (body.worktrees) { extraArgs.push('--worktrees'); }
 
         const proc = spawnCloudyProcess(projectId, meta.path, 'run', [
           'run', '--non-interactive', '--agent-output',
-          '--execution-model', execModel,
+          '--build-model', execModel,
           '--task-review-model', taskReviewModel,
           '--run-review-model', runReviewModel,
           '--heartbeat-interval', '5',

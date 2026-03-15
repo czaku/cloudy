@@ -155,14 +155,14 @@ cloudy plan --spec ./phase1.md --spec ./phase2.md
 # Skip interactive review
 cloudy plan --spec ./PRD.md --no-review
 
-# Control the planning model
-cloudy plan --spec ./PRD.md --planning-model sonnet
+# Control the plan model
+cloudy plan --spec ./PRD.md --plan-model sonnet
 
-# Override the planning runtime
-cloudy plan --spec ./PRD.md --planning-engine codex --planning-provider codex --planning-model-id o3-mini
+# Override the plan runtime
+cloudy plan --spec ./PRD.md --plan-engine codex --plan-provider codex --plan-model-id o3-mini
 ```
 
-The planner uses the configured planning runtime to decompose your goal into concrete, ordered tasks — each with a title, description, acceptance criteria, context file patterns, expected output artifacts, and a time estimate. If you don't pass `--no-review`, you can approve the plan or describe changes in plain English and iterate before running.
+The planner uses the configured plan runtime to decompose your goal into concrete, ordered tasks — each with a title, description, acceptance criteria, context file patterns, expected output artifacts, and a time estimate. If you don't pass `--no-review`, you can approve the plan or describe changes in plain English and iterate before running.
 
 ---
 
@@ -172,13 +172,13 @@ The planner uses the configured planning runtime to decompose your goal into con
 cloudy run
 
 # Choose models per phase
-cloudy run --execution-model sonnet --task-review-model haiku --run-review-model opus
+cloudy run --build-model sonnet --task-review-model haiku --run-review-model opus
 
 # Override planning / validation / review runtimes
 cloudy run \
-  --planning-engine codex --planning-provider codex --planning-model-id o3-mini \
-  --validation-engine codex --validation-provider codex --validation-model-id o4-mini \
-  --review-engine codex --review-provider codex --review-model-id gpt-4.1
+  --plan-engine codex --plan-provider codex --plan-model-id o3-mini \
+  --task-review-engine codex --task-review-provider codex --task-review-model-id o4-mini \
+  --run-review-engine codex --run-review-provider codex --run-review-model-id gpt-4.1
 
 # Show live agent output as each task runs
 cloudy run --verbose
@@ -213,16 +213,16 @@ cloudy run --no-dashboard
 | `--no-dashboard` | Disable the web dashboard |
 | `--verbose` | Stream live agent output per task |
 | `--model <m>` | Model for all phases (`opus`, `sonnet`, `haiku`) |
-| `--planning-model <m>` | Planning model (used for `cloudy plan` or `cloudy run --goal`) |
-| `--execution-model <m>` | Model for execution phase |
+| `--plan-model <m>` | Plan model (used for `cloudy plan` or `cloudy run --goal`) |
+| `--build-model <m>` | Model for execution phase |
 | `--task-review-model <m>` | Model for per-task validation |
 | `--run-review-model <m>` | Model for holistic post-run review |
-| `--planning-engine <e>` / `--planning-provider <p>` / `--planning-model-id <id>` | Planning runtime override |
+| `--plan-engine <e>` / `--plan-provider <p>` / `--plan-model-id <id>` | Plan runtime override |
 | `--non-interactive` | Skip all prompts, disable dashboard (also `--ni`) |
 | `--model-auto` | Auto-route model by task complexity |
-| `--engine <e>` / `--provider <p>` / `--execution-model-id <id>` | Execution runtime override |
-| `--validation-engine <e>` / `--validation-provider <p>` / `--validation-model-id <id>` | Per-task AI validation runtime override |
-| `--review-engine <e>` / `--review-provider <p>` / `--review-model-id <id>` | Holistic review runtime override |
+| `--build-engine <e>` / `--build-provider <p>` / `--build-model-id <id>` | Build runtime override |
+| `--task-review-engine <e>` / `--task-review-provider <p>` / `--task-review-model-id <id>` | Per-task AI task-review runtime override |
+| `--run-review-engine <e>` / `--run-review-provider <p>` / `--run-review-model-id <id>` | Run-review runtime override |
 
 ---
 
@@ -233,7 +233,7 @@ cloudy tasks                 # full task list
 cloudy tasks --graph         # ASCII dependency tree
 cloudy tasks --mermaid       # Mermaid diagram
 cloudy tasks --json          # raw JSON
-cloudy tasks edit            # edit pending tasks via the configured planning runtime
+cloudy tasks edit            # edit pending tasks via the configured plan runtime
 ```
 
 `cloudy tasks --graph`:
@@ -339,19 +339,19 @@ The dashboard has six tabs per project:
 
 The dashboard exposes the same phase/runtime split as the CLI:
 
-- **Plan tab**: planning `engine`, `provider`, and provider-native `modelId`
-- **Run tab**: execution, validation, and review runtime routes
-- **Retry flow**: failed-task retries reuse the same execution / validation / review runtime settings
+- **Plan tab**: `planEngine`, `planProvider`, and provider-native `planModelId`
+- **Run tab**: build, task-review, and run-review routes
+- **Retry flow**: failed-task retries reuse the same build / task-review / run-review route settings
 
 Use this when you want the web path to behave like:
 
 ```bash
-cloudy plan --planning-engine codex --planning-provider codex --planning-model-id o3-mini
+cloudy plan --plan-engine codex --plan-provider codex --plan-model-id o3-mini
 
 cloudy run \
-  --engine codex --provider codex --execution-model-id o3 \
-  --validation-engine claude-code --validation-provider claude --validation-model-id claude-sonnet-4-6 \
-  --review-engine pi-mono --review-provider openai --review-model-id gpt-5
+  --build-engine codex --build-provider codex --build-model-id o3 \
+  --task-review-engine claude-code --task-review-provider claude --task-review-model-id claude-sonnet-4-6 \
+  --run-review-engine pi-mono --run-review-provider openai --run-review-model-id gpt-5
 ```
 
 ### 💬 Chat tab
@@ -392,10 +392,10 @@ Planning example:
 ```json
 {
   "specPaths": ["/Users/ted/dev/myapp/specs/auth.md"],
-  "model": "sonnet",
-  "planningEngine": "codex",
-  "planningProvider": "codex",
-  "planningModelId": "o3-mini"
+  "planModel": "sonnet",
+  "planEngine": "codex",
+  "planProvider": "codex",
+  "planModelId": "o3-mini"
 }
 ```
 
@@ -403,18 +403,18 @@ Run example:
 
 ```json
 {
-  "executionModel": "sonnet",
+  "buildModel": "sonnet",
   "taskReviewModel": "haiku",
   "runReviewModel": "sonnet",
-  "engine": "codex",
-  "provider": "codex",
-  "executionModelId": "o3",
-  "validationEngine": "claude-code",
-  "validationProvider": "claude",
-  "validationModelId": "claude-sonnet-4-6",
-  "reviewEngine": "pi-mono",
-  "reviewProvider": "openai",
-  "reviewModelId": "gpt-5"
+  "buildEngine": "codex",
+  "buildProvider": "codex",
+  "buildModelId": "o3",
+  "taskReviewEngine": "claude-code",
+  "taskReviewProvider": "claude",
+  "taskReviewModelId": "claude-sonnet-4-6",
+  "runReviewEngine": "pi-mono",
+  "runReviewProvider": "openai",
+  "runReviewModelId": "gpt-5"
 }
 ```
 
@@ -455,7 +455,7 @@ cloudy run --tui          # force on even in non-TTY contexts
 Uses your local Claude Code subscription/login.
 
 ```bash
-cloudy run --engine claude-code --provider claude --execution-model sonnet
+cloudy run --build-engine claude-code --build-provider claude --build-model sonnet
 ```
 
 ### Codex CLI subscription
@@ -463,7 +463,7 @@ cloudy run --engine claude-code --provider claude --execution-model sonnet
 Uses your local Codex CLI login/subscription, separate from OpenAI API keys.
 
 ```bash
-cloudy run --engine codex --provider codex --execution-model-id o3
+cloudy run --build-engine codex --build-provider codex --build-model-id o3
 ```
 
 ### OpenAI API route
@@ -471,7 +471,7 @@ cloudy run --engine codex --provider codex --execution-model-id o3
 Uses an API-backed engine such as `pi-mono`, separate from the Codex CLI path.
 
 ```bash
-cloudy run --engine pi-mono --provider openai --execution-model-id gpt-4.1-mini
+cloudy run --build-engine pi-mono --build-provider openai --build-model-id gpt-4.1-mini
 ```
 
 Persist execution defaults in config:
@@ -501,7 +501,7 @@ cloudy config --set reviewRuntime.engine=codex
 cloudy run --model opus
 
 # Mix per phase — cheap task review, quality execution, deep holistic review
-cloudy run --execution-model sonnet --task-review-model haiku --run-review-model opus
+cloudy run --build-model sonnet --task-review-model haiku --run-review-model opus
 
 # Auto-route by task complexity
 cloudy run --model-auto
@@ -514,14 +514,14 @@ cloudy config --set review.model=opus
 
 | Phase | Flag | Default | Notes |
 |-------|------|---------|-------|
-| 🧠 Planning | `--planning-model` | sonnet | Goal → task graph |
-| 🔨 Execution | `--execution-model` | sonnet | Builds the code |
+| 🧠 Plan | `--plan-model` | sonnet | Goal → task graph |
+| 🔨 Build | `--build-model` | sonnet | Builds the code |
 | 🔍 Task review | `--task-review-model` | haiku | Per-task diff review, runs every task |
 | 🔭 Run review | `--run-review-model` | opus | Holistic post-run review, runs once at the end |
 
 These abstract model flags map cleanly to Claude-style runtimes. For non-Claude providers, use the phase runtime `*ModelId` flags/config keys instead.
 
-With `--model-auto`, task complexity (acceptance criteria count, description length, dep count, context size) determines the execution model automatically.
+With `--model-auto`, task complexity (acceptance criteria count, description length, dep count, context size) determines the build model automatically.
 
 ---
 
@@ -559,7 +559,7 @@ Add a `wrapUpPrompt` to your plan to run a final prompt after all tasks complete
 cloudy check
 cloudy check task-3
 cloudy check --no-ai-review
-cloudy check --validation-engine codex --validation-provider codex --validation-model-id o3
+cloudy check --task-review-engine codex --task-review-provider codex --task-review-model-id o3
 
 # ↩️ Roll back a task to its pre-execution git checkpoint
 cloudy rollback task-3
@@ -692,16 +692,16 @@ You can also put Cloudy runtime preferences directly on a Keel task. When `--kee
   "title": "Notifications inbox + route correction",
   "cloudy": {
     "models": {
-      "planning": "sonnet",
-      "execution": "sonnet",
+      "plan": "sonnet",
+      "build": "sonnet",
       "taskReview": "haiku",
       "runReview": "sonnet",
       "qualityReview": "haiku"
     },
-    "planning": { "engine": "codex", "provider": "codex", "modelId": "o3-mini" },
-    "execution": { "engine": "codex", "provider": "codex", "modelId": "o3" },
-    "validation": { "engine": "codex", "provider": "codex", "modelId": "o4-mini" },
-    "review": { "engine": "pi-mono", "provider": "openai", "modelId": "gpt-5" }
+    "plan": { "engine": "codex", "provider": "codex", "modelId": "o3-mini" },
+    "build": { "engine": "codex", "provider": "codex", "modelId": "o3" },
+    "taskReview": { "engine": "codex", "provider": "codex", "modelId": "o4-mini" },
+    "runReview": { "engine": "pi-mono", "provider": "openai", "modelId": "gpt-5" }
   }
 }
 ```
@@ -790,7 +790,7 @@ Full config reference (`.cloudy/config.json`):
 }
 ```
 
-`engine` / `provider` / `executionModelId` apply to execution by default. `planningRuntime`, `validationRuntime`, and `reviewRuntime` let you route those phases independently from config, CLI flags, or daemon HTTP requests.
+Internal config keys remain `engine` / `provider` / `executionModelId` for the build route, plus `planningRuntime`, `validationRuntime`, and `reviewRuntime` for the other phases. The external CLI, dashboard, and daemon API use `plan`, `build`, `task-review`, and `run-review`.
 
 ---
 

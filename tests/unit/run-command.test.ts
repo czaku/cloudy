@@ -201,27 +201,27 @@ describe('run command', () => {
     mockLoadKeelTaskRuntime.mockResolvedValue(null);
   });
 
-  it('passes engine, provider, and execution model ID through to selection and orchestration', async () => {
+  it('passes build, plan, task-review, and run-review routing through to selection and orchestration', async () => {
     const program = createProgram();
 
     await program.parseAsync([
       'run',
       '--non-interactive',
-      '--execution-model', 'sonnet',
+      '--build-model', 'sonnet',
       '--task-review-model', 'haiku',
       '--run-review-model', 'sonnet',
-      '--planning-engine', 'codex',
-      '--planning-provider', 'codex',
-      '--planning-model-id', 'o3-mini',
-      '--engine', 'codex',
-      '--provider', 'codex',
-      '--execution-model-id', 'o3',
-      '--validation-engine', 'codex',
-      '--validation-provider', 'codex',
-      '--validation-model-id', 'o4-mini',
-      '--review-engine', 'codex',
-      '--review-provider', 'codex',
-      '--review-model-id', 'gpt-4.1',
+      '--plan-engine', 'codex',
+      '--plan-provider', 'codex',
+      '--plan-model-id', 'o3-mini',
+      '--build-engine', 'codex',
+      '--build-provider', 'codex',
+      '--build-model-id', 'o3',
+      '--task-review-engine', 'codex',
+      '--task-review-provider', 'codex',
+      '--task-review-model-id', 'o4-mini',
+      '--run-review-engine', 'codex',
+      '--run-review-provider', 'codex',
+      '--run-review-model-id', 'gpt-4.1',
       '--no-dashboard',
     ], { from: 'user' });
 
@@ -295,7 +295,7 @@ describe('run command', () => {
     await program.parseAsync([
       'run',
       '--non-interactive',
-      '--execution-model', 'sonnet',
+      '--build-model', 'sonnet',
       '--task-review-model', 'haiku',
       '--run-review-model', 'sonnet',
       '--no-dashboard',
@@ -337,11 +337,11 @@ describe('run command', () => {
     await expect(program.parseAsync([
       'run',
       '--non-interactive',
-      '--execution-model', 'sonnet',
+      '--build-model', 'sonnet',
       '--task-review-model', 'haiku',
       '--run-review-model', 'sonnet',
-      '--engine', 'codex',
-      '--provider', 'codex',
+      '--build-engine', 'codex',
+      '--build-provider', 'codex',
       '--no-dashboard',
     ], { from: 'user' })).rejects.toThrow('EXIT:1');
 
@@ -364,7 +364,7 @@ describe('run command', () => {
     await program.parseAsync([
       'run',
       '--non-interactive',
-      '--execution-model', 'sonnet',
+      '--build-model', 'sonnet',
       '--task-review-model', 'haiku',
       '--run-review-model', 'sonnet',
       '--no-dashboard',
@@ -393,7 +393,7 @@ describe('run command', () => {
     await program.parseAsync([
       'run',
       '--non-interactive',
-      '--execution-model', 'sonnet',
+      '--build-model', 'sonnet',
       '--task-review-model', 'haiku',
       '--run-review-model', 'sonnet',
       '--no-dashboard',

@@ -11,14 +11,14 @@ export const validateCommand = new Command('check')
   .description('Re-run acceptance criteria against already-completed work')
   .argument('[taskId]', 'Task ID to validate (default: all completed tasks)')
   .option('--no-ai-review', 'Skip AI review phase, run deterministic checks only (typecheck, lint, build, test)')
-  .option('--validation-engine <engine>', 'Per-task AI validation engine')
-  .option('--validation-provider <provider>', 'Per-task AI validation provider/auth route (e.g. claude subscription, codex subscription, openai API)')
-  .option('--validation-model-id <id>', 'Provider-native per-task AI validation model ID')
+  .option('--task-review-engine <engine>', 'Per-task review engine')
+  .option('--task-review-provider <provider>', 'Per-task review provider/auth route (e.g. claude subscription, codex subscription, openai API)')
+  .option('--task-review-model-id <id>', 'Provider-native per-task review model ID')
   .action(async (taskId: string | undefined, opts: {
     aiReview: boolean;
-    validationEngine?: string;
-    validationProvider?: string;
-    validationModelId?: string;
+    taskReviewEngine?: string;
+    taskReviewProvider?: string;
+    taskReviewModelId?: string;
   }) => {
     const cwd = process.cwd();
     await initLogger(cwd);
@@ -33,9 +33,9 @@ export const validateCommand = new Command('check')
     if (!opts.aiReview) {
       config.validation.aiReview = false;
     }
-    if (opts.validationEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.validationEngine as typeof config.engine };
-    if (opts.validationProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.validationProvider };
-    if (opts.validationModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.validationModelId };
+    if (opts.taskReviewEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.taskReviewEngine as typeof config.engine };
+    if (opts.taskReviewProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.taskReviewProvider };
+    if (opts.taskReviewModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.taskReviewModelId };
 
     if (config.validation.aiReview) {
       try {

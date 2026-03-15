@@ -213,10 +213,10 @@ beforeEach(async () => {
   execFileMock.mockReset();
   selectViaDaemonMock.mockReset();
   loadConfigMock.mockReset();
-  selectViaDaemonMock.mockResolvedValue({ engine: 'codex' });
+  selectViaDaemonMock.mockResolvedValue({ buildEngine: 'codex' });
   loadConfigMock.mockResolvedValue({
-    engine: 'claude-code',
-    provider: 'claude',
+    buildEngine: 'claude-code',
+    buildProvider: 'claude',
     planningRuntime: {},
     validationRuntime: {},
     reviewRuntime: {},
@@ -452,10 +452,10 @@ describe('GET /api/projects/:id/config', () => {
 
     const { status, body } = await get(base, '/api/projects/test-project/config');
     expect(status).toBe(200);
-    expect(body.engine).toBe('codex');
-    expect(body.provider).toBe('codex');
-    expect(body.executionModelId).toBe('o3');
-    expect(body.planningRuntime.engine).toBe('claude-code');
+    expect(body.buildEngine).toBe('codex');
+    expect(body.buildProvider).toBe('codex');
+    expect(body.buildModelId).toBe('o3');
+    expect(body.planRuntime.planEngine).toBe('claude-code');
   });
 
   it('returns 404 when project does not exist', async () => {
@@ -498,10 +498,10 @@ describe('runtime routing via daemon HTTP', () => {
 
     const { status, body } = await post(base, '/api/projects/test-project/plan', {
       specPaths: ['/fake/test-project/specs/auth.md'],
-      model: 'sonnet',
-      planningEngine: 'codex',
-      planningProvider: 'codex',
-      planningModelId: 'codex-mini',
+      planModel: 'sonnet',
+      planEngine: 'codex',
+      planProvider: 'codex',
+      planModelId: 'codex-mini',
     });
 
     expect(status).toBe(200);
@@ -510,10 +510,10 @@ describe('runtime routing via daemon HTTP', () => {
 
     const [, argv] = spawnMock.mock.calls[0] as [string, string[]];
     expect(argv).toContain('plan');
-    expect(argv).toContain('--planning-engine');
+    expect(argv).toContain('--plan-engine');
     expect(argv).toContain('codex');
-    expect(argv).toContain('--planning-provider');
-    expect(argv).toContain('--planning-model-id');
+    expect(argv).toContain('--plan-provider');
+    expect(argv).toContain('--plan-model-id');
     expect(argv).toContain('codex-mini');
     expect(selectViaDaemonMock).toHaveBeenCalledWith({
       engine: 'codex',
@@ -537,7 +537,7 @@ describe('runtime routing via daemon HTTP', () => {
 
     const { status, body } = await post(base, '/api/projects/test-project/plan', {
       specPaths: ['/fake/test-project/specs/auth.md'],
-      model: 'sonnet',
+      planModel: 'sonnet',
     });
 
     expect(status).toBe(200);
@@ -553,20 +553,20 @@ describe('runtime routing via daemon HTTP', () => {
     vi.mocked(findProject).mockResolvedValue(makeProject());
 
     const { status, body } = await post(base, '/api/projects/test-project/run', {
-      executionModel: 'sonnet',
+      buildModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
       keelSlug: 'fitkind',
       keelTask: 'T-77',
-      engine: 'codex',
-      provider: 'codex',
-      executionModelId: 'o3',
-      validationEngine: 'claude-code',
-      validationProvider: 'claude',
-      validationModelId: 'claude-sonnet-4-6',
-      reviewEngine: 'openai',
-      reviewProvider: 'openai',
-      reviewModelId: 'gpt-5',
+      buildEngine: 'codex',
+      buildProvider: 'codex',
+      buildModelId: 'o3',
+      taskReviewEngine: 'claude-code',
+      taskReviewProvider: 'claude',
+      taskReviewModelId: 'claude-sonnet-4-6',
+      runReviewEngine: 'openai',
+      runReviewProvider: 'openai',
+      runReviewModelId: 'gpt-5',
     });
 
     expect(status).toBe(200);
@@ -575,25 +575,25 @@ describe('runtime routing via daemon HTTP', () => {
 
     const [, argv] = spawnMock.mock.calls[0] as [string, string[]];
     expect(argv).toContain('run');
-    expect(argv).toContain('--engine');
+    expect(argv).toContain('--build-engine');
     expect(argv).toContain('codex');
     expect(argv).toContain('--keel-slug');
     expect(argv).toContain('fitkind');
     expect(argv).toContain('--keel-task');
     expect(argv).toContain('T-77');
-    expect(argv).toContain('--provider');
-    expect(argv).toContain('--execution-model-id');
+    expect(argv).toContain('--build-provider');
+    expect(argv).toContain('--build-model-id');
     expect(argv).toContain('o3');
-    expect(argv).toContain('--validation-engine');
+    expect(argv).toContain('--task-review-engine');
     expect(argv).toContain('claude-code');
-    expect(argv).toContain('--validation-provider');
+    expect(argv).toContain('--task-review-provider');
     expect(argv).toContain('claude');
-    expect(argv).toContain('--validation-model-id');
+    expect(argv).toContain('--task-review-model-id');
     expect(argv).toContain('claude-sonnet-4-6');
-    expect(argv).toContain('--review-engine');
+    expect(argv).toContain('--run-review-engine');
     expect(argv).toContain('openai');
-    expect(argv).toContain('--review-provider');
-    expect(argv).toContain('--review-model-id');
+    expect(argv).toContain('--run-review-provider');
+    expect(argv).toContain('--run-review-model-id');
     expect(argv).toContain('gpt-5');
     expect(selectViaDaemonMock).toHaveBeenCalledWith({
       engine: 'codex',
@@ -629,7 +629,7 @@ describe('runtime routing via daemon HTTP', () => {
     });
 
     const { status, body } = await post(base, '/api/projects/test-project/run', {
-      executionModel: 'sonnet',
+      buildModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
     });
@@ -658,20 +658,20 @@ describe('runtime routing via daemon HTTP', () => {
 
     const { status, body } = await post(base, '/api/projects/test-project/retry', {
       taskId: 'task-7',
-      executionModel: 'sonnet',
+      buildModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
       keelSlug: 'fitkind',
       keelTask: 'T-88',
-      engine: 'codex',
-      provider: 'codex',
-      executionModelId: 'o3',
-      validationEngine: 'claude-code',
-      validationProvider: 'claude',
-      validationModelId: 'claude-sonnet-4-6',
-      reviewEngine: 'pi-mono',
-      reviewProvider: 'openai',
-      reviewModelId: 'gpt-5',
+      buildEngine: 'codex',
+      buildProvider: 'codex',
+      buildModelId: 'o3',
+      taskReviewEngine: 'claude-code',
+      taskReviewProvider: 'claude',
+      taskReviewModelId: 'claude-sonnet-4-6',
+      runReviewEngine: 'pi-mono',
+      runReviewProvider: 'openai',
+      runReviewModelId: 'gpt-5',
     });
 
     expect(status).toBe(200);
@@ -686,11 +686,11 @@ describe('runtime routing via daemon HTTP', () => {
     expect(argv).toContain('fitkind');
     expect(argv).toContain('--keel-task');
     expect(argv).toContain('T-88');
-    expect(argv).toContain('--engine');
+    expect(argv).toContain('--build-engine');
     expect(argv).toContain('codex');
-    expect(argv).toContain('--validation-engine');
+    expect(argv).toContain('--task-review-engine');
     expect(argv).toContain('claude-code');
-    expect(argv).toContain('--review-engine');
+    expect(argv).toContain('--run-review-engine');
     expect(argv).toContain('pi-mono');
   });
 
@@ -712,7 +712,7 @@ describe('runtime routing via daemon HTTP', () => {
 
     const { status, body } = await post(base, '/api/projects/test-project/retry', {
       taskId: 'task-7',
-      executionModel: 'sonnet',
+      buildModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
     });
@@ -741,19 +741,19 @@ describe('runtime routing via daemon HTTP', () => {
 
     const { status, body } = await post(base, '/api/projects/test-project/chain', {
       specPaths: ['/fake/test-project/specs/auth.md', '/fake/test-project/specs/payments.md'],
-      executionModel: 'sonnet',
-      planningModel: 'sonnet',
+      buildModel: 'sonnet',
+      planModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
-      planningEngine: 'codex',
-      planningProvider: 'codex',
-      planningModelId: 'o3-mini',
-      validationEngine: 'claude-code',
-      validationProvider: 'claude',
-      validationModelId: 'claude-sonnet-4-6',
-      reviewEngine: 'pi-mono',
-      reviewProvider: 'openai',
-      reviewModelId: 'gpt-5',
+      planEngine: 'codex',
+      planProvider: 'codex',
+      planModelId: 'o3-mini',
+      taskReviewEngine: 'claude-code',
+      taskReviewProvider: 'claude',
+      taskReviewModelId: 'claude-sonnet-4-6',
+      runReviewEngine: 'pi-mono',
+      runReviewProvider: 'openai',
+      runReviewModelId: 'gpt-5',
     });
 
     expect(status).toBe(200);
@@ -762,14 +762,14 @@ describe('runtime routing via daemon HTTP', () => {
 
     const [, argv] = spawnMock.mock.calls[0] as [string, string[]];
     expect(argv).toContain('chain');
-    expect(argv).toContain('--planning-engine');
+    expect(argv).toContain('--plan-engine');
     expect(argv).toContain('codex');
-    expect(argv).toContain('--planning-provider');
-    expect(argv).toContain('--planning-model-id');
+    expect(argv).toContain('--plan-provider');
+    expect(argv).toContain('--plan-model-id');
     expect(argv).toContain('o3-mini');
-    expect(argv).toContain('--validation-engine');
+    expect(argv).toContain('--task-review-engine');
     expect(argv).toContain('claude-code');
-    expect(argv).toContain('--review-engine');
+    expect(argv).toContain('--run-review-engine');
     expect(argv).toContain('pi-mono');
   });
 
@@ -794,8 +794,8 @@ describe('runtime routing via daemon HTTP', () => {
 
     const { status, body } = await post(base, '/api/projects/test-project/chain', {
       specPaths: ['/fake/test-project/specs/auth.md'],
-      executionModel: 'sonnet',
-      planningModel: 'sonnet',
+      buildModel: 'sonnet',
+      planModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
     });
@@ -825,8 +825,8 @@ describe('runtime routing via daemon HTTP', () => {
 
     const { status, body } = await post(base, '/api/projects/test-project/plan', {
       specPaths: ['/fake/test-project/specs/auth.md'],
-      planningEngine: 'codex',
-      planningProvider: 'codex',
+      planEngine: 'codex',
+      planProvider: 'codex',
     });
 
     expect(status).toBe(400);
@@ -862,11 +862,11 @@ describe('runtime routing via daemon HTTP', () => {
     selectViaDaemonMock.mockRejectedValueOnce(new Error('provider unavailable'));
 
     const { status, body } = await post(base, '/api/projects/test-project/run', {
-      executionModel: 'sonnet',
+      buildModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
-      engine: 'codex',
-      provider: 'codex',
+      buildEngine: 'codex',
+      buildProvider: 'codex',
     });
 
     expect(status).toBe(400);
@@ -880,11 +880,11 @@ describe('runtime routing via daemon HTTP', () => {
 
     const { status, body } = await post(base, '/api/projects/test-project/retry', {
       taskId: 'task-7',
-      executionModel: 'sonnet',
+      buildModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
-      engine: 'codex',
-      provider: 'codex',
+      buildEngine: 'codex',
+      buildProvider: 'codex',
     });
 
     expect(status).toBe(400);
@@ -898,12 +898,12 @@ describe('runtime routing via daemon HTTP', () => {
 
     const { status, body } = await post(base, '/api/projects/test-project/chain', {
       specPaths: ['/fake/test-project/specs/auth.md'],
-      executionModel: 'sonnet',
-      planningModel: 'sonnet',
+      buildModel: 'sonnet',
+      planModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
-      planningEngine: 'codex',
-      planningProvider: 'codex',
+      planEngine: 'codex',
+      planProvider: 'codex',
     });
 
     expect(status).toBe(400);
@@ -918,8 +918,8 @@ describe('runtime routing via daemon HTTP', () => {
 
     const planRes = await post(base, '/api/projects/test-project/plan', {
       specPaths: ['/fake/test-project/specs/auth.md'],
-      model: 'sonnet',
-      planningEngine: 'codex',
+      planModel: 'sonnet',
+      planEngine: 'codex',
     });
     expect(planRes.status).toBe(200);
     expect(planRes.body.started).toBe(true);
@@ -941,11 +941,11 @@ describe('runtime routing via daemon HTTP', () => {
     });
 
     const runRes = await post(base, '/api/projects/test-project/run', {
-      executionModel: 'sonnet',
+      buildModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
-      engine: 'codex',
-      provider: 'codex',
+      buildEngine: 'codex',
+      buildProvider: 'codex',
     });
     expect(runRes.status).toBe(200);
     expect(runRes.body.started).toBe(true);

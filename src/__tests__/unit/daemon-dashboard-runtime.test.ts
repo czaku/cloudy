@@ -14,30 +14,30 @@ describe('daemon dashboard runtime routing controls', () => {
   });
 
   it('includes planning runtime fields in the plan request payload', () => {
-    expect(source).toContain("addOptionalRuntimeField(runtimePayload, 'planningEngine', planningEngine)");
-    expect(source).toContain("addOptionalRuntimeField(runtimePayload, 'planningProvider', planningProvider)");
-    expect(source).toContain("addOptionalRuntimeField(runtimePayload, 'planningModelId', planningModelId)");
+    expect(source).toContain("addOptionalRuntimeField(runtimePayload, 'planEngine', planEngine)");
+    expect(source).toContain("addOptionalRuntimeField(runtimePayload, 'planProvider', planProvider)");
+    expect(source).toContain("addOptionalRuntimeField(runtimePayload, 'planModelId', planModelId)");
   });
 
   it('includes execution, validation, and review runtime fields in run payloads', () => {
-    expect(source).toContain("addOptionalRuntimeField(payload, 'engine', executionEngine)");
-    expect(source).toContain("addOptionalRuntimeField(payload, 'provider', executionProvider)");
-    expect(source).toContain("addOptionalRuntimeField(payload, 'executionModelId', executionModelId)");
-    expect(source).toContain("addOptionalRuntimeField(payload, 'validationEngine', validationEngine)");
-    expect(source).toContain("addOptionalRuntimeField(payload, 'validationProvider', validationProvider)");
-    expect(source).toContain("addOptionalRuntimeField(payload, 'validationModelId', validationModelId)");
-    expect(source).toContain("addOptionalRuntimeField(payload, 'reviewEngine', reviewEngine)");
-    expect(source).toContain("addOptionalRuntimeField(payload, 'reviewProvider', reviewProvider)");
-    expect(source).toContain("addOptionalRuntimeField(payload, 'reviewModelId', reviewModelId)");
+    expect(source).toContain("addOptionalRuntimeField(payload, 'buildEngine', buildEngine)");
+    expect(source).toContain("addOptionalRuntimeField(payload, 'buildProvider', buildProvider)");
+    expect(source).toContain("addOptionalRuntimeField(payload, 'buildModelId', buildModelId)");
+    expect(source).toContain("addOptionalRuntimeField(payload, 'taskReviewEngine', taskReviewEngine)");
+    expect(source).toContain("addOptionalRuntimeField(payload, 'taskReviewProvider', taskReviewProvider)");
+    expect(source).toContain("addOptionalRuntimeField(payload, 'taskReviewModelId', taskReviewModelId)");
+    expect(source).toContain("addOptionalRuntimeField(payload, 'runReviewEngine', runReviewEngine)");
+    expect(source).toContain("addOptionalRuntimeField(payload, 'runReviewProvider', runReviewProvider)");
+    expect(source).toContain("addOptionalRuntimeField(payload, 'runReviewModelId', runReviewModelId)");
     expect(source).toContain("addOptionalRuntimeField(payload, 'keelSlug', keelSlug)");
     expect(source).toContain("addOptionalRuntimeField(payload, 'keelTask', keelTask)");
   });
 
   it('renders runtime controls in both planning and run flows', () => {
-    expect(source).toContain('Planning runtime');
-    expect(source).toContain('Execution route');
-    expect(source).toContain('Validation route');
-    expect(source).toContain('Review route');
+    expect(source).toContain('Plan route');
+    expect(source).toContain('Build route');
+    expect(source).toContain('Task-review route');
+    expect(source).toContain('Run-review route');
   });
 
   it('surfaces daemon request failures in planning and run flows', () => {

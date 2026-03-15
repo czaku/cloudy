@@ -111,9 +111,9 @@ describe('validate command', () => {
 
     await program.parseAsync([
       'check',
-      '--validation-engine', 'codex',
-      '--validation-provider', 'codex',
-      '--validation-model-id', 'o3',
+      '--task-review-engine', 'codex',
+      '--task-review-provider', 'codex',
+      '--task-review-model-id', 'o3',
     ], { from: 'user' });
 
     expect(mockSelectViaDaemon).toHaveBeenCalledWith({
@@ -136,9 +136,9 @@ describe('validate command', () => {
     await program.parseAsync([
       'check',
       '--no-ai-review',
-      '--validation-engine', 'codex',
-      '--validation-provider', 'codex',
-      '--validation-model-id', 'o3',
+      '--task-review-engine', 'codex',
+      '--task-review-provider', 'codex',
+      '--task-review-model-id', 'o3',
     ], { from: 'user' });
 
     expect(mockSelectViaDaemon).not.toHaveBeenCalled();

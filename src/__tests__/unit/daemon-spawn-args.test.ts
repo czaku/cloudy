@@ -183,15 +183,15 @@ describe('daemon server runtime flag forwarding', () => {
   });
 
   it('forwards planning runtime flags for daemon planning requests', () => {
-    expect(source).toContain('--planning-engine');
-    expect(source).toContain('--planning-provider');
-    expect(source).toContain('--planning-model-id');
+    expect(source).toContain('--plan-engine');
+    expect(source).toContain('--plan-provider');
+    expect(source).toContain('--plan-model-id');
   });
 
   it('forwards execution runtime flags for daemon run and retry requests', () => {
-    expect(source).toContain('--engine');
-    expect(source).toContain('--provider');
-    expect(source).toContain('--execution-model-id');
+    expect(source).toContain('--build-engine');
+    expect(source).toContain('--build-provider');
+    expect(source).toContain('--build-model-id');
   });
 
   it('forwards keel flags for daemon run and retry requests', () => {
@@ -200,11 +200,11 @@ describe('daemon server runtime flag forwarding', () => {
   });
 
   it('forwards validation and review runtime flags for run and chain requests', () => {
-    expect(source).toContain('--validation-engine');
-    expect(source).toContain('--validation-provider');
-    expect(source).toContain('--validation-model-id');
-    expect(source).toContain('--review-engine');
-    expect(source).toContain('--review-provider');
-    expect(source).toContain('--review-model-id');
+    expect(source).toContain('--task-review-engine');
+    expect(source).toContain('--task-review-provider');
+    expect(source).toContain('--task-review-model-id');
+    expect(source).toContain('--run-review-engine');
+    expect(source).toContain('--run-review-provider');
+    expect(source).toContain('--run-review-model-id');
   });
 });

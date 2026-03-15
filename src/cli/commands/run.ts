@@ -160,25 +160,25 @@ async function runFinishingWorkflow(cwd: string): Promise<void> {
 export const runCommand = new Command('run')
   .description('Execute the current plan')
   .option('--model <model>', 'Model for all phases')
-  .option('--planning-model <model>', 'Model for planning phase (used with --goal)')
-  .option('--execution-model <model>', 'Model for execution phase')
-  .option('--execution-model-id <id>', 'Provider-native execution model ID (e.g. o3, codex-mini)')
+  .option('--plan-model <model>', 'Model for plan phase (used with --goal)')
+  .option('--build-model <model>', 'Model for build phase')
+  .option('--build-model-id <id>', 'Provider-native build model ID (e.g. o3, codex-mini)')
   .option('--task-review-model <model>', 'Model for per-task validation')
   .option('--model-auto', 'Auto-route model per task complexity')
-  .option('--planning-engine <engine>', 'Planning engine (e.g. claude-code, codex, pi-mono)')
-  .option('--planning-provider <provider>', 'Planning provider/auth route (e.g. claude subscription, codex subscription, openai API)')
-  .option('--planning-model-id <id>', 'Provider-native planning model ID')
-  .option('--planning-effort <level>', 'Planning effort: low|medium|high|max')
-  .option('--engine <engine>', 'Execution engine (e.g. claude-code, codex, pi-mono)')
-  .option('--provider <provider>', 'Execution provider/auth route (e.g. claude subscription, codex subscription, openai API)')
-  .option('--validation-engine <engine>', 'Per-task AI validation engine')
-  .option('--validation-provider <provider>', 'Per-task AI validation provider/auth route')
-  .option('--validation-model-id <id>', 'Provider-native per-task AI validation model ID')
-  .option('--validation-effort <level>', 'Per-task AI validation effort: low|medium|high|max')
-  .option('--review-engine <engine>', 'Holistic review / review-side prompt engine')
-  .option('--review-provider <provider>', 'Holistic review / review-side provider/auth route')
-  .option('--review-model-id <id>', 'Provider-native holistic review model ID')
-  .option('--review-effort <level>', 'Holistic review effort: low|medium|high|max')
+  .option('--plan-engine <engine>', 'Plan engine (e.g. claude-code, codex, pi-mono)')
+  .option('--plan-provider <provider>', 'Plan provider/auth route (e.g. claude subscription, codex subscription, openai API)')
+  .option('--plan-model-id <id>', 'Provider-native plan model ID')
+  .option('--plan-effort <level>', 'Plan effort: low|medium|high|max')
+  .option('--build-engine <engine>', 'Build engine (e.g. claude-code, codex, pi-mono)')
+  .option('--build-provider <provider>', 'Build provider/auth route (e.g. claude subscription, codex subscription, openai API)')
+  .option('--task-review-engine <engine>', 'Per-task review engine')
+  .option('--task-review-provider <provider>', 'Per-task review provider/auth route')
+  .option('--task-review-model-id <id>', 'Provider-native per-task review model ID')
+  .option('--task-review-effort <level>', 'Per-task review effort: low|medium|high|max')
+  .option('--run-review-engine <engine>', 'Holistic run-review engine')
+  .option('--run-review-provider <provider>', 'Holistic run-review provider/auth route')
+  .option('--run-review-model-id <id>', 'Provider-native run-review model ID')
+  .option('--run-review-effort <level>', 'Holistic run-review effort: low|medium|high|max')
   .option('--parallel', 'Enable parallel execution')
   .option('--max-parallel <n>', 'Max parallel tasks', parseInt)
   .option('--no-validate', 'Skip validation')
@@ -198,31 +198,31 @@ export const runCommand = new Command('run')
   .option('--heartbeat-interval <seconds>', 'Write status.json to run dir every N seconds during execution', parseInt)
   .option('--non-interactive', 'Skip all interactive prompts — requires explicit model flags, exits when run completes')
   .option('--agent-output', 'Emit structured plain-text lines (no ANSI, no emoji) — auto-enabled with --non-interactive')
-  .option('--effort <level>', 'Thinking effort for execution tasks: low|medium|high|max (high/max enable extended thinking; max requires opus)')
+  .option('--build-effort <level>', 'Thinking effort for build tasks: low|medium|high|max (high/max enable extended thinking; max requires opus)')
   .option('--keel-slug <slug>', 'Keel project slug to write outcomes back to')
   .option('--keel-task <id>', 'Keel task ID to update on completion')
   .action(
     async (opts: {
       model?: string;
-      planningModel?: string;
-      executionModel?: string;
-      executionModelId?: string;
+      planModel?: string;
+      buildModel?: string;
+      buildModelId?: string;
       taskReviewModel?: string;
       qualityReviewModel?: string;
-      planningEngine?: string;
-      planningProvider?: string;
-      planningModelId?: string;
-      planningEffort?: string;
-      engine?: string;
-      provider?: string;
-      validationEngine?: string;
-      validationProvider?: string;
-      validationModelId?: string;
-      validationEffort?: string;
-      reviewEngine?: string;
-      reviewProvider?: string;
-      reviewModelId?: string;
-      reviewEffort?: string;
+      planEngine?: string;
+      planProvider?: string;
+      planModelId?: string;
+      planEffort?: string;
+      buildEngine?: string;
+      buildProvider?: string;
+      taskReviewEngine?: string;
+      taskReviewProvider?: string;
+      taskReviewModelId?: string;
+      taskReviewEffort?: string;
+      runReviewEngine?: string;
+      runReviewProvider?: string;
+      runReviewModelId?: string;
+      runReviewEffort?: string;
       modelAuto?: boolean;
       parallel?: boolean;
       maxParallel?: number;
@@ -241,7 +241,7 @@ export const runCommand = new Command('run')
       nonInteractive?: boolean;
       agentOutput?: boolean;
       worktrees?: boolean;
-      effort?: string;
+      buildEffort?: string;
       keelSlug?: string;
       keelTask?: string;
     }) => {
@@ -255,7 +255,7 @@ export const runCommand = new Command('run')
       }
       if (isNonInteractive) {
         const missing: string[] = [];
-        if (!opts.executionModel && !opts.model) missing.push('--execution-model');
+        if (!opts.buildModel && !opts.model) missing.push('--build-model');
         if (!opts.taskReviewModel && !opts.model) missing.push('--task-review-model');
         if (!opts.runReviewModel) missing.push('--run-review-model');
         if (missing.length > 0) {
@@ -287,22 +287,22 @@ export const runCommand = new Command('run')
       // Apply planning/review/runtime overrides before any on-the-fly planning.
       config.models = mergeModelConfig(config.models, {
         model: opts.model ? parseModelFlag(opts.model) : undefined,
-        planningModel: opts.planningModel
-          ? parseModelFlag(opts.planningModel)
+        planningModel: opts.planModel
+          ? parseModelFlag(opts.planModel)
           : undefined,
       });
-      if (opts.planningEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planningEngine as typeof config.engine };
-      if (opts.planningProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planningProvider };
-      if (opts.planningModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planningModelId };
-      if (opts.planningEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planningEffort as any };
-      if (opts.validationEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.validationEngine as typeof config.engine };
-      if (opts.validationProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.validationProvider };
-      if (opts.validationModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.validationModelId };
-      if (opts.validationEffort) config.validationRuntime = { ...config.validationRuntime, effort: opts.validationEffort as any };
-      if (opts.reviewEngine) config.reviewRuntime = { ...config.reviewRuntime, engine: opts.reviewEngine as typeof config.engine };
-      if (opts.reviewProvider) config.reviewRuntime = { ...config.reviewRuntime, provider: opts.reviewProvider };
-      if (opts.reviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.reviewModelId };
-      if (opts.reviewEffort) config.reviewRuntime = { ...config.reviewRuntime, effort: opts.reviewEffort as any };
+      if (opts.planEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planEngine as typeof config.engine };
+      if (opts.planProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planProvider };
+      if (opts.planModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planModelId };
+      if (opts.planEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planEffort as any };
+      if (opts.taskReviewEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.taskReviewEngine as typeof config.engine };
+      if (opts.taskReviewProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.taskReviewProvider };
+      if (opts.taskReviewModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.taskReviewModelId };
+      if (opts.taskReviewEffort) config.validationRuntime = { ...config.validationRuntime, effort: opts.taskReviewEffort as any };
+      if (opts.runReviewEngine) config.reviewRuntime = { ...config.reviewRuntime, engine: opts.runReviewEngine as typeof config.engine };
+      if (opts.runReviewProvider) config.reviewRuntime = { ...config.reviewRuntime, provider: opts.runReviewProvider };
+      if (opts.runReviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.runReviewModelId };
+      if (opts.runReviewEffort) config.reviewRuntime = { ...config.reviewRuntime, effort: opts.runReviewEffort as any };
 
       // ── Interactive model selection (when not provided via flags) ────────────
       const MODEL_OPTIONS = [
@@ -311,7 +311,7 @@ export const runCommand = new Command('run')
         { value: 'opus',   label: 'opus',   hint: 'most capable' },
       ];
 
-      if (!isNonInteractive && !opts.model && !opts.executionModel && !opts.goal) {
+      if (!isNonInteractive && !opts.model && !opts.buildModel && !opts.goal) {
         const projectName = path.basename(cwd);
         p.intro(`${c(cyan + bold, '☁️  cloudy build')}  ${c(bold, projectName)}`);
 
@@ -321,7 +321,7 @@ export const runCommand = new Command('run')
           initialValue: config.models.execution ?? 'sonnet',
         });
         if (p.isCancel(execModel)) { p.cancel('Cancelled.'); process.exit(0); }
-        opts.executionModel = execModel as string;
+        opts.buildModel = execModel as string;
 
         if (!opts.taskReviewModel) {
           const valModel = await p.select({
@@ -385,11 +385,11 @@ export const runCommand = new Command('run')
       // Apply model overrides
       config.models = mergeModelConfig(config.models, {
         model: opts.model ? parseModelFlag(opts.model) : undefined,
-        planningModel: opts.planningModel
-          ? parseModelFlag(opts.planningModel)
+        planningModel: opts.planModel
+          ? parseModelFlag(opts.planModel)
           : undefined,
-        executionModel: opts.executionModel
-          ? parseModelFlag(opts.executionModel)
+        executionModel: opts.buildModel
+          ? parseModelFlag(opts.buildModel)
           : undefined,
         taskReviewModel: opts.taskReviewModel
           ? parseModelFlag(opts.taskReviewModel)
@@ -400,25 +400,25 @@ export const runCommand = new Command('run')
       });
 
       if (opts.modelAuto) config.autoModelRouting = true;
-      if (opts.engine) config.engine = opts.engine as typeof config.engine;
-      if (opts.provider) config.provider = opts.provider;
-      if (opts.executionModelId) config.executionModelId = opts.executionModelId;
-      if (opts.planningEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planningEngine as typeof config.engine };
-      if (opts.planningProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planningProvider };
-      if (opts.planningModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planningModelId };
-      if (opts.planningEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planningEffort as any };
-      if (opts.validationEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.validationEngine as typeof config.engine };
-      if (opts.validationProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.validationProvider };
-      if (opts.validationModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.validationModelId };
-      if (opts.validationEffort) config.validationRuntime = { ...config.validationRuntime, effort: opts.validationEffort as any };
-      if (opts.reviewEngine) config.reviewRuntime = { ...config.reviewRuntime, engine: opts.reviewEngine as typeof config.engine };
-      if (opts.reviewProvider) config.reviewRuntime = { ...config.reviewRuntime, provider: opts.reviewProvider };
-      if (opts.reviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.reviewModelId };
-      if (opts.reviewEffort) config.reviewRuntime = { ...config.reviewRuntime, effort: opts.reviewEffort as any };
+      if (opts.buildEngine) config.engine = opts.buildEngine as typeof config.engine;
+      if (opts.buildProvider) config.provider = opts.buildProvider;
+      if (opts.buildModelId) config.executionModelId = opts.buildModelId;
+      if (opts.planEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planEngine as typeof config.engine };
+      if (opts.planProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planProvider };
+      if (opts.planModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planModelId };
+      if (opts.planEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planEffort as any };
+      if (opts.taskReviewEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.taskReviewEngine as typeof config.engine };
+      if (opts.taskReviewProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.taskReviewProvider };
+      if (opts.taskReviewModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.taskReviewModelId };
+      if (opts.taskReviewEffort) config.validationRuntime = { ...config.validationRuntime, effort: opts.taskReviewEffort as any };
+      if (opts.runReviewEngine) config.reviewRuntime = { ...config.reviewRuntime, engine: opts.runReviewEngine as typeof config.engine };
+      if (opts.runReviewProvider) config.reviewRuntime = { ...config.reviewRuntime, provider: opts.runReviewProvider };
+      if (opts.runReviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.runReviewModelId };
+      if (opts.runReviewEffort) config.reviewRuntime = { ...config.reviewRuntime, effort: opts.runReviewEffort as any };
       if (opts.parallel) config.parallel = true;
       if (opts.maxParallel) config.maxParallel = opts.maxParallel;
       if (opts.worktrees) config.worktrees = true;
-      if (opts.effort) config.executionEffort = opts.effort as typeof config.executionEffort;
+      if (opts.buildEffort) config.executionEffort = opts.buildEffort as typeof config.executionEffort;
       if (opts.maxRetries !== undefined) config.maxRetries = opts.maxRetries;
       if (!opts.dashboard) config.dashboard = false; // --no-dashboard for headless CI
 
