@@ -1,0 +1,17 @@
+{
+  "id": "T-008",
+  "title": "Operator quality views in run history and dashboard",
+  "description": "Expose quality verdicts, proof completeness, and residual risk in Cloudy's history and dashboard surfaces.",
+  "wave": "wave-3",
+  "product": "cloudy",
+  "lane": "dashboard",
+  "space": "space-dashboard",
+  "status": "planned",
+  "priority": "medium",
+  "assignee": null,
+  "depends_on": ["T-001", "T-004"],
+  "spec": "/Users/luke/dev/cloudy/keel/specs/quality/T-008.md",
+  "notes": [],
+  "createdAt": "2026-03-16T14:45:00.000Z",
+  "updatedAt": "2026-03-16T14:45:00.000Z"
+}

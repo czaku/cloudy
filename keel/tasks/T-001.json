@@ -1,0 +1,19 @@
+{
+  "id": "T-001",
+  "title": "Structured end-of-run assessment",
+  "description": "Write assessment.json and richer Keel notes so Cloudy records what happened, what passed, what proof exists, and what is still risky.",
+  "wave": "wave-1",
+  "product": "cloudy",
+  "lane": "backend",
+  "space": "space-backend",
+  "status": "active",
+  "priority": "critical",
+  "assignee": "codex",
+  "depends_on": [],
+  "spec": "/Users/luke/dev/cloudy/keel/specs/quality/T-001.md",
+  "notes": [
+    "Started from the overnight aiyayai acceptance drift: Cloudy wrote a shallow successful note, but Keel and QA diverged."
+  ],
+  "createdAt": "2026-03-16T14:45:00.000Z",
+  "updatedAt": "2026-03-16T14:45:00.000Z"
+}

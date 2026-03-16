@@ -1,0 +1,26 @@
+{
+  "schema": 1,
+  "slug": "cloudy",
+  "name": "cloudy",
+  "path": "/Users/luke/dev/cloudy",
+  "products": [
+    {
+      "id": "cloudy",
+      "name": "cloudy",
+      "role": "primary product"
+    }
+  ],
+  "stack": {
+    "platforms": ["cli", "dashboard", "daemon"],
+    "languages": ["typescript"],
+    "frameworks": ["commander", "ink", "react", "esbuild"]
+  },
+  "integrations": {
+    "cloudy": true,
+    "keel": true,
+    "fed": true,
+    "playwright": false
+  },
+  "createdAt": "2026-03-16T14:45:00.000Z",
+  "updatedAt": "2026-03-16T14:45:00.000Z"
+}

@@ -1,0 +1,55 @@
+{
+  "waves": [
+    {
+      "id": "wave-1",
+      "name": "Run Truth & Quality Gates",
+      "goal": "Make Cloudy produce trustworthy task outcomes instead of shallow success summaries.",
+      "status": "active",
+      "target": "2026-Q1",
+      "gates": [
+        "Every run produces a structured assessment artifact",
+        "Keel write-back includes evidence, checks, and risks instead of a one-line summary",
+        "Task close-out distinguishes review-ready from truly accepted",
+        "Acceptance drift between Keel and docs can be detected before closure"
+      ],
+      "checkpoints": [
+        "T-001 active",
+        "T-002 planned",
+        "T-003 planned",
+        "T-004 planned"
+      ]
+    },
+    {
+      "id": "wave-2",
+      "name": "Scheduler, Lanes, And Watchdog Discipline",
+      "goal": "Make cron-driven Cloudy runs safe, lane-aware, and self-monitoring.",
+      "status": "planned",
+      "target": "2026-Q2",
+      "gates": [
+        "Watchdog loop can detect stuck or silent runs",
+        "Lane and product metadata are enforced enough to prevent common collisions",
+        "Cloudy can trigger the next ready task only when the queue state is trustworthy"
+      ],
+      "checkpoints": [
+        "T-005 planned",
+        "T-006 planned",
+        "T-007 planned"
+      ]
+    },
+    {
+      "id": "wave-3",
+      "name": "Operator Visibility",
+      "goal": "Make run history, dashboard views, and review state expose the real quality of a run.",
+      "status": "planned",
+      "target": "2026-Q2",
+      "gates": [
+        "Run history exposes quality verdict, proof completeness, and risks",
+        "Dashboard surfaces review-ready vs accepted state clearly",
+        "Operators can see which runs are green, yellow, or red and why"
+      ],
+      "checkpoints": [
+        "T-008 planned"
+      ]
+    }
+  ]
+}

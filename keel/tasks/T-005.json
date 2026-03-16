@@ -1,0 +1,17 @@
+{
+  "id": "T-005",
+  "title": "Lane collision detection",
+  "description": "Use lane and product metadata to block or warn on obviously unsafe parallel Cloudy runs.",
+  "wave": "wave-2",
+  "product": "cloudy",
+  "lane": "ops",
+  "space": "space-ops",
+  "status": "planned",
+  "priority": "high",
+  "assignee": null,
+  "depends_on": ["T-004"],
+  "spec": "/Users/luke/dev/cloudy/keel/specs/quality/T-005.md",
+  "notes": [],
+  "createdAt": "2026-03-16T14:45:00.000Z",
+  "updatedAt": "2026-03-16T14:45:00.000Z"
+}

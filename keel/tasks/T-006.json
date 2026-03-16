@@ -1,0 +1,17 @@
+{
+  "id": "T-006",
+  "title": "Cron watchdog and stuck-run control loop",
+  "description": "Add a watchdog loop that inspects active runs, marks stuck runs, and launches the next safe run when no active run exists.",
+  "wave": "wave-2",
+  "product": "cloudy",
+  "lane": "ops",
+  "space": "space-ops",
+  "status": "planned",
+  "priority": "critical",
+  "assignee": null,
+  "depends_on": ["T-004", "T-005"],
+  "spec": "/Users/luke/dev/cloudy/keel/specs/quality/T-006.md",
+  "notes": [],
+  "createdAt": "2026-03-16T14:45:00.000Z",
+  "updatedAt": "2026-03-16T14:45:00.000Z"
+}

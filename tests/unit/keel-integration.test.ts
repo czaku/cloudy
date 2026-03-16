@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'node:fs/promises';
 
 const logInfo = vi.fn(async () => {});
 const logWarn = vi.fn(async () => {});
@@ -31,9 +32,21 @@ describe('keel integration', () => {
 
     const { writeRunOutcome } = await import('../../src/integrations/keel.js');
 
+    await fs.mkdir('/tmp/project/.cloudy/runs/run-20260314-fitkind', { recursive: true });
+    await fs.writeFile(
+      '/tmp/project/.cloudy/runs/run-20260314-fitkind/review.json',
+      JSON.stringify({ verdict: 'PASS_WITH_NOTES', issues: [{ severity: 'major', description: 'Needs one more acceptance pass' }] }),
+      'utf-8',
+    );
+    await fs.writeFile(
+      '/tmp/project/.cloudy/runs/run-20260314-fitkind/verification.json',
+      JSON.stringify({ checks: [{ command: 'bun run test', passed: true }, { command: 'bun run build', passed: false }] }),
+      'utf-8',
+    );
+
     await writeRunOutcome(
       { slug: 'fitkind', taskId: 'T-123', port: 7842 },
-      { success: true, tasksDone: 4, tasksFailed: 0, costUsd: 1.23, durationMs: 65000 },
+      { success: true, tasksDone: 4, tasksFailed: 0, costUsd: 1.23, durationMs: 65000, filesTouched: ['src/foo.ts'], artifactsProduced: ['docs/proof.md'] },
       '/tmp/project',
     );
 
@@ -58,9 +71,13 @@ describe('keel integration', () => {
       'http://127.0.0.1:7842/api/projects/fitkind/tasks/T-123/notes',
       expect.objectContaining({
         method: 'POST',
-        body: expect.stringContaining('Cloudy run run-20260314-fitkind completed successfully.'),
+        body: expect.stringContaining('Quality verdict: yellow'),
       }),
     );
+    const assessment = JSON.parse(await fs.readFile('/tmp/project/.cloudy/runs/run-20260314-fitkind/assessment.json', 'utf-8'));
+    expect(assessment.acceptanceStatus).toBe('needs_review');
+    expect(assessment.checksPassed).toContain('bun run test');
+    expect(assessment.checksFailed).toContain('bun run build');
     expect(logInfo).toHaveBeenCalledWith(expect.stringContaining('Updated fitkind/T-123'));
   });
 

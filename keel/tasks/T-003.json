@@ -1,0 +1,17 @@
+{
+  "id": "T-003",
+  "title": "Acceptance reconciliation before close-out",
+  "description": "Detect contradictions between task state and repo acceptance docs before Cloudy writes a final success result.",
+  "wave": "wave-1",
+  "product": "cloudy",
+  "lane": "backend",
+  "space": "space-backend",
+  "status": "planned",
+  "priority": "high",
+  "assignee": null,
+  "depends_on": ["T-001"],
+  "spec": "/Users/luke/dev/cloudy/keel/specs/quality/T-003.md",
+  "notes": [],
+  "createdAt": "2026-03-16T14:45:00.000Z",
+  "updatedAt": "2026-03-16T14:45:00.000Z"
+}

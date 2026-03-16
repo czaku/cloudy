@@ -27,7 +27,7 @@ function formatDuration(ms: number): string {
 }
 
 function summarizeKeelOutcome(
-  tasks: Array<{ status: string }>,
+  tasks: Array<{ status: string; filesWritten?: string[]; outputArtifacts?: string[] }>,
   state: { costSummary: { totalEstimatedUsd: number }; startedAt?: string },
   opts: { keelSlug?: string; keelTask?: string },
   config: { keel?: { slug: string; taskId?: string; port?: number }; review: { failBlocksRun?: boolean } },
@@ -63,6 +63,13 @@ function summarizeKeelOutcome(
       topError,
       costUsd: state.costSummary.totalEstimatedUsd,
       durationMs: state.startedAt ? Date.now() - new Date(state.startedAt).getTime() : 0,
+      reviewVerdict,
+      filesTouched: [...new Set(tasks.flatMap((task) => task.filesWritten ?? []))].sort(),
+      artifactsProduced: [...new Set(
+        tasks
+          .filter((task) => task.status === 'completed')
+          .flatMap((task) => task.outputArtifacts ?? []),
+      )].sort(),
     },
   };
 }

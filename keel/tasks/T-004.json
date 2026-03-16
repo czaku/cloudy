@@ -1,0 +1,17 @@
+{
+  "id": "T-004",
+  "title": "Review-ready Keel write-back semantics",
+  "description": "Separate execution success from accepted completion so Cloudy can write review-ready states without always marking tasks done.",
+  "wave": "wave-1",
+  "product": "cloudy",
+  "lane": "backend",
+  "space": "space-backend",
+  "status": "planned",
+  "priority": "high",
+  "assignee": null,
+  "depends_on": ["T-001", "T-002", "T-003"],
+  "spec": "/Users/luke/dev/cloudy/keel/specs/quality/T-004.md",
+  "notes": [],
+  "createdAt": "2026-03-16T14:45:00.000Z",
+  "updatedAt": "2026-03-16T14:45:00.000Z"
+}

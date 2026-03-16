@@ -1,0 +1,17 @@
+{
+  "id": "T-007",
+  "title": "Preflight baseline separation in run assessments",
+  "description": "Record what was already broken before execution so Cloudy does not blame the task for baseline failures.",
+  "wave": "wave-2",
+  "product": "cloudy",
+  "lane": "backend",
+  "space": "space-backend",
+  "status": "planned",
+  "priority": "medium",
+  "assignee": null,
+  "depends_on": ["T-001"],
+  "spec": "/Users/luke/dev/cloudy/keel/specs/quality/T-007.md",
+  "notes": [],
+  "createdAt": "2026-03-16T14:45:00.000Z",
+  "updatedAt": "2026-03-16T14:45:00.000Z"
+}

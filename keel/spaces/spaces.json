@@ -1,0 +1,28 @@
+{
+  "spaces": [
+    {
+      "id": "space-backend",
+      "name": "Backend",
+      "description": "Core run loop, planner, validator, write-back, and daemon logic",
+      "icon": "○",
+      "platforms": [],
+      "createdAt": "2026-03-16T14:45:00.000Z"
+    },
+    {
+      "id": "space-dashboard",
+      "name": "Dashboard",
+      "description": "Run history, dashboard state, and operator-facing quality visibility",
+      "icon": "○",
+      "platforms": [],
+      "createdAt": "2026-03-16T14:45:00.000Z"
+    },
+    {
+      "id": "space-ops",
+      "name": "Ops",
+      "description": "Cron watchdog, scheduling, and multi-agent operating model",
+      "icon": "○",
+      "platforms": [],
+      "createdAt": "2026-03-16T14:45:00.000Z"
+    }
+  ]
+}
