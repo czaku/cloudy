@@ -435,6 +435,7 @@ export class Orchestrator {
         prompt,
         engine: this.config.engine,
         provider: this.config.provider,
+        accountId: this.config.executionAccountId,
         claudeModel: this.config.models.execution,
         modelId: this.config.executionModelId,
         effort: this.config.executionEffort,
@@ -550,6 +551,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
         provider: reviewRuntime.provider,
         modelId: reviewRuntime.modelId,
         effort: reviewRuntime.effort,
+        accountId: reviewRuntime.accountId,
         taskType: 'review',
       });
       if (result.success && result.output?.trim()) {
@@ -874,6 +876,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           prompt,
           engine,
           provider,
+          accountId: this.config.executionAccountId,
           modelId: this.config.executionModelId,
           claudeModel: executionModel,
           effort: this.config.executionEffort,

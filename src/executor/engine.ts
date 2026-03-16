@@ -7,6 +7,7 @@ export interface EngineRunOptions {
   prompt: string;
   engine?: Engine;
   provider?: Provider;
+  accountId?: string;
   claudeModel?: ClaudeModel;
   modelId?: string;
   cwd: string;
@@ -26,6 +27,7 @@ export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunRes
     prompt,
     engine,
     provider,
+    accountId,
     claudeModel,
     modelId,
     cwd,
@@ -49,6 +51,7 @@ export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunRes
     prompt,
     engine: engine ?? 'claude-code',
     provider,
+    accountId,
     modelId: resolvedModelId,
     cwd,
     onOutput,

@@ -107,6 +107,9 @@ export const pipelineCommand = new Command('chain')
   .option('--build-effort <level>', 'Build effort for all phases: low|medium|high|max')
   .option('--keel-slug <slug>', 'Keel project slug to write outcomes back to')
   .option('--keel-task <id>', 'Keel task ID to read runtime defaults from and update on completion')
+  .option('--plan-account-id <id>', 'Plan provider account/profile ID from omnai estate for all phases')
+  .option('--task-review-account-id <id>', 'Per-task review provider account/profile ID from omnai estate for all phases')
+  .option('--run-review-account-id <id>', 'Holistic run-review provider account/profile ID from omnai estate for all phases')
   .option('--no-auto-fix', 'Disable automatic fix-task generation from review notes')
   .option('--verbose', 'Pass --verbose to each run')
   .option('--heartbeat-interval <seconds>', 'Write status.json every N seconds during each phase', parseInt)
@@ -133,6 +136,9 @@ export const pipelineCommand = new Command('chain')
     buildEffort?: string;
     keelSlug?: string;
     keelTask?: string;
+    planAccountId?: string;
+    taskReviewAccountId?: string;
+    runReviewAccountId?: string;
     autoFix?: boolean;
     verbose?: boolean;
     heartbeatInterval?: number;
@@ -156,6 +162,9 @@ export const pipelineCommand = new Command('chain')
     if (opts.runReviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.runReviewModelId };
     if (opts.runReviewEffort) config.reviewRuntime = { ...config.reviewRuntime, effort: opts.runReviewEffort as any };
     if (opts.buildEffort) config.executionEffort = opts.buildEffort as typeof config.executionEffort;
+    if (opts.planAccountId) config.planningRuntime = { ...config.planningRuntime, accountId: opts.planAccountId };
+    if (opts.taskReviewAccountId) config.validationRuntime = { ...config.validationRuntime, accountId: opts.taskReviewAccountId };
+    if (opts.runReviewAccountId) config.reviewRuntime = { ...config.reviewRuntime, accountId: opts.runReviewAccountId };
 
     if (opts.spec.length === 0) {
       console.error(c(red, '✖  --spec required (repeatable): cloudy chain --spec p1.md --spec p2.md'));
@@ -234,6 +243,7 @@ export const pipelineCommand = new Command('chain')
           ...(config.planningRuntime?.provider ? ['--plan-provider', config.planningRuntime.provider] : []),
           ...(config.planningRuntime?.modelId ? ['--plan-model-id', config.planningRuntime.modelId] : []),
           ...(config.planningRuntime?.effort ? ['--plan-effort', config.planningRuntime.effort] : []),
+          ...(config.planningRuntime?.accountId ? ['--plan-account-id', config.planningRuntime.accountId] : []),
           '--run-name', runName,
         ], {
           stdio: 'inherit',
@@ -283,14 +293,17 @@ export const pipelineCommand = new Command('chain')
         ...(config.engine ? ['--build-engine', config.engine] : []),
         ...(config.provider ? ['--build-provider', config.provider] : []),
         ...(config.executionModelId ? ['--build-model-id', config.executionModelId] : []),
+        ...(config.executionAccountId ? ['--build-account-id', config.executionAccountId] : []),
         ...(config.validationRuntime?.engine ? ['--task-review-engine', config.validationRuntime.engine] : []),
         ...(config.validationRuntime?.provider ? ['--task-review-provider', config.validationRuntime.provider] : []),
         ...(config.validationRuntime?.modelId ? ['--task-review-model-id', config.validationRuntime.modelId] : []),
         ...(config.validationRuntime?.effort ? ['--task-review-effort', config.validationRuntime.effort] : []),
+        ...(config.validationRuntime?.accountId ? ['--task-review-account-id', config.validationRuntime.accountId] : []),
         ...(config.reviewRuntime?.engine ? ['--run-review-engine', config.reviewRuntime.engine] : []),
         ...(config.reviewRuntime?.provider ? ['--run-review-provider', config.reviewRuntime.provider] : []),
         ...(config.reviewRuntime?.modelId ? ['--run-review-model-id', config.reviewRuntime.modelId] : []),
         ...(config.reviewRuntime?.effort ? ['--run-review-effort', config.reviewRuntime.effort] : []),
+        ...(config.reviewRuntime?.accountId ? ['--run-review-account-id', config.reviewRuntime.accountId] : []),
         ...(opts.keelSlug ?? config.keel?.slug ? ['--keel-slug', opts.keelSlug ?? config.keel?.slug ?? ''] : []),
         ...(opts.keelTask ?? config.keel?.taskId ? ['--keel-task', opts.keelTask ?? config.keel?.taskId ?? ''] : []),
       ];

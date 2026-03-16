@@ -176,16 +176,20 @@ export const runCommand = new Command('run')
   .option('--plan-provider <provider>', 'Plan provider/auth route (e.g. claude subscription, codex subscription, openai API)')
   .option('--plan-model-id <id>', 'Provider-native plan model ID')
   .option('--plan-effort <level>', 'Plan effort: low|medium|high|max')
+  .option('--plan-account-id <id>', 'Plan provider account/profile ID from omnai estate')
   .option('--build-engine <engine>', 'Build engine (e.g. claude-code, codex, pi-mono)')
   .option('--build-provider <provider>', 'Build provider/auth route (e.g. claude subscription, codex subscription, openai API)')
+  .option('--build-account-id <id>', 'Build provider account/profile ID from omnai estate')
   .option('--task-review-engine <engine>', 'Per-task review engine')
   .option('--task-review-provider <provider>', 'Per-task review provider/auth route')
   .option('--task-review-model-id <id>', 'Provider-native per-task review model ID')
   .option('--task-review-effort <level>', 'Per-task review effort: low|medium|high|max')
+  .option('--task-review-account-id <id>', 'Per-task review provider account/profile ID from omnai estate')
   .option('--run-review-engine <engine>', 'Holistic run-review engine')
   .option('--run-review-provider <provider>', 'Holistic run-review provider/auth route')
   .option('--run-review-model-id <id>', 'Provider-native run-review model ID')
   .option('--run-review-effort <level>', 'Holistic run-review effort: low|medium|high|max')
+  .option('--run-review-account-id <id>', 'Holistic run-review provider account/profile ID from omnai estate')
   .option('--parallel', 'Enable parallel execution')
   .option('--max-parallel <n>', 'Max parallel tasks', parseInt)
   .option('--no-validate', 'Skip validation')
@@ -220,16 +224,20 @@ export const runCommand = new Command('run')
       planProvider?: string;
       planModelId?: string;
       planEffort?: string;
+      planAccountId?: string;
       buildEngine?: string;
       buildProvider?: string;
+      buildAccountId?: string;
       taskReviewEngine?: string;
       taskReviewProvider?: string;
       taskReviewModelId?: string;
       taskReviewEffort?: string;
+      taskReviewAccountId?: string;
       runReviewEngine?: string;
       runReviewProvider?: string;
       runReviewModelId?: string;
       runReviewEffort?: string;
+      runReviewAccountId?: string;
       modelAuto?: boolean;
       parallel?: boolean;
       maxParallel?: number;
@@ -302,14 +310,20 @@ export const runCommand = new Command('run')
       if (opts.planProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planProvider };
       if (opts.planModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planModelId };
       if (opts.planEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planEffort as any };
+      if (opts.planAccountId) config.planningRuntime = { ...config.planningRuntime, accountId: opts.planAccountId };
+      if (opts.buildEngine) config.engine = opts.buildEngine as typeof config.engine;
+      if (opts.buildProvider) config.provider = opts.buildProvider;
+      if (opts.buildAccountId) config.executionAccountId = opts.buildAccountId;
       if (opts.taskReviewEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.taskReviewEngine as typeof config.engine };
       if (opts.taskReviewProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.taskReviewProvider };
       if (opts.taskReviewModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.taskReviewModelId };
       if (opts.taskReviewEffort) config.validationRuntime = { ...config.validationRuntime, effort: opts.taskReviewEffort as any };
+      if (opts.taskReviewAccountId) config.validationRuntime = { ...config.validationRuntime, accountId: opts.taskReviewAccountId };
       if (opts.runReviewEngine) config.reviewRuntime = { ...config.reviewRuntime, engine: opts.runReviewEngine as typeof config.engine };
       if (opts.runReviewProvider) config.reviewRuntime = { ...config.reviewRuntime, provider: opts.runReviewProvider };
       if (opts.runReviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.runReviewModelId };
       if (opts.runReviewEffort) config.reviewRuntime = { ...config.reviewRuntime, effort: opts.runReviewEffort as any };
+      if (opts.runReviewAccountId) config.reviewRuntime = { ...config.reviewRuntime, accountId: opts.runReviewAccountId };
 
       // ── Interactive model selection (when not provided via flags) ────────────
       const MODEL_OPTIONS = [

@@ -39,6 +39,8 @@ export interface AbstractModelRunOptions extends ClaudeRunOptions {
   engine?: Engine;
   provider?: Provider;
   modelId?: string;
+  accountId?: string;
+  configDir?: string;
   taskType?: 'coding' | 'analysis' | 'planning' | 'review' | 'chat' | 'research';
 }
 
@@ -48,6 +50,8 @@ export interface OmnaiRunOptions {
   engine?: Engine;
   provider?: Provider;
   modelId?: string;
+  accountId?: string;
+  configDir?: string;
   onOutput?: (text: string) => void;
   onToolUse?: (toolName: string, toolInput: unknown) => void;
   onFilesWritten?: (paths: string[]) => void;
@@ -81,6 +85,53 @@ function rewritePromptForWorktree(prompt: string, cwd: string): string {
     .replace(new RegExp(`${escapedMainRepo}/`, 'g'), '');
 }
 
+async function resolveRuntimeAccount(options: {
+  engine?: Engine;
+  provider?: Provider;
+  accountId?: string;
+  configDir?: string;
+}): Promise<{ engine?: Engine; provider?: Provider; env?: Record<string, string> }> {
+  let resolvedEngine = options.engine;
+  let resolvedProvider = options.provider;
+  let resolvedConfigDir = options.configDir;
+
+  if (options.accountId && !resolvedConfigDir) {
+    try {
+      const { OmnaiClient, loadEstate } = await import('omnai');
+      const client = new OmnaiClient();
+      const estate = await client.getEstate().catch(() => loadEstate());
+      const account = estate.accounts?.[options.accountId];
+      if (account) {
+        resolvedEngine = resolvedEngine ?? (account.engine as Engine);
+        resolvedProvider = resolvedProvider ?? (account.provider as Provider);
+        if (typeof account.configDir === 'string' && account.configDir.trim()) {
+          resolvedConfigDir = account.configDir;
+        }
+      }
+    } catch {
+      // Ignore estate lookup failures; direct engine/provider selection still works.
+    }
+  }
+
+  if (!resolvedConfigDir) {
+    return { engine: resolvedEngine, provider: resolvedProvider };
+  }
+
+  const env: Record<string, string> = {};
+  if (resolvedEngine === 'claude-code' || resolvedProvider === 'claude') {
+    env.CLAUDE_CONFIG_DIR = resolvedConfigDir;
+  }
+  if (resolvedEngine === 'codex' || resolvedProvider === 'codex') {
+    env.CODEX_HOME = resolvedConfigDir;
+  }
+
+  return {
+    engine: resolvedEngine,
+    provider: resolvedProvider,
+    env: Object.keys(env).length > 0 ? env : undefined,
+  };
+}
+
 export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResult> {
   const {
     prompt,
@@ -88,6 +139,8 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
     engine,
     provider,
     modelId,
+    accountId,
+    configDir,
     onOutput,
     onToolUse,
     onFilesWritten,
@@ -100,9 +153,17 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
     taskType,
   } = options;
 
-  const runner = await selectViaDaemon({
-    provider,
+  const runtime = await resolveRuntimeAccount({
     engine,
+    provider,
+    accountId,
+    configDir,
+  });
+
+  const runner = await selectViaDaemon({
+    provider: runtime.provider,
+    engine: runtime.engine,
+    account: accountId,
     taskType: taskType ?? 'coding',
   });
   const rewrittenPrompt = rewritePromptForWorktree(prompt, cwd);
@@ -207,6 +268,8 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
     maxBudgetUsd,
     effort,
     thinking,
+    account: accountId,
+    env: runtime.env,
   };
 
   if (runner.engine === 'claude-code') {
@@ -308,6 +371,8 @@ export async function runAbstractModel(
     engine: options.engine ?? 'claude-code',
     provider: options.provider ?? 'claude',
     modelId: resolvedModelId,
+    accountId: options.accountId,
+    configDir: options.configDir,
     onOutput: options.onOutput,
     onToolUse: options.onToolUse,
     onFilesWritten: options.onFilesWritten,
@@ -322,3 +387,4 @@ export async function runAbstractModel(
 }
 
 export const runPhaseModel = runAbstractModel;
+export { resolveRuntimeAccount };

@@ -185,6 +185,7 @@ export const initCommand = new Command('plan')
   .option('--plan-provider <provider>', 'Plan provider/auth route (e.g. claude subscription, codex subscription, openai API)')
   .option('--plan-model-id <id>', 'Provider-native plan model ID')
   .option('--plan-effort <level>', 'Plan effort: low|medium|high|max')
+  .option('--plan-account-id <id>', 'Plan provider account/profile ID from omnai estate')
   .option('--spec <file>', 'Spec/PRD file (repeatable: --spec A --spec B)', (v: string, prev: string[]) => [...prev, v], [] as string[])
   .option('--no-review', 'Auto-approve the generated plan without interactive review')
   .option('--yes', 'Skip "Run now?" confirmation and proceed automatically')
@@ -200,6 +201,7 @@ export const initCommand = new Command('plan')
     planProvider?: string;
     planModelId?: string;
     planEffort?: string;
+    planAccountId?: string;
     spec: string[];
     review: boolean;
     verbose?: boolean;
@@ -228,6 +230,7 @@ export const initCommand = new Command('plan')
     if (opts.planProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planProvider };
     if (opts.planModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planModelId };
     if (opts.planEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planEffort as any };
+    if (opts.planAccountId) config.planningRuntime = { ...config.planningRuntime, accountId: opts.planAccountId };
 
     // ── Spec file(s) ──────────────────────────────────────────────────────────
     let specContent: string | undefined;
