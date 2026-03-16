@@ -884,14 +884,21 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
             logTaskOutput(task.id, text, this.cwd).catch(() => {});
           },
           onToolUse: (toolName, toolInput) => {
+            _lastOutputMs = Date.now(); // tool activity means the runtime is alive
             this.onEvent({ type: 'task_tool_call', taskId: task.id, toolName, toolInput });
+            logTaskOutput(task.id, `[tool] ${toolName}`, this.cwd).catch(() => {});
           },
           onToolResult: (toolName, content, isError) => {
+            _lastOutputMs = Date.now(); // tool results also count as progress
             this.onEvent({ type: 'task_tool_result', taskId: task.id, toolName, content, isError });
+            const prefix = isError ? `[tool-error] ${toolName}: ` : `[tool-result] ${toolName}: `;
+            logTaskOutput(task.id, `${prefix}${content.slice(0, 500)}`, this.cwd).catch(() => {});
           },
           onFilesWritten: (paths) => {
+            _lastOutputMs = Date.now(); // file writes prove the task is moving
             // Real-time file tracking from PostToolUse hooks
             task.filesWritten = [...(task.filesWritten ?? []), ...paths];
+            logTaskOutput(task.id, `[files] ${paths.join(', ')}`, this.cwd).catch(() => {});
           },
           abortSignal: abortController.signal,
           // Pass session ID for resume — smarter retries that continue where Claude left off

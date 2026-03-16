@@ -1,6 +1,7 @@
 import { execa } from 'execa';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import crypto from 'node:crypto';
 import { CLAWDASH_DIR } from '../config/defaults.js';
 import { log } from '../utils/logger.js';
 import { commitAll, hasUncommittedChanges } from './git.js';
@@ -21,8 +22,10 @@ function worktreePath(cwd: string, taskId: string): string {
   return path.join(worktreesBase(cwd), taskId);
 }
 
-function branchName(taskId: string): string {
-  return `cloudy/${taskId}`;
+function branchName(cwd: string, taskId: string): string {
+  const repoSlug = path.basename(cwd).replace(/[^a-zA-Z0-9._-]+/g, '-');
+  const repoHash = crypto.createHash('sha1').update(cwd).digest('hex').slice(0, 8);
+  return `cloudy/${repoSlug}-${repoHash}-${taskId}`;
 }
 
 /**
@@ -33,10 +36,27 @@ export async function createWorktree(
   taskId: string,
 ): Promise<WorktreeInfo> {
   const wtPath = worktreePath(cwd, taskId);
-  const branch = branchName(taskId);
+  const branch = branchName(cwd, taskId);
 
   await fs.mkdir(worktreesBase(cwd), { recursive: true });
   await log.info(`Creating worktree for task "${taskId}" at ${wtPath}`);
+
+  // If a previous interrupted run left a stale task worktree behind, clear it
+  // before recreating the isolated branch. The orchestrator resets interrupted
+  // tasks back to pending, so preserving that stale branch is less useful than
+  // restoring deterministic worktree creation on resume.
+  try {
+    await execa('git', ['worktree', 'remove', wtPath, '--force'], { cwd });
+    await log.info(`Removed stale worktree path for task "${taskId}"`);
+  } catch {
+    // No stale worktree path — continue.
+  }
+  try {
+    await execa('git', ['branch', '-D', branch], { cwd });
+    await log.info(`Removed stale worktree branch for task "${taskId}"`);
+  } catch {
+    // No stale task branch — continue.
+  }
 
   await execa('git', ['worktree', 'add', '-b', branch, wtPath], { cwd });
   await log.info(`Worktree created: branch=${branch}, path=${wtPath}`);

@@ -20,6 +20,73 @@ import { CLAWDASH_DIR } from '../../config/defaults.js';
 import { createStreamFormatter } from '../../utils/stream-formatter.js';
 import type { Plan } from '../../core/types.js';
 import { getPhaseRuntime } from '../../config/phase-runtime.js';
+import type { Task } from '../../core/types.js';
+
+interface ExternalTaskGraph {
+  goal?: string;
+  tasks: Array<{
+    id: string;
+    title: string;
+    description: string;
+    acceptanceCriteria: string[];
+    dependencies?: string[];
+    contextPatterns?: string[];
+    outputArtifacts?: string[];
+    implementationSteps?: string[];
+    timeoutMinutes?: number;
+  }>;
+  rationale?: string;
+  questions?: PlanQuestion[];
+}
+
+function toPlannedTask(raw: ExternalTaskGraph['tasks'][number], maxRetries: number): Task {
+  return {
+    id: raw.id,
+    title: raw.title,
+    description: raw.description,
+    acceptanceCriteria: raw.acceptanceCriteria,
+    dependencies: raw.dependencies ?? [],
+    contextPatterns: raw.contextPatterns ?? [],
+    status: 'pending',
+    retries: 0,
+    maxRetries,
+    ifFailed: 'skip',
+    timeout: Math.min(Math.max(raw.timeoutMinutes ?? 30, 15), 60) * 60 * 1000,
+    outputArtifacts: raw.outputArtifacts ?? [],
+    implementationSteps: raw.implementationSteps,
+  };
+}
+
+async function loadAdjacentTaskGraph(
+  specPaths: string[],
+  goal: string,
+  maxRetries: number,
+): Promise<Plan | null> {
+  if (specPaths.length !== 1) return null;
+
+  const specPath = specPaths[0];
+  const ext = path.extname(specPath);
+  if (!ext) return null;
+
+  const taskGraphPath = specPath.slice(0, -ext.length) + '.tasks.json';
+  if (!(await fileExists(taskGraphPath))) return null;
+
+  const raw = JSON.parse(await fs.readFile(taskGraphPath, 'utf-8')) as ExternalTaskGraph;
+  const now = new Date().toISOString();
+  const plan: Plan = {
+    goal: raw.goal ?? goal,
+    tasks: raw.tasks.map((task) => toPlannedTask(task, maxRetries)),
+    createdAt: now,
+    updatedAt: now,
+    rationale: raw.rationale,
+  };
+
+  if (raw.questions && raw.questions.length > 0) {
+    (plan as any)._questions = raw.questions;
+  }
+
+  return plan;
+}
 
 /**
  * Prompt for input with a countdown timer. Returns the trimmed answer or null on timeout/empty.
@@ -405,41 +472,48 @@ export const initCommand = new Command('plan')
     const planningTimeout = setTimeout(() => planningAbort.abort(), PLANNING_TIMEOUT_MS);
 
     let plan: Plan;
-    try {
-      const onOutput = opts.verbose
-        ? (() => {
-            const fmt = createStreamFormatter((s) => process.stdout.write(s));
-            return (text: string) => fmt(text);
-          })()
-        : undefined;
-
-      plan = await createPlan(
-        goal,
-        config.models.planning,
-        cwd,
-        onOutput ?? (() => {}),
-        specContent,
-        claudeMdContent,
-        planningAbort.signal,
-        getPhaseRuntime(config, 'planning'),
-      );
-    } catch (err) {
+    const adjacentTaskGraph = await loadAdjacentTaskGraph(specPaths, goal, config.maxRetries);
+    if (adjacentTaskGraph) {
       clearInterval(tickInterval);
       clearTimeout(planningTimeout);
-      spinner.stop('Planning failed');
-      p.log.error(err instanceof Error ? err.message : String(err));
-      process.exit(1);
+      plan = adjacentTaskGraph;
+      spinner.stop(`Plan loaded from task graph  ·  ${plan.tasks.length} tasks`);
+      p.log.info(`Using adjacent task graph: ${path.basename(specPaths[0]).replace(/\.[^.]+$/, '.tasks.json')}`);
+    } else {
+      try {
+        const onOutput = opts.verbose
+          ? (() => {
+              const fmt = createStreamFormatter((s) => process.stdout.write(s));
+              return (text: string) => fmt(text);
+            })()
+          : undefined;
+
+        plan = await createPlan(
+          goal,
+          config.models.planning,
+          cwd,
+          onOutput ?? (() => {}),
+          specContent,
+          claudeMdContent,
+          planningAbort.signal,
+          getPhaseRuntime(config, 'planning'),
+        );
+      } catch (err) {
+        clearInterval(tickInterval);
+        clearTimeout(planningTimeout);
+        spinner.stop('Planning failed');
+        p.log.error(err instanceof Error ? err.message : String(err));
+        process.exit(1);
+      }
+      clearInterval(tickInterval);
+      clearTimeout(planningTimeout);
+
+      const elapsed = Math.round((Date.now() - planningStart) / 1000);
+      spinner.stop(`Plan ready  ·  ${plan.tasks.length} tasks  ·  ${elapsed}s`);
     }
-
-    clearInterval(tickInterval);
-    clearTimeout(planningTimeout);
-
     if (wrapUpPrompt) {
       plan.wrapUpPrompt = wrapUpPrompt;
     }
-
-    const elapsed = Math.round((Date.now() - planningStart) / 1000);
-    spinner.stop(`Plan ready  ·  ${plan.tasks.length} tasks  ·  ${elapsed}s`);
 
     // ── Planning Q&A ──────────────────────────────────────────────────────────
     const planQuestions: PlanQuestion[] = (plan as any)._questions ?? [];
@@ -743,7 +817,15 @@ Respond with ONLY valid JSON:
 
     // Spawn `cloudy run` — it will ask for execution/validation/review models interactively
     const { execa } = await import('execa');
-    const runArgs = ['run'];
+    const runArgs = [
+      'run',
+      '--build-model', config.models.execution,
+      '--task-review-model', config.models.validation,
+      '--run-review-model', config.review.model,
+    ];
+    if (config.models.qualityReview) {
+      runArgs.push('--quality-review-model', config.models.qualityReview);
+    }
     // Release init lock before spawning run — run acquires its own slot
     releaseLock?.();
     try {

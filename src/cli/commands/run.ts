@@ -533,7 +533,7 @@ export const runCommand = new Command('run')
         let taskFormatter: ((chunk: string) => void) | null = null;
         let taskHeartbeat: ReturnType<typeof setInterval> | null = null;
         let taskStartTime = 0;
-        let taskHasOutput = false;
+        let taskHasActivity = false;
 
         function clearHeartbeat() {
           if (taskHeartbeat) { clearInterval(taskHeartbeat); taskHeartbeat = null; }
@@ -557,10 +557,10 @@ export const runCommand = new Command('run')
                 clearHeartbeat();
                 taskFormatter = createStreamFormatter((s) => process.stdout.write(s));
                 taskStartTime = Date.now();
-                taskHasOutput = false;
+                taskHasActivity = false;
                 console.log(`    ${c(dim, '─── live output ───────────────────────────')}`);
                 taskHeartbeat = setInterval(() => {
-                  if (!taskHasOutput) {
+                  if (!taskHasActivity) {
                     const elapsed = Math.floor((Date.now() - taskStartTime) / 1000);
                     process.stdout.write(c(dim, `  [${elapsed}s — still waiting for the runtime...]\n`));
                   }
@@ -571,11 +571,39 @@ export const runCommand = new Command('run')
 
             case 'task_output': {
               if (opts.verbose && taskFormatter) {
-                if (!taskHasOutput) {
-                  taskHasOutput = true;
+                if (!taskHasActivity) {
+                  taskHasActivity = true;
                   clearHeartbeat();
                 }
                 taskFormatter(event.text);
+              }
+              break;
+            }
+
+            case 'task_tool_call': {
+              if (opts.verbose) {
+                if (!taskHasActivity) {
+                  taskHasActivity = true;
+                  clearHeartbeat();
+                }
+                const summary =
+                  typeof event.toolInput === 'object' && event.toolInput !== null
+                    ? JSON.stringify(event.toolInput).slice(0, 160)
+                    : String(event.toolInput ?? '');
+                process.stdout.write(`    ${c(dim, `→ ${event.toolName}${summary ? ` ${summary}` : ''}`)}\n`);
+              }
+              break;
+            }
+
+            case 'task_tool_result': {
+              if (opts.verbose) {
+                if (!taskHasActivity) {
+                  taskHasActivity = true;
+                  clearHeartbeat();
+                }
+                const text = event.content.replace(/\s+/g, ' ').trim().slice(0, 160);
+                const prefix = event.isError ? '✗' : '←';
+                process.stdout.write(`    ${c(dim, `${prefix} ${event.toolName}${text ? ` ${text}` : ''}`)}\n`);
               }
               break;
             }

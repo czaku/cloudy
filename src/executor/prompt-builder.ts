@@ -164,6 +164,11 @@ export function buildExecutionPrompt(
   parts.push('NEVER use absolute paths starting with `/Users/`, `/home/`, or `~/`.');
   parts.push('Your working directory is the project root. Relative paths resolve correctly from it.');
   parts.push('');
+  parts.push('**CRITICAL — Discovery discipline:** Start from the provided context files before exploring.');
+  parts.push('Prefer targeted `rg`, `sed`, and `ls` commands over broad `find` scans.');
+  parts.push('Do not crawl unrelated parts of the repo just to learn the structure.');
+  parts.push('Once the relevant files are identified, move directly into implementation or verification.');
+  parts.push('');
 
   // #9 — Anti-pattern catalog (general + testing, merged into one section)
   parts.push('## Anti-Patterns — Do Not Do These');
