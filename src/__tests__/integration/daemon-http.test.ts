@@ -493,7 +493,7 @@ describe('fed lifecycle', () => {
 });
 
 describe('runtime routing via daemon HTTP', () => {
-  it('forwards planning runtime fields from POST /plan into spawned CLI args', async () => {
+  it('forwards plan runtime fields from POST /plan into spawned CLI args', async () => {
     vi.mocked(findProject).mockResolvedValue(makeProject());
 
     const { status, body } = await post(base, '/api/projects/test-project/plan', {
@@ -522,7 +522,7 @@ describe('runtime routing via daemon HTTP', () => {
     });
   });
 
-  it('preflights planning runtime from project config defaults when the request omits overrides', async () => {
+  it('preflights plan runtime from project config defaults when the request omits overrides', async () => {
     vi.mocked(findProject).mockResolvedValue(makeProject());
     loadConfigMock.mockResolvedValue({
       engine: 'claude-code',
@@ -549,7 +549,7 @@ describe('runtime routing via daemon HTTP', () => {
     });
   });
 
-  it('forwards execution, validation, and review runtime fields from POST /run into spawned CLI args', async () => {
+  it('forwards build, task-review, and run-review runtime fields from POST /run into spawned CLI args', async () => {
     vi.mocked(findProject).mockResolvedValue(makeProject());
 
     const { status, body } = await post(base, '/api/projects/test-project/run', {
@@ -612,7 +612,7 @@ describe('runtime routing via daemon HTTP', () => {
     });
   });
 
-  it('preflights execution, validation, and review runtimes from project config defaults when the request omits overrides', async () => {
+  it('preflights build, task-review, and run-review runtimes from project config defaults when the request omits overrides', async () => {
     vi.mocked(findProject).mockResolvedValue(makeProject());
     loadConfigMock.mockResolvedValue({
       engine: 'codex',
@@ -736,7 +736,7 @@ describe('runtime routing via daemon HTTP', () => {
     });
   });
 
-  it('forwards planning, validation, and review runtime fields from POST /chain into spawned CLI args', async () => {
+  it('forwards plan, task-review, and run-review runtime fields from POST /chain into spawned CLI args', async () => {
     vi.mocked(findProject).mockResolvedValue(makeProject());
 
     const { status, body } = await post(base, '/api/projects/test-project/chain', {
@@ -819,7 +819,7 @@ describe('runtime routing via daemon HTTP', () => {
     });
   });
 
-  it('returns 400 and does not spawn when planning runtime preflight fails', async () => {
+  it('returns 400 and does not spawn when plan runtime preflight fails', async () => {
     vi.mocked(findProject).mockResolvedValue(makeProject());
     selectViaDaemonMock.mockRejectedValueOnce(new Error('codex not found'));
 
@@ -834,7 +834,7 @@ describe('runtime routing via daemon HTTP', () => {
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
-  it('returns 400 and does not spawn when project config planning runtime preflight fails', async () => {
+  it('returns 400 and does not spawn when project config plan runtime preflight fails', async () => {
     vi.mocked(findProject).mockResolvedValue(makeProject());
     loadConfigMock.mockResolvedValue({
       engine: 'claude-code',
@@ -892,9 +892,9 @@ describe('runtime routing via daemon HTTP', () => {
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
-  it('returns 400 and does not spawn when chain runtime preflight fails', async () => {
+  it('returns 400 and does not spawn when chain plan runtime preflight fails', async () => {
     vi.mocked(findProject).mockResolvedValue(makeProject());
-    selectViaDaemonMock.mockRejectedValueOnce(new Error('planning provider unavailable'));
+    selectViaDaemonMock.mockRejectedValueOnce(new Error('plan provider unavailable'));
 
     const { status, body } = await post(base, '/api/projects/test-project/chain', {
       specPaths: ['/fake/test-project/specs/auth.md'],
@@ -907,11 +907,11 @@ describe('runtime routing via daemon HTTP', () => {
     });
 
     expect(status).toBe(400);
-    expect(body.error).toContain('planning provider unavailable');
+    expect(body.error).toContain('plan provider unavailable');
     expect(spawnMock).not.toHaveBeenCalled();
   });
 
-  it('tracks activeProcess through planning and run lifecycle in a single daemon flow', async () => {
+  it('tracks activeProcess through plan and run lifecycle in a single daemon flow', async () => {
     vi.mocked(findProject).mockResolvedValue(makeProject());
     vi.mocked(listProjects).mockResolvedValue([makeProject()]);
     childControl.autoExit = false;

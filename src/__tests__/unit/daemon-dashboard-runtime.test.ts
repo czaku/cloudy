@@ -13,13 +13,13 @@ describe('daemon dashboard runtime routing controls', () => {
     source = await fs.readFile(DASHBOARD_PATH, 'utf-8');
   });
 
-  it('includes planning runtime fields in the plan request payload', () => {
+  it('includes plan runtime fields in the plan request payload', () => {
     expect(source).toContain("addOptionalRuntimeField(runtimePayload, 'planEngine', planEngine)");
     expect(source).toContain("addOptionalRuntimeField(runtimePayload, 'planProvider', planProvider)");
     expect(source).toContain("addOptionalRuntimeField(runtimePayload, 'planModelId', planModelId)");
   });
 
-  it('includes execution, validation, and review runtime fields in run payloads', () => {
+  it('includes build, task-review, and run-review runtime fields in run payloads', () => {
     expect(source).toContain("addOptionalRuntimeField(payload, 'buildEngine', buildEngine)");
     expect(source).toContain("addOptionalRuntimeField(payload, 'buildProvider', buildProvider)");
     expect(source).toContain("addOptionalRuntimeField(payload, 'buildModelId', buildModelId)");
@@ -33,15 +33,15 @@ describe('daemon dashboard runtime routing controls', () => {
     expect(source).toContain("addOptionalRuntimeField(payload, 'keelTask', keelTask)");
   });
 
-  it('renders runtime controls in both planning and run flows', () => {
+  it('renders runtime controls in both plan and run flows', () => {
     expect(source).toContain('Plan route');
     expect(source).toContain('Build route');
     expect(source).toContain('Task-review route');
     expect(source).toContain('Run-review route');
   });
 
-  it('surfaces daemon request failures in planning and run flows', () => {
-    expect(source).toContain('Network error while starting planning.');
+  it('surfaces daemon request failures in plan and run flows', () => {
+    expect(source).toContain('Network error while starting plan.');
     expect(source).toContain('Network error while starting the run.');
     expect(source).toContain('getApiErrorMessage(response)');
   });

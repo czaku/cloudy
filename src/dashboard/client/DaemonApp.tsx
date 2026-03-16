@@ -2209,7 +2209,7 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
       ...runtimePayload,
     }).catch(() => null);
     if (!response) {
-      setRequestError('Network error while starting planning.');
+      setRequestError('Network error while starting plan.');
       setShowPlanOutput(false);
       return;
     }
@@ -2293,7 +2293,7 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
             )}
           </div>
 
-          {/* Process switcher — shows all active planning sessions (tabs for parallel planning) */}
+          {/* Process switcher — shows all active plan sessions (tabs for parallel plan runs) */}
           {(project.processes ?? []).filter(p => p.type === 'init').length > 0 && (
             <div className="plan-process-switcher">
               {(project.processes ?? []).filter(p => p.type === 'init').map((proc, i) => (
@@ -2373,7 +2373,7 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
               </div>
 
               <div className="plan-right-body">
-                {/* Active planning sessions */}
+                {/* Active plan sessions */}
                 {(project.processes ?? []).filter(p => p.type === 'init').map(proc => (
                   <div key={proc.id} className="plan-active-session-card">
                     <div className="plan-active-session-header">
@@ -2615,7 +2615,7 @@ function PlanBuildTab({ project, onPlanSavedEvent }: BuildTabProps) {
               )}
             </div>
             <div className="plan-right-body">
-              {/* Active planning sessions */}
+              {/* Active plan sessions */}
               {(project.processes ?? []).filter(p => p.type === 'init').map(proc => (
                 <div key={proc.id} className="plan-active-session-card">
                   <div className="plan-active-session-header">

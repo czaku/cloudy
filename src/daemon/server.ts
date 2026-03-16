@@ -372,7 +372,7 @@ function appendOptionalFlag(args: string[], flag: string, value: string | undefi
   if (value) args.push(flag, value);
 }
 
-function buildPlanningRuntimeArgs(runtime: RuntimeRouteFields): string[] {
+function buildPlanRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   const args: string[] = [];
   appendOptionalFlag(args, '--plan-engine', runtime.planEngine);
   appendOptionalFlag(args, '--plan-provider', runtime.planProvider);
@@ -381,7 +381,7 @@ function buildPlanningRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   return args;
 }
 
-function buildValidationRuntimeArgs(runtime: RuntimeRouteFields): string[] {
+function buildTaskReviewRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   const args: string[] = [];
   appendOptionalFlag(args, '--task-review-engine', runtime.taskReviewEngine);
   appendOptionalFlag(args, '--task-review-provider', runtime.taskReviewProvider);
@@ -390,7 +390,7 @@ function buildValidationRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   return args;
 }
 
-function buildReviewRuntimeArgs(runtime: RuntimeRouteFields): string[] {
+function buildRunReviewRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   const args: string[] = [];
   appendOptionalFlag(args, '--run-review-engine', runtime.runReviewEngine);
   appendOptionalFlag(args, '--run-review-provider', runtime.runReviewProvider);
@@ -408,9 +408,9 @@ function buildRunRuntimeArgs(runtime: RunRuntimeRouteFields): string[] {
   appendOptionalFlag(args, '--keel-slug', runtime.keelSlug);
   appendOptionalFlag(args, '--keel-task', runtime.keelTask);
   args.push(
-    ...buildPlanningRuntimeArgs(runtime),
-    ...buildValidationRuntimeArgs(runtime),
-    ...buildReviewRuntimeArgs(runtime),
+    ...buildPlanRuntimeArgs(runtime),
+    ...buildTaskReviewRuntimeArgs(runtime),
+    ...buildRunReviewRuntimeArgs(runtime),
   );
   return args;
 }
@@ -1459,7 +1459,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     // POST /api/projects/:id/plan
     if (method === 'POST' && subpath === '/plan') {
       if (!meta) { send404(res); return; }
-      // No guard — allow parallel planning sessions
+      // No guard — allow parallel plan sessions
       try {
         const body = await parseBody(req) as {
           specPaths?: string[];
@@ -1518,7 +1518,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         const specArgs: string[] = [];
         for (const sp of specPaths) specArgs.push('--spec', sp);
         const modelArg = body.planModel ? ['--plan-model', body.planModel] : ['--plan-model', 'sonnet'];
-        const runtimeArgs = buildPlanningRuntimeArgs(body);
+        const runtimeArgs = buildPlanRuntimeArgs(body);
         // Generate a stable run-name so scope exits immediately after saving the plan
         // (--run-name triggers pipeline-mode exit, preventing scope from auto-spawning cloudy run)
         const ts = new Date().toISOString().slice(0, 16).replace('T', '-').replace(/:/g, '');
@@ -1546,7 +1546,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           ? [...activeProcesses.values()].find((p) => p.id === body.processId && p.projectId === projectId)
           : getRunningProcess(projectId, 'init');
         if (!proc || !proc.child.stdin) {
-          sendJson(res, 404, { error: 'No active planning process' });
+          sendJson(res, 404, { error: 'No active plan process' });
           return;
         }
         const line = (body.answer ?? body.action ?? '') + '\n';
@@ -1743,9 +1743,9 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           specArgs.push('--spec', sp);
         }
         const runtimeArgs = [
-          ...buildPlanningRuntimeArgs(body),
-          ...buildValidationRuntimeArgs(body),
-          ...buildReviewRuntimeArgs(body),
+          ...buildPlanRuntimeArgs(body),
+          ...buildTaskReviewRuntimeArgs(body),
+          ...buildRunReviewRuntimeArgs(body),
         ];
         const modelArgs: string[] = [
           '--build-model', body.buildModel ?? runtimeDefaults.models?.buildModel ?? 'sonnet',
