@@ -40,7 +40,6 @@ export interface AbstractModelRunOptions extends ClaudeRunOptions {
   provider?: Provider;
   account?: string;
   modelId?: string;
-  accountId?: string;
   configDir?: string;
   taskType?: 'coding' | 'analysis' | 'planning' | 'review' | 'chat' | 'research';
 }
@@ -52,7 +51,6 @@ export interface OmnaiRunOptions {
   provider?: Provider;
   account?: string;
   modelId?: string;
-  accountId?: string;
   configDir?: string;
   onOutput?: (text: string) => void;
   onToolUse?: (toolName: string, toolInput: unknown) => void;
@@ -90,19 +88,19 @@ function rewritePromptForWorktree(prompt: string, cwd: string): string {
 async function resolveRuntimeAccount(options: {
   engine?: Engine;
   provider?: Provider;
-  accountId?: string;
+  account?: string;
   configDir?: string;
 }): Promise<{ engine?: Engine; provider?: Provider; env?: Record<string, string> }> {
   let resolvedEngine = options.engine;
   let resolvedProvider = options.provider;
   let resolvedConfigDir = options.configDir;
 
-  if (options.accountId && !resolvedConfigDir) {
+  if (options.account && !resolvedConfigDir) {
     try {
       const { OmnaiClient, loadEstate } = await import('omnai');
       const client = new OmnaiClient();
       const estate = await client.getEstate().catch(() => loadEstate());
-      const account = estate.accounts?.[options.accountId];
+      const account = estate.accounts?.[options.account];
       if (account) {
         resolvedEngine = resolvedEngine ?? (account.engine as Engine);
         resolvedProvider = resolvedProvider ?? (account.provider as Provider);
@@ -142,7 +140,6 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
     provider,
     account,
     modelId,
-    accountId,
     configDir,
     onOutput,
     onToolUse,
@@ -159,14 +156,14 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
   const runtime = await resolveRuntimeAccount({
     engine,
     provider,
-    accountId,
+    account,
     configDir,
   });
 
   const runner = await selectViaDaemon({
     provider: runtime.provider ?? provider,
     engine: runtime.engine ?? engine,
-    account: account ?? accountId,
+    account,
     taskType: taskType ?? 'coding',
   });
   const rewrittenPrompt = rewritePromptForWorktree(prompt, cwd);
@@ -265,7 +262,7 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
   const runOpts: RunOptions = {
     cwd,
     model: modelId,
-    account: account ?? accountId,
+    account,
     permissionMode: 'bypass',
     abortSignal,
     resumeSessionId,
@@ -375,7 +372,6 @@ export async function runAbstractModel(
     provider: options.provider ?? 'claude',
     account: options.account,
     modelId: resolvedModelId,
-    accountId: options.accountId,
     configDir: options.configDir,
     onOutput: options.onOutput,
     onToolUse: options.onToolUse,

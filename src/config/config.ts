@@ -37,7 +37,6 @@ type ExternalCloudyConfig = Omit<
   buildProvider?: CloudyConfig['provider'];
   buildAccount?: CloudyConfig['account'];
   buildModelId?: CloudyConfig['executionModelId'];
-  buildAccountId?: CloudyConfig['executionAccountId'];
   buildEffort?: CloudyConfig['executionEffort'];
   planRuntime?: CloudyConfig['planningRuntime'];
   taskReviewRuntime?: CloudyConfig['validationRuntime'];
@@ -138,7 +137,6 @@ export function toExternalConfig(config: CloudyConfig): ExternalCloudyConfig {
     buildProvider: config.provider,
     buildAccount: config.account,
     buildModelId: config.executionModelId,
-    buildAccountId: config.executionAccountId,
     buildEffort: config.executionEffort,
     planRuntime: config.planningRuntime,
     taskReviewRuntime: config.validationRuntime,
@@ -219,7 +217,6 @@ export async function loadConfig(cwd: string): Promise<CloudyConfig> {
       model: savedModels.runReview ?? effectiveDefaults.review.model,
     },
     keel: saved.keel ?? effectiveDefaults.keel,
-    executionAccountId: saved.buildAccountId ?? effectiveDefaults.executionAccountId,
   };
 
   const errors = validateConfig(config);

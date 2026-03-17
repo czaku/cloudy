@@ -28,7 +28,7 @@ vi.mock('omnai', () => ({
 describe('resolveRuntimeAccount', () => {
   it('maps Claude account ids to CLAUDE_CONFIG_DIR', async () => {
     const { resolveRuntimeAccount } = await import('../../executor/claude-runner.js');
-    const result = await resolveRuntimeAccount({ accountId: 'claude-pole' });
+    const result = await resolveRuntimeAccount({ account: 'claude-pole' });
     expect(result.engine).toBe('claude-code');
     expect(result.provider).toBe('claude');
     expect(result.env).toEqual({ CLAUDE_CONFIG_DIR: '/Users/luke/.claude-pole' });
@@ -36,7 +36,7 @@ describe('resolveRuntimeAccount', () => {
 
   it('maps Codex account ids to CODEX_HOME', async () => {
     const { resolveRuntimeAccount } = await import('../../executor/claude-runner.js');
-    const result = await resolveRuntimeAccount({ accountId: 'codex-local' });
+    const result = await resolveRuntimeAccount({ account: 'codex-local' });
     expect(result.engine).toBe('codex');
     expect(result.provider).toBe('codex');
     expect(result.env).toEqual({ CODEX_HOME: '/Users/luke/.codex-alt' });
@@ -47,7 +47,7 @@ describe('resolveRuntimeAccount', () => {
     const result = await resolveRuntimeAccount({
       engine: 'claude-code',
       provider: 'claude',
-      accountId: 'claude-pole',
+      account: 'claude-pole',
       configDir: '/tmp/custom-claude',
     });
     expect(result.env).toEqual({ CLAUDE_CONFIG_DIR: '/tmp/custom-claude' });

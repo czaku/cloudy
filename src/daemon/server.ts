@@ -330,19 +330,16 @@ interface RuntimeRouteFields {
   planAccount?: string;
   planModelId?: string;
   planEffort?: string;
-  planAccountId?: string;
   taskReviewEngine?: string;
   taskReviewProvider?: string;
   taskReviewAccount?: string;
   taskReviewModelId?: string;
   taskReviewEffort?: string;
-  taskReviewAccountId?: string;
   runReviewEngine?: string;
   runReviewProvider?: string;
   runReviewAccount?: string;
   runReviewModelId?: string;
   runReviewEffort?: string;
-  runReviewAccountId?: string;
 }
 
 interface RunRuntimeRouteFields extends RuntimeRouteFields {
@@ -351,7 +348,6 @@ interface RunRuntimeRouteFields extends RuntimeRouteFields {
   buildAccount?: string;
   buildModelId?: string;
   buildEffort?: string;
-  buildAccountId?: string;
   keelSlug?: string;
   keelTask?: string;
 }
@@ -364,10 +360,10 @@ interface RuntimePreflight {
 }
 
 interface RuntimeDefaults {
-  build?: Pick<RunRuntimeRouteFields, 'buildEngine' | 'buildProvider' | 'buildAccount' | 'buildModelId' | 'buildEffort' | 'buildAccountId'>;
-  plan?: Pick<RuntimeRouteFields, 'planEngine' | 'planProvider' | 'planAccount' | 'planModelId' | 'planEffort' | 'planAccountId'>;
-  taskReview?: Pick<RuntimeRouteFields, 'taskReviewEngine' | 'taskReviewProvider' | 'taskReviewAccount' | 'taskReviewModelId' | 'taskReviewEffort' | 'taskReviewAccountId'>;
-  runReview?: Pick<RuntimeRouteFields, 'runReviewEngine' | 'runReviewProvider' | 'runReviewAccount' | 'runReviewModelId' | 'runReviewEffort' | 'runReviewAccountId'>;
+  build?: Pick<RunRuntimeRouteFields, 'buildEngine' | 'buildProvider' | 'buildAccount' | 'buildModelId' | 'buildEffort'>;
+  plan?: Pick<RuntimeRouteFields, 'planEngine' | 'planProvider' | 'planAccount' | 'planModelId' | 'planEffort'>;
+  taskReview?: Pick<RuntimeRouteFields, 'taskReviewEngine' | 'taskReviewProvider' | 'taskReviewAccount' | 'taskReviewModelId' | 'taskReviewEffort'>;
+  runReview?: Pick<RuntimeRouteFields, 'runReviewEngine' | 'runReviewProvider' | 'runReviewAccount' | 'runReviewModelId' | 'runReviewEffort'>;
   models?: {
     planModel?: string;
     buildModel?: string;
@@ -388,7 +384,6 @@ function buildPlanRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   appendOptionalFlag(args, '--plan-account', runtime.planAccount);
   appendOptionalFlag(args, '--plan-model-id', runtime.planModelId);
   appendOptionalFlag(args, '--plan-effort', runtime.planEffort);
-  appendOptionalFlag(args, '--plan-account-id', runtime.planAccountId);
   return args;
 }
 
@@ -399,7 +394,6 @@ function buildTaskReviewRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   appendOptionalFlag(args, '--task-review-account', runtime.taskReviewAccount);
   appendOptionalFlag(args, '--task-review-model-id', runtime.taskReviewModelId);
   appendOptionalFlag(args, '--task-review-effort', runtime.taskReviewEffort);
-  appendOptionalFlag(args, '--task-review-account-id', runtime.taskReviewAccountId);
   return args;
 }
 
@@ -410,7 +404,6 @@ function buildRunReviewRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   appendOptionalFlag(args, '--run-review-account', runtime.runReviewAccount);
   appendOptionalFlag(args, '--run-review-model-id', runtime.runReviewModelId);
   appendOptionalFlag(args, '--run-review-effort', runtime.runReviewEffort);
-  appendOptionalFlag(args, '--run-review-account-id', runtime.runReviewAccountId);
   return args;
 }
 
@@ -421,7 +414,6 @@ function buildRunRuntimeArgs(runtime: RunRuntimeRouteFields): string[] {
   appendOptionalFlag(args, '--build-account', runtime.buildAccount);
   appendOptionalFlag(args, '--build-model-id', runtime.buildModelId);
   appendOptionalFlag(args, '--build-effort', runtime.buildEffort);
-  appendOptionalFlag(args, '--build-account-id', runtime.buildAccountId);
   appendOptionalFlag(args, '--keel-slug', runtime.keelSlug);
   appendOptionalFlag(args, '--keel-task', runtime.keelTask);
   args.push(
@@ -476,7 +468,6 @@ async function loadRuntimeDefaults(projectPath: string, keelTaskId?: string): Pr
       buildAccount: config.account,
       buildModelId: config.executionModelId,
       buildEffort: config.executionEffort,
-      buildAccountId: config.executionAccountId,
     },
     plan: {
       planEngine: config.planningRuntime?.engine,
@@ -484,7 +475,6 @@ async function loadRuntimeDefaults(projectPath: string, keelTaskId?: string): Pr
       planAccount: config.planningRuntime?.account,
       planModelId: config.planningRuntime?.modelId,
       planEffort: config.planningRuntime?.effort,
-      planAccountId: config.planningRuntime?.accountId,
     },
     taskReview: {
       taskReviewEngine: config.validationRuntime?.engine,
@@ -492,7 +482,6 @@ async function loadRuntimeDefaults(projectPath: string, keelTaskId?: string): Pr
       taskReviewAccount: config.validationRuntime?.account,
       taskReviewModelId: config.validationRuntime?.modelId,
       taskReviewEffort: config.validationRuntime?.effort,
-      taskReviewAccountId: config.validationRuntime?.accountId,
     },
     runReview: {
       runReviewEngine: config.reviewRuntime?.engine,
@@ -500,7 +489,6 @@ async function loadRuntimeDefaults(projectPath: string, keelTaskId?: string): Pr
       runReviewAccount: config.reviewRuntime?.account,
       runReviewModelId: config.reviewRuntime?.modelId,
       runReviewEffort: config.reviewRuntime?.effort,
-      runReviewAccountId: config.reviewRuntime?.accountId,
     },
     models: {
       planModel: models.planning,
@@ -1495,9 +1483,9 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           planIds?: string[];
           planEngine?: string;
           planProvider?: string;
+          planAccount?: string;
           planModelId?: string;
           planEffort?: string;
-          planAccountId?: string;
           keelTask?: string;
         };
         const runtimeDefaults = await loadRuntimeDefaults(meta.path, body.keelTask);
@@ -1507,12 +1495,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
             {
               engine: body.planEngine,
               provider: body.planProvider,
-              account: body.planAccountId,
+              account: body.planAccount,
             },
             {
               engine: runtimeDefaults.plan?.planEngine,
               provider: runtimeDefaults.plan?.planProvider,
-              account: runtimeDefaults.plan?.planAccountId,
+              account: runtimeDefaults.plan?.planAccount,
             },
           ));
         } catch (err) {
@@ -1610,23 +1598,23 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           worktrees?: boolean;
           buildEngine?: string;
           buildProvider?: string;
+          buildAccount?: string;
           buildModelId?: string;
-          buildAccountId?: string;
           planEngine?: string;
           planProvider?: string;
+          planAccount?: string;
           planModelId?: string;
           planEffort?: string;
-          planAccountId?: string;
           taskReviewEngine?: string;
           taskReviewProvider?: string;
+          taskReviewAccount?: string;
           taskReviewModelId?: string;
           taskReviewEffort?: string;
-          taskReviewAccountId?: string;
           runReviewEngine?: string;
           runReviewProvider?: string;
+          runReviewAccount?: string;
           runReviewModelId?: string;
           runReviewEffort?: string;
-          runReviewAccountId?: string;
           keelSlug?: string;
           keelTask?: string;
         };
@@ -1637,12 +1625,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
             {
               engine: body.buildEngine,
               provider: body.buildProvider,
-              account: body.buildAccountId,
+              account: body.buildAccount,
             },
             {
               engine: runtimeDefaults.build?.buildEngine,
               provider: runtimeDefaults.build?.buildProvider,
-              account: runtimeDefaults.build?.buildAccountId,
+              account: runtimeDefaults.build?.buildAccount,
             },
           ));
           await preflightRuntime(resolveRuntimePreflight(
@@ -1650,12 +1638,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
             {
               engine: body.taskReviewEngine,
               provider: body.taskReviewProvider,
-              account: body.taskReviewAccountId,
+              account: body.taskReviewAccount,
             },
             {
               engine: runtimeDefaults.taskReview?.taskReviewEngine,
               provider: runtimeDefaults.taskReview?.taskReviewProvider,
-              account: runtimeDefaults.taskReview?.taskReviewAccountId,
+              account: runtimeDefaults.taskReview?.taskReviewAccount,
             },
           ));
           await preflightRuntime(resolveRuntimePreflight(
@@ -1663,12 +1651,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
             {
               engine: body.runReviewEngine,
               provider: body.runReviewProvider,
-              account: body.runReviewAccountId,
+              account: body.runReviewAccount,
             },
             {
               engine: runtimeDefaults.runReview?.runReviewEngine,
               provider: runtimeDefaults.runReview?.runReviewProvider,
-              account: runtimeDefaults.runReview?.runReviewAccountId,
+              account: runtimeDefaults.runReview?.runReviewAccount,
             },
           ));
         } catch (err) {
@@ -1726,19 +1714,19 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           runReviewModel?: string;
           planEngine?: string;
           planProvider?: string;
+          planAccount?: string;
           planModelId?: string;
           planEffort?: string;
-          planAccountId?: string;
           taskReviewEngine?: string;
           taskReviewProvider?: string;
+          taskReviewAccount?: string;
           taskReviewModelId?: string;
           taskReviewEffort?: string;
-          taskReviewAccountId?: string;
           runReviewEngine?: string;
           runReviewProvider?: string;
+          runReviewAccount?: string;
           runReviewModelId?: string;
           runReviewEffort?: string;
-          runReviewAccountId?: string;
           keelSlug?: string;
           keelTask?: string;
         };
@@ -1749,12 +1737,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
             {
               engine: body.planEngine,
               provider: body.planProvider,
-              account: body.planAccountId,
+              account: body.planAccount,
             },
             {
               engine: runtimeDefaults.plan?.planEngine,
               provider: runtimeDefaults.plan?.planProvider,
-              account: runtimeDefaults.plan?.planAccountId,
+              account: runtimeDefaults.plan?.planAccount,
             },
           ));
           await preflightRuntime(resolveRuntimePreflight(
@@ -1762,12 +1750,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
             {
               engine: body.taskReviewEngine,
               provider: body.taskReviewProvider,
-              account: body.taskReviewAccountId,
+              account: body.taskReviewAccount,
             },
             {
               engine: runtimeDefaults.taskReview?.taskReviewEngine,
               provider: runtimeDefaults.taskReview?.taskReviewProvider,
-              account: runtimeDefaults.taskReview?.taskReviewAccountId,
+              account: runtimeDefaults.taskReview?.taskReviewAccount,
             },
           ));
           await preflightRuntime(resolveRuntimePreflight(
@@ -1775,12 +1763,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
             {
               engine: body.runReviewEngine,
               provider: body.runReviewProvider,
-              account: body.runReviewAccountId,
+              account: body.runReviewAccount,
             },
             {
               engine: runtimeDefaults.runReview?.runReviewEngine,
               provider: runtimeDefaults.runReview?.runReviewProvider,
-              account: runtimeDefaults.runReview?.runReviewAccountId,
+              account: runtimeDefaults.runReview?.runReviewAccount,
             },
           ));
         } catch (err) {
@@ -1912,23 +1900,23 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           worktrees?: boolean;
           buildEngine?: string;
           buildProvider?: string;
+          buildAccount?: string;
           buildModelId?: string;
-          buildAccountId?: string;
           planEngine?: string;
           planProvider?: string;
+          planAccount?: string;
           planModelId?: string;
           planEffort?: string;
-          planAccountId?: string;
           taskReviewEngine?: string;
           taskReviewProvider?: string;
+          taskReviewAccount?: string;
           taskReviewModelId?: string;
           taskReviewEffort?: string;
-          taskReviewAccountId?: string;
           runReviewEngine?: string;
           runReviewProvider?: string;
+          runReviewAccount?: string;
           runReviewModelId?: string;
           runReviewEffort?: string;
-          runReviewAccountId?: string;
         };
         const runtimeDefaults = await loadRuntimeDefaults(meta.path);
         try {
@@ -1937,12 +1925,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
             {
               engine: body.buildEngine,
               provider: body.buildProvider,
-              account: body.buildAccountId,
+              account: body.buildAccount,
             },
             {
               engine: runtimeDefaults.build?.buildEngine,
               provider: runtimeDefaults.build?.buildProvider,
-              account: runtimeDefaults.build?.buildAccountId,
+              account: runtimeDefaults.build?.buildAccount,
             },
           ));
           await preflightRuntime(resolveRuntimePreflight(
@@ -1950,12 +1938,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
             {
               engine: body.taskReviewEngine,
               provider: body.taskReviewProvider,
-              account: body.taskReviewAccountId,
+              account: body.taskReviewAccount,
             },
             {
               engine: runtimeDefaults.taskReview?.taskReviewEngine,
               provider: runtimeDefaults.taskReview?.taskReviewProvider,
-              account: runtimeDefaults.taskReview?.taskReviewAccountId,
+              account: runtimeDefaults.taskReview?.taskReviewAccount,
             },
           ));
           await preflightRuntime(resolveRuntimePreflight(
@@ -1963,12 +1951,12 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
             {
               engine: body.runReviewEngine,
               provider: body.runReviewProvider,
-              account: body.runReviewAccountId,
+              account: body.runReviewAccount,
             },
             {
               engine: runtimeDefaults.runReview?.runReviewEngine,
               provider: runtimeDefaults.runReview?.runReviewProvider,
-              account: runtimeDefaults.runReview?.runReviewAccountId,
+              account: runtimeDefaults.runReview?.runReviewAccount,
             },
           ));
         } catch (err) {

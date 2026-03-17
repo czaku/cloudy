@@ -229,23 +229,19 @@ export const runCommand = new Command('run')
       planAccount?: string;
       planModelId?: string;
       planEffort?: string;
-      planAccountId?: string;
       buildEngine?: string;
       buildProvider?: string;
       buildAccount?: string;
-      buildAccountId?: string;
       taskReviewEngine?: string;
       taskReviewProvider?: string;
       taskReviewAccount?: string;
       taskReviewModelId?: string;
       taskReviewEffort?: string;
-      taskReviewAccountId?: string;
       runReviewEngine?: string;
       runReviewProvider?: string;
       runReviewAccount?: string;
       runReviewModelId?: string;
       runReviewEffort?: string;
-      runReviewAccountId?: string;
       modelAuto?: boolean;
       parallel?: boolean;
       maxParallel?: number;
@@ -319,22 +315,19 @@ export const runCommand = new Command('run')
       if (opts.planAccount) config.planningRuntime = { ...config.planningRuntime, account: opts.planAccount };
       if (opts.planModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planModelId };
       if (opts.planEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planEffort as any };
-      if (opts.planAccountId) config.planningRuntime = { ...config.planningRuntime, accountId: opts.planAccountId };
       if (opts.buildEngine) config.engine = opts.buildEngine as typeof config.engine;
       if (opts.buildProvider) config.provider = opts.buildProvider;
-      if (opts.buildAccountId) config.executionAccountId = opts.buildAccountId;
+      if (opts.buildAccount) config.account = opts.buildAccount;
       if (opts.taskReviewEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.taskReviewEngine as typeof config.engine };
       if (opts.taskReviewProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.taskReviewProvider };
       if (opts.taskReviewAccount) config.validationRuntime = { ...config.validationRuntime, account: opts.taskReviewAccount };
       if (opts.taskReviewModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.taskReviewModelId };
       if (opts.taskReviewEffort) config.validationRuntime = { ...config.validationRuntime, effort: opts.taskReviewEffort as any };
-      if (opts.taskReviewAccountId) config.validationRuntime = { ...config.validationRuntime, accountId: opts.taskReviewAccountId };
       if (opts.runReviewEngine) config.reviewRuntime = { ...config.reviewRuntime, engine: opts.runReviewEngine as typeof config.engine };
       if (opts.runReviewProvider) config.reviewRuntime = { ...config.reviewRuntime, provider: opts.runReviewProvider };
       if (opts.runReviewAccount) config.reviewRuntime = { ...config.reviewRuntime, account: opts.runReviewAccount };
       if (opts.runReviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.runReviewModelId };
       if (opts.runReviewEffort) config.reviewRuntime = { ...config.reviewRuntime, effort: opts.runReviewEffort as any };
-      if (opts.runReviewAccountId) config.reviewRuntime = { ...config.reviewRuntime, accountId: opts.runReviewAccountId };
 
       // ── Interactive model selection (when not provided via flags) ────────────
       const MODEL_OPTIONS = [
