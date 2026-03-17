@@ -83,10 +83,17 @@ export type TaskStatus =
 export interface RetryHistoryEntry {
   attempt: number;
   timestamp: string;
-  failureType: 'execution' | 'acceptance' | 'timeout' | 'over_exploration' | 'already_satisfied' | 'environment';
+  failureType: 'execution' | 'acceptance' | 'timeout' | 'over_exploration' | 'already_satisfied' | 'environment' | 'validation_config_error' | 'out_of_scope_drift';
   reason: string;
   fullError: string;
   durationMs: number;
+}
+
+export interface TaskValidationOverrides {
+  commands?: string[];
+  iosBuildCommand?: string;
+  androidBuildCommand?: string;
+  skipAutoPlatformBuild?: boolean;
 }
 
 export interface AcceptanceCriterionResult {
@@ -118,11 +125,15 @@ export interface Task {
   retryHistory?: RetryHistoryEntry[];
   acceptanceCriteriaResults?: AcceptanceCriterionResult[];
   outputArtifacts?: string[]; // file paths that must exist after completion
+  allowedWritePaths?: string[]; // relative glob-like prefixes or explicit paths that writes must stay within
+  validationOverrides?: TaskValidationOverrides;
   implementationSteps?: string[]; // planner-generated numbered steps (e.g. TDD red-green-refactor)
   parentTaskId?: string;     // set when this task was dynamically created by another task
   requiresApproval?: boolean; // per-task override: require human approval before running
   sessionId?: string;        // SDK session ID from last execution — used for resume on retry
   filesWritten?: string[];   // auto-tracked via SDK PostToolUse hooks
+  implementationCandidateReady?: boolean; // true when code looks ready but validation config/environment blocked closure
+  implementationCandidateReason?: string;
 }
 
 // ── Plan types ───────────────────────────────────────────────────────

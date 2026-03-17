@@ -6,8 +6,9 @@ import type { OrchestratorEvent, ProjectState, CloudyConfig, Plan, Task } from '
 
 // Mock external dependencies
 vi.mock('../../src/executor/engine.js', () => {
-  const runEngine = vi.fn(async ({ onOutput }: { onOutput?: (text: string) => void }) => {
+  const runEngine = vi.fn(async ({ onOutput, onFilesWritten }: { onOutput?: (text: string) => void; onFilesWritten?: (paths: string[]) => void }) => {
     onOutput?.('mock output');
+    onFilesWritten?.(['src/mock-output.ts']);
     return {
       success: true,
       output: 'Task completed successfully',
@@ -266,6 +267,73 @@ describe('Orchestrator', () => {
 
     expect(state.plan?.tasks[0].status).toBe('completed_without_changes');
     expect(vi.mocked(runEngine)).not.toHaveBeenCalled();
+  });
+
+  it('fails immediately on out-of-scope writes', async () => {
+    const { runEngine } = await import('../../src/executor/engine.js');
+    const { validateTask } = await import('../../src/validator/validator.js');
+
+    vi.mocked(runEngine).mockImplementationOnce(async ({ onFilesWritten, onOutput }: { onFilesWritten?: (paths: string[]) => void; onOutput?: (text: string) => void }) => {
+      onOutput?.('writing outside scope');
+      onFilesWritten?.(['/Users/luke/dev/cloudy/src/validator/strategies/build-check.ts']);
+      return {
+        success: true,
+        output: 'wrote wrong file',
+        usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        durationMs: 100,
+        costUsd: 0.001,
+        filesWritten: ['/Users/luke/dev/cloudy/src/validator/strategies/build-check.ts'],
+      };
+    });
+
+    const task = makeTask('task-1');
+    task.allowedWritePaths = ['apple/FitKind', 'sentinel/fixtures'];
+    const state = makeState([task]);
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: makeConfig(),
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(state.plan?.tasks[0].status).toBe('failed');
+    expect(state.plan?.tasks[0].error).toContain('Out-of-scope write detected');
+    expect(vi.mocked(validateTask)).not.toHaveBeenCalled();
+  });
+
+  it('marks implementation candidate ready when validation config is wrong and does not retry', async () => {
+    const { validateTask } = await import('../../src/validator/validator.js');
+    vi.mocked(validateTask).mockResolvedValueOnce({
+      taskId: 'task-1',
+      passed: false,
+      results: [
+        {
+          strategy: 'build',
+          passed: false,
+          output: 'iOS build (FitKind-Dev) failed (exit 65): xcodebuild: error: Scheme FitKind-Dev is not currently configured',
+          durationMs: 100,
+        },
+      ],
+    });
+
+    const task = makeTask('task-1');
+    task.maxRetries = 2;
+    const state = makeState([task]);
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: makeConfig(),
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(state.plan?.tasks[0].status).toBe('failed');
+    expect(state.plan?.tasks[0].retries).toBe(0);
+    expect(state.plan?.tasks[0].implementationCandidateReady).toBe(true);
+    expect(state.plan?.tasks[0].implementationCandidateReason).toContain('Validation configuration error');
   });
 
   it('stops on task failure when ifFailed is halt', async () => {

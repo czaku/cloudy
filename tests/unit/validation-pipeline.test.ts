@@ -40,6 +40,7 @@ import { runArtifactCheck } from '../../src/validator/strategies/artifact-check.
 import { runTypeCheck } from '../../src/validator/strategies/type-check.js';
 import { runAiReview } from '../../src/validator/strategies/ai-review.js';
 import { runAiQualityReview } from '../../src/validator/strategies/ai-review-quality.js';
+import { runIosBuildCheck } from '../../src/validator/strategies/build-check.js';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -169,6 +170,51 @@ describe('validateTask — full pipeline integration', () => {
     const report = await validateTask({ task, config: ALL_ON, model: 'haiku', cwd: '/tmp' });
     expect(report.passed).toBe(true);
     expect(report.alreadySatisfied).toBe(true);
+  });
+
+  it('runs task-level validation override commands in addition to config commands', async () => {
+    const report = await validateTask({
+      task: makeTask({
+        validationOverrides: {
+          commands: ['echo task-level-check'],
+        },
+      }),
+      config: {
+        ...ALL_OFF,
+        commands: ['echo config-check'],
+      },
+      model: 'haiku',
+      cwd: '/tmp',
+    });
+
+    expect(report.passed).toBe(true);
+    const commandResults = report.results.filter((result) => result.strategy === 'command');
+    expect(commandResults).toHaveLength(2);
+  });
+
+  it('forwards task-level iOS build override to auto platform build checks', async () => {
+    const { detectPlatformBuildNeeds } = await import('../../src/validator/strategies/build-check.js');
+    vi.mocked(detectPlatformBuildNeeds).mockReturnValueOnce({ ios: true, android: false });
+
+    await validateTask({
+      task: makeTask({
+        filesWritten: ['apple/FitKind/Features/Vault/TrainingPlansView.swift'],
+        validationOverrides: {
+          iosBuildCommand: "xcodebuild -project apple/FitKind.xcodeproj -scheme 'FitKind (Dev)' build",
+        },
+      }),
+      config: ALL_OFF,
+      model: 'haiku',
+      cwd: '/tmp',
+    });
+
+    expect(runIosBuildCheck).toHaveBeenCalledWith(
+      '/tmp',
+      [],
+      expect.objectContaining({
+        iosBuildCommand: "xcodebuild -project apple/FitKind.xcodeproj -scheme 'FitKind (Dev)' build",
+      }),
+    );
   });
 
   it('report contains taskId matching the task', async () => {

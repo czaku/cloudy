@@ -38,6 +38,8 @@ export function parseSubtasks(output: string, parent: Task): Task[] {
       dependencies,
       contextPatterns: parent.contextPatterns ?? [],
       outputArtifacts: [],
+      allowedWritePaths: parent.allowedWritePaths ?? [],
+      validationOverrides: parent.validationOverrides,
       status: 'pending',
       retries: 0,
       maxRetries: parent.maxRetries,

@@ -22,6 +22,7 @@ import type { Plan } from '../../core/types.js';
 import { getPhaseRuntime } from '../../config/phase-runtime.js';
 import type { Task } from '../../core/types.js';
 import { resolvePlanningRetryModel } from '../../planner/planning-fallback.js';
+import type { TaskValidationOverrides } from '../../core/types.js';
 
 interface ExternalTaskGraph {
   goal?: string;
@@ -33,6 +34,8 @@ interface ExternalTaskGraph {
     dependencies?: string[];
     contextPatterns?: string[];
     outputArtifacts?: string[];
+    allowedWritePaths?: string[];
+    validationOverrides?: TaskValidationOverrides;
     implementationSteps?: string[];
     timeoutMinutes?: number;
   }>;
@@ -60,6 +63,8 @@ function toPlannedTask(raw: ExternalTaskGraph['tasks'][number], maxRetries: numb
     ifFailed: 'skip',
     timeout: Math.min(Math.max(raw.timeoutMinutes ?? 30, 15), 60) * 60 * 1000,
     outputArtifacts: raw.outputArtifacts ?? [],
+    allowedWritePaths: raw.allowedWritePaths ?? [],
+    validationOverrides: raw.validationOverrides,
     implementationSteps: raw.implementationSteps,
   };
 }

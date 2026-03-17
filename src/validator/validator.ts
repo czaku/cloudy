@@ -234,6 +234,7 @@ export async function validateTask(
   const resolvedQualityModel: ClaudeModel = qualityModel ?? model;
   const results: ValidationResult[] = [];
   const artifactPaths = [...new Set([...(task.outputArtifacts ?? []), ...inferArtifactsFromAcceptanceCriteria(task.acceptanceCriteria)])];
+  const commandChecks = [...(config.commands ?? []), ...(task.validationOverrides?.commands ?? [])];
   let alreadySatisfied = false;
 
   await log.info(`Validating task "${task.id}": ${task.title}`);
@@ -282,8 +283,8 @@ export async function validateTask(
   }
 
   // Phase 1b: Custom shell commands (run after built-in deterministic checks)
-  if (deterministicPassed && config.commands && config.commands.length > 0) {
-    for (const cmd of config.commands) {
+  if (deterministicPassed && commandChecks.length > 0) {
+    for (const cmd of commandChecks) {
       if (!deterministicPassed) break;
       await log.info(`  Running command: ${cmd}`);
       const result = await runShellCommand(cmd, cwd);
@@ -304,10 +305,10 @@ export async function validateTask(
       ? await getChangedFiles(cwd, checkpointSha).catch(() => [] as string[])
       : (task.filesWritten ?? []);
     const { ios, android } = detectPlatformBuildNeeds(changedFilesForBuild);
-    const existingLabels = config.commands ?? [];
+    const existingLabels = commandChecks;
 
-    if (ios) {
-      const iosResult = await runIosBuildCheck(cwd, existingLabels);
+    if (ios && !task.validationOverrides?.skipAutoPlatformBuild) {
+      const iosResult = await runIosBuildCheck(cwd, existingLabels, task.validationOverrides);
       if (iosResult) {
         results.push(iosResult);
         if (!iosResult.passed) {
@@ -319,8 +320,8 @@ export async function validateTask(
       }
     }
 
-    if (android && deterministicPassed) {
-      const androidResult = await runAndroidBuildCheck(cwd, existingLabels);
+    if (android && deterministicPassed && !task.validationOverrides?.skipAutoPlatformBuild) {
+      const androidResult = await runAndroidBuildCheck(cwd, existingLabels, task.validationOverrides);
       if (androidResult) {
         results.push(androidResult);
         if (!androidResult.passed) {

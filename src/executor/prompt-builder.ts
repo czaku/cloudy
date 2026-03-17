@@ -126,6 +126,16 @@ export function buildExecutionPrompt(
     parts.push('');
   }
 
+  if (task.allowedWritePaths && task.allowedWritePaths.length > 0) {
+    parts.push('# Allowed Write Scope');
+    parts.push('You may only create or modify files inside the following relative paths:');
+    for (const allowedPath of task.allowedWritePaths) {
+      parts.push(`- ${allowedPath}`);
+    }
+    parts.push('Do not edit files outside this scope. If validation or tooling outside this scope is wrong, stop and report it instead of changing unrelated code.');
+    parts.push('');
+  }
+
   if (task.implementationSteps && task.implementationSteps.length > 0) {
     parts.push('## Implementation Steps');
     task.implementationSteps.forEach((step, i) => parts.push(`${i + 1}. ${step}`));
@@ -163,6 +173,8 @@ export function buildExecutionPrompt(
   parts.push('**CRITICAL — File paths:** Always write files using RELATIVE paths (e.g. `src/Foo.swift`, `StrikeThePose/Bar.ts`).');
   parts.push('NEVER use absolute paths starting with `/Users/`, `/home/`, or `~/`.');
   parts.push('Your working directory is the project root. Relative paths resolve correctly from it.');
+  parts.push('');
+  parts.push('**CRITICAL — Repo boundary:** Stay inside this project repo. Do not inspect or modify sibling repos or Cloudy internals unless the task explicitly requires cross-repo work.');
   parts.push('');
   parts.push('**CRITICAL — Discovery discipline:** Start from the provided context files before exploring.');
   parts.push('Prefer targeted `rg`, `sed`, and `ls` commands over broad `find` scans.');

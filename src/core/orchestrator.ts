@@ -53,6 +53,10 @@ const VERIFY_FIRST_TASK_TYPES = new Set(['verify', 'review', 'closeout']);
 
 function classifyRetryFailure(error: string | undefined): RetryHistoryEntry['failureType'] {
   const message = (error ?? '').toLowerCase();
+  if (message.includes('out-of-scope') || message.includes('outside allowed task scope')) return 'out_of_scope_drift';
+  if (message.includes('validation configuration') || message.includes('validator mismatch') || message.includes('build override required')) {
+    return 'validation_config_error';
+  }
   if (message.includes('over-exploration')) return 'over_exploration';
   if (message.includes('already satisf') || message.includes('already complete')) return 'already_satisfied';
   if (message.includes('timed out') || message.includes('hung engine')) return 'timeout';
@@ -64,6 +68,56 @@ function classifyRetryFailure(error: string | undefined): RetryHistoryEntry['fai
 
 function isBroadDiscoveryCommand(command: string): boolean {
   return /\b(find|grep\s+-r|grep\s+-R|ls\s+-R|tree)\b/.test(command) || /\| head\b/.test(command);
+}
+
+function normalizePathForScope(candidate: string, cwd: string): string {
+  const expanded = candidate.startsWith('~/')
+    ? path.join(process.env.HOME ?? '', candidate.slice(2))
+    : candidate;
+  return path.isAbsolute(expanded) ? path.normalize(expanded) : path.normalize(path.join(cwd, expanded));
+}
+
+function pathWithin(base: string, target: string): boolean {
+  const rel = path.relative(base, target);
+  return rel === '' || (!rel.startsWith('..') && !path.isAbsolute(rel));
+}
+
+function matchesAllowedWritePath(filePath: string, cwd: string, allowedWritePaths: string[]): boolean {
+  if (allowedWritePaths.length === 0) return pathWithin(cwd, filePath);
+  const relative = path.relative(cwd, filePath).replace(/\\/g, '/');
+  return allowedWritePaths.some((allowed) => {
+    const normalized = allowed.replace(/\\/g, '/').replace(/\/+$/, '');
+    return relative === normalized || relative.startsWith(`${normalized}/`);
+  });
+}
+
+function findOutOfScopeRepoPath(command: string, cwd: string): string | null {
+  const matches = command.match(/\/Users\/[^\s"'`]+/g) ?? [];
+  for (const match of matches) {
+    const normalized = path.normalize(match);
+    if (normalized.includes('/dev/') && !pathWithin(cwd, normalized)) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
+function classifyValidationConfigError(report: Awaited<ReturnType<typeof validateTask>>): string | null {
+  const failing = report.results.find((result) => !result.passed);
+  if (!failing) return null;
+  const output = failing.output.toLowerCase();
+  if (failing.strategy === 'build' && (
+    output.includes('xcodebuild') ||
+    output.includes('scheme') ||
+    output.includes('destination') ||
+    output.includes('simulator') ||
+    output.includes('generic/platform=ios simulator') ||
+    output.includes('assembledebug') ||
+    output.includes('gradle')
+  )) {
+    return 'Validation configuration error: platform build command needs an explicit task-level override. Preserve the implementation diff, stop retrying, and surface the failing command/output for manual review.';
+  }
+  return null;
 }
 
 // ── Project conventions loader ────────────────────────────────────────────────
@@ -712,6 +766,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       engine === 'claude-code'
         ? executionModel
         : (this.config.executionModelId ?? 'default');
+    const allowedWritePaths = task.allowedWritePaths ?? [];
     let currentPatterns = [...task.contextPatterns];
     const budget = this.config.contextBudgetTokens;
     const budgetMode = this.config.contextBudgetMode ?? 'warn';
@@ -916,6 +971,9 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
 
         const preflightDiff = await getGitDiff(taskCwd, checkpointSha).catch(() => '');
         const noChangesDetected = !preflightDiff.trim() && !(task.filesWritten?.length);
+        await log.info(
+          `  Preflight verify check: passed=${preflightReport.passed} alreadySatisfied=${preflightReport.alreadySatisfied ? 'true' : 'false'} noChangesDetected=${noChangesDetected ? 'true' : 'false'}`,
+        );
 
         if (preflightReport.passed && (preflightReport.alreadySatisfied || noChangesDetected)) {
           if (noChangesDetected) {
@@ -1003,6 +1061,12 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
               const command = typeof (toolInput as { command?: unknown })?.command === 'string'
                 ? (toolInput as { command?: string }).command ?? ''
                 : '';
+              const outOfScopeRepoPath = findOutOfScopeRepoPath(command, taskCwd);
+              if (outOfScopeRepoPath) {
+                forcedAbortReason = `Out-of-scope repo access detected: ${outOfScopeRepoPath}`;
+                abortController.abort();
+                return;
+              }
               if (/\b(gradlew|npm|pnpm|yarn|bun|swift build|xcodebuild|sentinel|simemu|keel)\b/.test(command)) {
                 verificationOps++;
               }
@@ -1027,9 +1091,16 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           },
           onFilesWritten: (paths) => {
             _lastOutputMs = Date.now(); // file writes prove the task is moving
+            const normalizedPaths = paths.map((candidate) => normalizePathForScope(candidate, taskCwd));
+            const outOfScopeWrite = normalizedPaths.find((candidate) => !matchesAllowedWritePath(candidate, taskCwd, allowedWritePaths));
+            if (outOfScopeWrite) {
+              forcedAbortReason = `Out-of-scope write detected: ${path.relative(taskCwd, outOfScopeWrite) || outOfScopeWrite}`;
+              abortController.abort();
+              return;
+            }
             // Real-time file tracking from PostToolUse hooks
-            task.filesWritten = [...(task.filesWritten ?? []), ...paths];
-            logTaskOutput(task.id, `[files] ${paths.join(', ')}`, this.cwd).catch(() => {});
+            task.filesWritten = [...(task.filesWritten ?? []), ...normalizedPaths];
+            logTaskOutput(task.id, `[files] ${normalizedPaths.join(', ')}`, this.cwd).catch(() => {});
           },
           abortSignal: abortController.signal,
           // Pass session ID for resume — smarter retries that continue where Claude left off
@@ -1055,12 +1126,28 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       }
 
       // Persist session ID and file list for resume on next retry
+      if (forcedAbortReason && result.success) {
+        result = {
+          ...result,
+          success: false,
+          error: forcedAbortReason,
+        };
+      }
       if (result.sessionId) {
         task.sessionId = result.sessionId;
       }
       if (result.filesWritten?.length) {
+        const normalizedFilesWritten = result.filesWritten.map((candidate) => normalizePathForScope(candidate, taskCwd));
+        const outOfScopeWrite = normalizedFilesWritten.find((candidate) => !matchesAllowedWritePath(candidate, taskCwd, allowedWritePaths));
+        if (outOfScopeWrite) {
+          result = {
+            ...result,
+            success: false,
+            error: `Out-of-scope write detected: ${path.relative(taskCwd, outOfScopeWrite) || outOfScopeWrite}`,
+          };
+        }
         task.filesWritten = [
-          ...new Set([...(task.filesWritten ?? []), ...result.filesWritten]),
+          ...new Set([...(task.filesWritten ?? []), ...normalizedFilesWritten]),
         ];
       }
 
@@ -1374,12 +1461,21 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       lastPriorFilesCreated = await getChangedFiles(taskCwd, checkpointSha).catch(() => []);
       await log.warn(`  Validation failed:\n${lastValidationErrors}`);
 
-      const canRetry = queue.incrementRetry(task.id);
+      const validationConfigError = classifyValidationConfigError(report);
+      if (validationConfigError) {
+        task.implementationCandidateReady = true;
+        task.implementationCandidateReason = validationConfigError;
+        lastValidationErrors = `${validationConfigError}\n\n${lastValidationErrors}`;
+      }
+
+      const canRetry = validationConfigError ? false : queue.incrementRetry(task.id);
       const entry: RetryHistoryEntry = {
         attempt,
         timestamp: new Date().toISOString(),
-        failureType: report.alreadySatisfied ? 'already_satisfied' : 'acceptance',
-        reason: 'Validation failed',
+        failureType: validationConfigError
+          ? 'validation_config_error'
+          : (report.alreadySatisfied ? 'already_satisfied' : 'acceptance'),
+        reason: validationConfigError ?? 'Validation failed',
         fullError: lastValidationErrors,
         durationMs: Date.now() - attemptStart,
       };
