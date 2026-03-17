@@ -238,6 +238,36 @@ describe('Orchestrator', () => {
     expect(vi.mocked(runEngine)).not.toHaveBeenCalled();
   });
 
+  it('short-circuits verify tasks before execution when validation passes and there is no diff', async () => {
+    const { validateTask } = await import('../../src/validator/validator.js');
+    const { runEngine } = await import('../../src/executor/engine.js');
+    const { getGitDiff } = await import('../../src/git/git.js');
+
+    vi.mocked(validateTask).mockResolvedValueOnce({
+      taskId: 'task-1',
+      passed: true,
+      alreadySatisfied: false,
+      results: [],
+    });
+    vi.mocked(getGitDiff).mockResolvedValueOnce('');
+
+    const tasks = [makeTask('task-1')];
+    tasks[0].type = 'verify';
+    const state = makeState(tasks);
+
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: makeConfig(),
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(state.plan?.tasks[0].status).toBe('completed_without_changes');
+    expect(vi.mocked(runEngine)).not.toHaveBeenCalled();
+  });
+
   it('stops on task failure when ifFailed is halt', async () => {
     const { runEngine } = await import('../../src/executor/engine.js');
     const mockedRunEngine = vi.mocked(runEngine);

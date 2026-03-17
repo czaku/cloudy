@@ -914,7 +914,13 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           criteriaResults: task.acceptanceCriteriaResults,
         });
 
-        if (preflightReport.passed && preflightReport.alreadySatisfied) {
+        const preflightDiff = await getGitDiff(taskCwd, checkpointSha).catch(() => '');
+        const noChangesDetected = !preflightDiff.trim() && !(task.filesWritten?.length);
+
+        if (preflightReport.passed && (preflightReport.alreadySatisfied || noChangesDetected)) {
+          if (noChangesDetected) {
+            preflightReport.alreadySatisfied = true;
+          }
           task.resultSummary = 'Already satisfied: verified existing artifacts and checks before execution.';
           await log.info(`  Task "${task.id}" already satisfied before execution — skipping engine run`);
           await this.finalizeSuccessfulTask(task, queue, plan, taskCwd, checkpointSha, preflightReport, attempt, taskStartTime, engineModel, engine);
