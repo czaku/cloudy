@@ -9,6 +9,7 @@ import type {
   ProjectState,
   RetryHistoryEntry,
   Task,
+  TaskExecutionMode,
 } from './types.js';
 import { TaskQueue } from './task-queue.js';
 import { ParallelScheduler } from './parallel-scheduler.js';
@@ -50,6 +51,7 @@ import { logApproval } from '../utils/approval-log.js';
 import { assessTaskRisk, getExecutionDefaults, inferExecutionMode, isTerminalFailureType } from './task-shape.js';
 
 const DISCOVERY_READ_TOOL_NAMES = new Set(['Read', 'LS', 'Glob', 'Grep', 'Find']);
+const WRITE_TOOL_NAMES = new Set(['Edit', 'Write', 'MultiEdit']);
 const VERIFY_FIRST_TASK_TYPES = new Set(['verify', 'review', 'closeout']);
 const SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT = 8;
 const SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS = 75_000;
@@ -106,6 +108,42 @@ function findOutOfScopeRepoPath(command: string, cwd: string): string | null {
     }
   }
   return null;
+}
+
+function recordFirstWriteProgress(
+  task: Task,
+  executionMode: TaskExecutionMode,
+  engineStartMs: number,
+  firstWriteDeadlineId: NodeJS.Timeout | undefined,
+): void {
+  if (firstWriteDeadlineId) {
+    clearTimeout(firstWriteDeadlineId);
+  }
+  if (!task.executionMetrics?.timeToFirstWriteMs) {
+    task.executionMetrics = {
+      ...(task.executionMetrics ?? {
+        discoveryOpsBeforeFirstWrite: 0,
+        subagentCalls: 0,
+        writeCount: 0,
+        verificationOps: 0,
+        executionMode,
+      }),
+      timeToFirstWriteMs: Date.now() - engineStartMs,
+    };
+  }
+}
+
+function extractWriteCandidates(toolName: string, toolInput: unknown, cwd: string): string[] {
+  if (!WRITE_TOOL_NAMES.has(toolName)) return [];
+  const input = (toolInput ?? {}) as Record<string, unknown>;
+  const candidates = new Set<string>();
+  for (const key of ['file_path', 'path']) {
+    const value = input[key];
+    if (typeof value === 'string' && value.trim()) {
+      candidates.add(normalizePathForScope(value, cwd));
+    }
+  }
+  return [...candidates];
 }
 
 function classifyValidationConfigError(report: Awaited<ReturnType<typeof validateTask>>): string | null {
@@ -1107,6 +1145,15 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           },
           onToolUse: (toolName, toolInput) => {
             _lastOutputMs = Date.now(); // tool activity means the runtime is alive
+            const pendingWriteCandidates = extractWriteCandidates(toolName, toolInput, taskCwd);
+            if (pendingWriteCandidates.length > 0) {
+              const outOfScopeWrite = pendingWriteCandidates.find((candidate) => !matchesAllowedWritePath(candidate, taskCwd, allowedWritePaths));
+              if (outOfScopeWrite) {
+                forcedAbortReason = `Out-of-scope write detected: ${path.relative(taskCwd, outOfScopeWrite) || outOfScopeWrite}`;
+                abortController.abort();
+                return;
+              }
+            }
             if (toolName === 'Bash') {
               const command = typeof (toolInput as { command?: unknown })?.command === 'string'
                 ? (toolInput as { command?: string }).command ?? ''
@@ -1167,27 +1214,28 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           },
           onToolResult: (toolName, content, isError) => {
             _lastOutputMs = Date.now(); // tool results also count as progress
+            if (!isError) {
+              if (WRITE_TOOL_NAMES.has(toolName)) {
+                recordFirstWriteProgress(task, task.executionMode ?? executionDefaults.executionMode, _engineStart, _firstWriteDeadlineId);
+                task.executionMetrics = {
+                  ...(task.executionMetrics ?? {
+                    discoveryOpsBeforeFirstWrite: 0,
+                    subagentCalls: 0,
+                    writeCount: 0,
+                    verificationOps: 0,
+                    executionMode: task.executionMode ?? executionDefaults.executionMode,
+                  }),
+                  writeCount: Math.max(task.executionMetrics?.writeCount ?? 0, 1),
+                };
+              }
+            }
             this.onEvent({ type: 'task_tool_result', taskId: task.id, toolName, content, isError });
             const prefix = isError ? `[tool-error] ${toolName}: ` : `[tool-result] ${toolName}: `;
             logTaskOutput(task.id, `${prefix}${content.slice(0, 500)}`, this.cwd).catch(() => {});
           },
           onFilesWritten: (paths) => {
             _lastOutputMs = Date.now(); // file writes prove the task is moving
-            if (_firstWriteDeadlineId) {
-              clearTimeout(_firstWriteDeadlineId);
-            }
-            if (!task.executionMetrics?.timeToFirstWriteMs) {
-              task.executionMetrics = {
-                ...(task.executionMetrics ?? {
-                  discoveryOpsBeforeFirstWrite: 0,
-                  subagentCalls: 0,
-                  writeCount: 0,
-                  verificationOps: 0,
-                  executionMode: task.executionMode ?? executionDefaults.executionMode,
-                }),
-                timeToFirstWriteMs: Date.now() - _engineStart,
-              };
-            }
+            recordFirstWriteProgress(task, task.executionMode ?? executionDefaults.executionMode, _engineStart, _firstWriteDeadlineId);
             const normalizedPaths = paths.map((candidate) => normalizePathForScope(candidate, taskCwd));
             const outOfScopeWrite = normalizedPaths.find((candidate) => !matchesAllowedWritePath(candidate, taskCwd, allowedWritePaths));
             if (outOfScopeWrite) {
@@ -1260,7 +1308,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
         }),
         discoveryOpsBeforeFirstWrite: task.executionMetrics?.timeToFirstWriteMs ? task.executionMetrics.discoveryOpsBeforeFirstWrite : discoveryOps,
         subagentCalls,
-        writeCount: task.filesWritten?.length ?? 0,
+        writeCount: Math.max(task.executionMetrics?.writeCount ?? 0, task.filesWritten?.length ?? 0),
         verificationOps,
       };
 

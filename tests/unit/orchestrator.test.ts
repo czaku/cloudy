@@ -450,6 +450,40 @@ describe('Orchestrator', () => {
     expect(state.plan?.tasks[0].error).toContain('Pre-write shell discovery is disallowed');
   });
 
+  it('treats a successful edit tool result as first-write progress for scoped tasks', async () => {
+    const { runEngine } = await import('../../src/executor/engine.js');
+    const mockedRunEngine = vi.mocked(runEngine);
+
+    mockedRunEngine.mockImplementationOnce(async ({ onToolUse, onToolResult }) => {
+      onToolUse?.('Edit', { file_path: 'apple/FitKind/Core/Network/Fixtures.swift' });
+      onToolResult?.('Edit', 'applied', false);
+      return {
+        success: true,
+        output: 'done',
+        usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        durationMs: 100,
+        costUsd: 0,
+      };
+    });
+
+    const task = makeTask('task-1');
+    task.allowedWritePaths = ['apple/FitKind/Core/Network/Fixtures.swift'];
+    task.maxRetries = 0;
+    const state = makeState([task]);
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: makeConfig(),
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(state.plan?.tasks[0].status).toBe('completed');
+    expect(state.plan?.tasks[0].executionMetrics?.timeToFirstWriteMs).toBeTypeOf('number');
+    expect(state.plan?.tasks[0].executionMetrics?.writeCount).toBeGreaterThanOrEqual(1);
+  });
+
   it('does not let holistic review rerun terminal failure tasks', async () => {
     const { runEngine } = await import('../../src/executor/engine.js');
     const { runHolisticReview } = await import('../../src/reviewer.js');
