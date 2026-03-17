@@ -51,6 +51,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.71",
     "@clack/prompts": "^1.0.1",
+    "@czaku/lure": "github:vykeai/lure",
     "@vykeai/fed": "github:vykeai/fed",
     "commander": "^13.1.0",
     "execa": "^9.5.2",

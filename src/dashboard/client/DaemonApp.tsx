@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useTheme } from './hooks/useTheme';
 import { stripAnsi } from './utils/parseOutput';
+import { LURE, shuffle } from '@czaku/lure';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -6223,13 +6224,13 @@ const TICKER_ITEMS = [
   '☁️  This is the way.',
 ];
 
+const LURE_STRINGS = LURE.map(e => {
+  const meta = e.category;
+  return e.text;
+});
+
 function shuffleTicker(): string[] {
-  const a = [...TICKER_ITEMS];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
+  return shuffle(LURE_STRINGS);
 }
 
 function HeaderTicker() {
