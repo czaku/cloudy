@@ -84,6 +84,13 @@ describe('buildExecutionPrompt', () => {
     expect(prompt).toContain('Implement this task completely');
   });
 
+  it('instructs the executor to verify proof tasks before exploring and to allow no-code-change completion', () => {
+    const prompt = buildExecutionPrompt(makeTask(), makePlan(), []);
+    expect(prompt).toContain('If the task is primarily proof, parity, verification, or task closure, start by checking the required artifacts');
+    expect(prompt).toContain('If all acceptance criteria are already satisfied, do not invent code changes.');
+    expect(prompt).toContain('Do not delegate repo discovery to subagents.');
+  });
+
   it('omits acceptance criteria section when empty', () => {
     const task = makeTask({ acceptanceCriteria: [] });
     const prompt = buildExecutionPrompt(task, makePlan(), []);

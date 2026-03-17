@@ -168,6 +168,9 @@ export function buildExecutionPrompt(
   parts.push('Prefer targeted `rg`, `sed`, and `ls` commands over broad `find` scans.');
   parts.push('Do not crawl unrelated parts of the repo just to learn the structure.');
   parts.push('Once the relevant files are identified, move directly into implementation or verification.');
+  parts.push('Do not delegate repo discovery to subagents. Read the provided files yourself first, then act.');
+  parts.push('If the task is primarily proof, parity, verification, or task closure, start by checking the required artifacts and verification commands before exploring anything else.');
+  parts.push('If all acceptance criteria are already satisfied, do not invent code changes. Verify the existing state, leave the code untouched, and summarize that the task was already complete.');
   parts.push('');
 
   // #9 — Anti-pattern catalog (general + testing, merged into one section)
