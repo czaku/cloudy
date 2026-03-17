@@ -21,6 +21,7 @@ import { createStreamFormatter } from '../../utils/stream-formatter.js';
 import type { Plan } from '../../core/types.js';
 import { getPhaseRuntime } from '../../config/phase-runtime.js';
 import type { Task } from '../../core/types.js';
+import { resolvePlanningRetryModel } from '../../planner/planning-fallback.js';
 
 interface ExternalTaskGraph {
   goal?: string;
@@ -508,11 +509,58 @@ export const initCommand = new Command('plan')
           getPhaseRuntime(config, 'planning'),
         );
       } catch (err) {
+        const retryModel = resolvePlanningRetryModel(config.models.planning, err);
+        if (!retryModel) {
+          clearInterval(tickInterval);
+          clearTimeout(planningTimeout);
+          spinner.stop('Planning failed');
+          p.log.error(err instanceof Error ? err.message : String(err));
+          process.exit(1);
+        }
+
         clearInterval(tickInterval);
         clearTimeout(planningTimeout);
-        spinner.stop('Planning failed');
-        p.log.error(err instanceof Error ? err.message : String(err));
-        process.exit(1);
+        spinner.stop(`Planning with ${config.models.planning} timed out — retrying with ${retryModel}`);
+
+        const retryAbort = new AbortController();
+        const retryStart = Date.now();
+        const retrySpinner = p.spinner();
+        retrySpinner.start(`Re-planning with ${retryModel}…`);
+        const retryTick = setInterval(() => {
+          const elapsedSec = Math.floor((Date.now() - retryStart) / 1000);
+          retrySpinner.message(`Re-planning with ${retryModel}… (${elapsedSec}s)`);
+        }, 1000);
+        const retryTimeout = setTimeout(() => retryAbort.abort(), PLANNING_TIMEOUT_MS);
+
+        try {
+          const onOutput = opts.verbose
+            ? (() => {
+                const fmt = createStreamFormatter((s) => process.stdout.write(s));
+                return (text: string) => fmt(text);
+              })()
+            : undefined;
+
+          plan = await createPlan(
+            goal,
+            retryModel,
+            cwd,
+            onOutput ?? (() => {}),
+            specContent,
+            claudeMdContent,
+            retryAbort.signal,
+            getPhaseRuntime(config, 'planning'),
+          );
+          clearInterval(retryTick);
+          clearTimeout(retryTimeout);
+          const elapsed = Math.round((Date.now() - retryStart) / 1000);
+          retrySpinner.stop(`Fallback plan ready  ·  ${plan.tasks.length} tasks  ·  ${elapsed}s`);
+        } catch (retryErr) {
+          clearInterval(retryTick);
+          clearTimeout(retryTimeout);
+          retrySpinner.stop('Planning failed');
+          p.log.error(retryErr instanceof Error ? retryErr.message : String(retryErr));
+          process.exit(1);
+        }
       }
       clearInterval(tickInterval);
       clearTimeout(planningTimeout);
