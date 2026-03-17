@@ -39,6 +39,12 @@ interface ExternalTaskGraph {
   questions?: PlanQuestion[];
 }
 
+function appendOptionalFlag(args: string[], flag: string, value?: string): void {
+  if (value) {
+    args.push(flag, value);
+  }
+}
+
 function toPlannedTask(raw: ExternalTaskGraph['tasks'][number], maxRetries: number): Task {
   return {
     id: raw.id,
@@ -826,6 +832,21 @@ Respond with ONLY valid JSON:
       '--task-review-model', config.models.validation,
       '--run-review-model', config.review.model,
     ];
+    appendOptionalFlag(runArgs, '--build-engine', config.engine);
+    appendOptionalFlag(runArgs, '--build-provider', config.provider);
+    appendOptionalFlag(runArgs, '--build-account', config.account);
+    appendOptionalFlag(runArgs, '--build-model-id', config.executionModelId);
+    appendOptionalFlag(runArgs, '--build-effort', config.executionEffort);
+    appendOptionalFlag(runArgs, '--task-review-engine', config.validationRuntime?.engine);
+    appendOptionalFlag(runArgs, '--task-review-provider', config.validationRuntime?.provider);
+    appendOptionalFlag(runArgs, '--task-review-account', config.validationRuntime?.account);
+    appendOptionalFlag(runArgs, '--task-review-model-id', config.validationRuntime?.modelId);
+    appendOptionalFlag(runArgs, '--task-review-effort', config.validationRuntime?.effort);
+    appendOptionalFlag(runArgs, '--run-review-engine', config.reviewRuntime?.engine);
+    appendOptionalFlag(runArgs, '--run-review-provider', config.reviewRuntime?.provider);
+    appendOptionalFlag(runArgs, '--run-review-account', config.reviewRuntime?.account);
+    appendOptionalFlag(runArgs, '--run-review-model-id', config.reviewRuntime?.modelId);
+    appendOptionalFlag(runArgs, '--run-review-effort', config.reviewRuntime?.effort);
     if (config.models.qualityReview) {
       runArgs.push('--quality-review-model', config.models.qualityReview);
     }
