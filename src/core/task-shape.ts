@@ -103,9 +103,9 @@ export function getTaskToolPolicy(task: Task): TaskToolPolicy {
   const tightlyScopedImplementation =
     defaults.requireFirstWrite &&
     (task.allowedWritePaths?.length ?? 0) > 0 &&
-    (task.allowedWritePaths?.length ?? 0) <= 2 &&
+    (task.allowedWritePaths?.length ?? 0) <= 5 &&
     (task.contextPatterns?.length ?? 0) > 0 &&
-    (task.contextPatterns?.length ?? 0) <= 10 &&
+    (task.contextPatterns?.length ?? 0) <= 12 &&
     task.contextPatterns.every(isConcreteContextPattern) &&
     (task.implementationSteps?.length ?? 0) > 0;
 

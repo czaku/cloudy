@@ -135,6 +135,36 @@ describe('task tool policy', () => {
     expect(policy.allowedTools).toEqual(['Read', 'Edit', 'MultiEdit', 'Write']);
     expect(policy.disallowedTools).toContain('Bash');
   });
+
+  it('keeps strict tool fences for bounded four-file implementation slices', () => {
+    const policy = getTaskToolPolicy(makeTask({
+      executionMode: 'implement_ui_surface',
+      title: 'Convert Compose training-plan detail screen route/content form',
+      description: 'Update the detail screen UI, view-model, root navigation, and screenshot test only.',
+      allowedWritePaths: [
+        'src/RootNavigation.kt',
+        'src/TrainingPlansViewModel.kt',
+        'src/TrainingPlanDetailScreen.kt',
+        'src/PrototypeScreenshotTests.kt',
+      ],
+      contextPatterns: [
+        'src/RootNavigation.kt',
+        'src/TrainingPlansViewModel.kt',
+        'src/TrainingPlanDetailScreen.kt',
+        'src/TrainingPlansRepository.kt',
+        'src/TemplateDetailScreen.kt',
+        'src/PrototypeScreenshotTests.kt',
+      ],
+      implementationSteps: [
+        'Add the route/content split',
+        'Thread the detail override through RootNavigation',
+        'Thread the detail override through screenshot tests',
+      ],
+    }));
+
+    expect(policy.allowedTools).toEqual(['Read', 'Edit', 'MultiEdit', 'Write']);
+    expect(policy.disallowedTools).toEqual(expect.arrayContaining(['Agent', 'Bash', 'Glob', 'Grep', 'LS', 'Find', 'ToolSearch']));
+  });
 });
 
 describe('task risk assessment', () => {
