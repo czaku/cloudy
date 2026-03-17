@@ -1795,7 +1795,7 @@ function ProjectSidebar({ projects, selectedId, onSelect }: ProjectSidebarProps)
               }}>
                 {proj.activeProcess === 'init'     ? '⚡ planning'  :
                proj.activeProcess === 'run'      ? '⚡ running'   :
-               proj.activeProcess === 'chain' ? '⚡ chaining'  :
+               proj.activeProcess === 'pipeline' ? '⚡ pipeline'  :
                proj.status === 'failed'          ? '✗ error'      :
                                                    '○ idle'}
               </span>
@@ -2912,6 +2912,30 @@ function RuntimeConfigFields({
   const activeRoute = hasOverride
     ? routeSummary({ engine: optionalText(engine), provider: optionalText(provider), account: optionalText(account), modelId: optionalText(modelId), effort: optionalText(effort) })
     : null;
+  const fieldKey = title.toLowerCase().replace(/[^a-z0-9]+/g, '-');
+  const engineListId = `${fieldKey}-engine-options`;
+  const providerListId = `${fieldKey}-provider-options`;
+  const accountListId = `${fieldKey}-account-options`;
+  const modelListId = `${fieldKey}-model-options`;
+  const engineOptions = Array.from(new Set([
+    ...presets.map((preset) => preset.engine),
+    defaultRoute?.engine ?? '',
+    engine,
+  ].filter(Boolean)));
+  const providerOptions = Array.from(new Set([
+    ...presets.map((preset) => preset.provider),
+    defaultRoute?.provider ?? '',
+    provider,
+  ].filter(Boolean)));
+  const accountOptions = Array.from(new Set([
+    defaultRoute?.account ?? '',
+    account,
+  ].filter(Boolean)));
+  const modelOptions = Array.from(new Set([
+    ...presets.map((preset) => preset.modelId ?? ''),
+    defaultRoute?.modelId ?? '',
+    modelId,
+  ].filter(Boolean)));
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, width: '100%' }}>
@@ -2929,6 +2953,9 @@ function RuntimeConfigFields({
       <div className="runtime-hint">
         Default: <strong>{routeSummary(defaultRoute)}</strong>
         {activeRoute ? <> · Override: <strong>{activeRoute}</strong></> : null}
+      </div>
+      <div className="runtime-hint">
+        All four routing dimensions are editable here: choose or type <strong>engine</strong>, <strong>provider</strong>, <strong>account</strong>, and <strong>model ID</strong>. Use presets for common routes, then pin account/model details as needed.
       </div>
       <div className="runtime-preset-row">
         {presets.map((preset) => {
@@ -2956,37 +2983,53 @@ function RuntimeConfigFields({
           <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Engine</span>
           <input
             style={inputStyle}
+            list={engineListId}
             placeholder="claude-code, codex"
             value={engine}
             onChange={(e) => onEngineChange((e.target as HTMLInputElement).value)}
           />
+          <datalist id={engineListId}>
+            {engineOptions.map((option) => <option key={option} value={option} />)}
+          </datalist>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Provider</span>
           <input
             style={inputStyle}
+            list={providerListId}
             placeholder="claude, codex, openai"
             value={provider}
             onChange={(e) => onProviderChange((e.target as HTMLInputElement).value)}
           />
+          <datalist id={providerListId}>
+            {providerOptions.map((option) => <option key={option} value={option} />)}
+          </datalist>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Account</span>
           <input
             style={inputStyle}
+            list={accountListId}
             placeholder="claude-ted, dashscope-prod"
             value={account}
             onChange={(e) => onAccountChange((e.target as HTMLInputElement).value)}
           />
+          <datalist id={accountListId}>
+            {accountOptions.map((option) => <option key={option} value={option} />)}
+          </datalist>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Model ID</span>
           <input
             style={inputStyle}
+            list={modelListId}
             placeholder="o3, codex-mini"
             value={modelId}
             onChange={(e) => onModelIdChange((e.target as HTMLInputElement).value)}
           />
+          <datalist id={modelListId}>
+            {modelOptions.map((option) => <option key={option} value={option} />)}
+          </datalist>
         </label>
         <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>Effort</span>
@@ -4534,11 +4577,11 @@ function DashboardTab({ project, onSwitchTab }: { project: ProjectStatusSnapshot
           </div>
         </div>
 
-        <div className="dashboard-card" onClick={() => onSwitchTab('plan')} title="Go to Build">
+        <div className="dashboard-card" onClick={() => onSwitchTab('plan')} title="Go to Plan">
           <div className="dashboard-card-icon"><IconChecklist size={20} color="#38bdf8" /></div>
           <div className="dashboard-card-value">{stats?.specFiles ?? '—'}</div>
           <div className="dashboard-card-label">spec files</div>
-          <div className="dashboard-card-sub">in plan</div>
+          <div className="dashboard-card-sub">queued for planning</div>
         </div>
 
         <div className="dashboard-card" onClick={() => onSwitchTab('run')} title="Go to Run">
@@ -4565,7 +4608,7 @@ function DashboardTab({ project, onSwitchTab }: { project: ProjectStatusSnapshot
           <IconChat size={13} color="currentColor" /> New Chat
         </button>
         <button className="daemon-btn" onClick={() => onSwitchTab('plan')}>
-          <IconChecklist size={13} color="currentColor" /> Build
+          <IconChecklist size={13} color="currentColor" /> Plan
         </button>
         <button className="daemon-btn" onClick={() => onSwitchTab('run')}>
           <IconRocket size={13} color="currentColor" /> Run

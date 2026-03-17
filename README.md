@@ -330,7 +330,7 @@ All decisions are logged to `.cloudy/logs/approvals.jsonl`.
 
 ## 🖥️ Dashboard
 
-A real-time web UI starts automatically at `http://localhost:3117`. It shows live task status, streaming output, cost tracking, and approval cards.
+A real-time web UI starts automatically at `http://localhost:1510`. It shows live task status, streaming output, cost tracking, and approval cards.
 
 ```bash
 cloudy run                # dashboard on by default, browser auto-opens
@@ -341,7 +341,7 @@ cloudy run --no-dashboard # disable
 
 ## 🌐 Daemon — Multi-Project Web Dashboard
 
-The daemon runs a persistent background server at `http://localhost:3117` that aggregates all your registered projects into one web dashboard.
+The daemon runs a persistent background server at `http://localhost:1510` that aggregates all your registered projects into one web dashboard.
 
 ```bash
 cloudy daemon start     # start the daemon (background, survives terminal close)
@@ -349,7 +349,7 @@ cloudy daemon stop      # stop it
 cloudy daemon status    # running/stopped + registered projects
 cloudy daemon register  # register the current project
 cloudy daemon scan      # auto-discover projects under ~/dev and ~/projects
-cloudy daemon open      # open http://localhost:3117 in browser
+cloudy daemon open      # open http://localhost:1510 in browser
 ```
 
 The dashboard has six tabs per project:
@@ -365,21 +365,21 @@ The dashboard has six tabs per project:
 
 ### Runtime controls in the dashboard
 
-The dashboard exposes the same phase/runtime split as the CLI:
+The dashboard exposes the same phase/runtime split as the CLI, including all four routing dimensions:
 
-- **Plan tab**: `planEngine`, `planProvider`, and provider-native `planModelId`
-- **Run tab**: build, task-review, and run-review routes
+- **Plan tab**: `engine`, `provider`, `account`, `modelId`, and `effort` for the planning route
+- **Run tab**: `engine`, `provider`, `account`, `modelId`, and `effort` for build, task-review, and run-review routes
 - **Retry flow**: failed-task retries reuse the same build / task-review / run-review route settings
 
 Use this when you want the web path to behave like:
 
 ```bash
-cloudy plan --plan-engine codex --plan-provider codex --plan-model-id o3-mini
+cloudy plan --plan-engine codex --plan-provider codex --plan-account codex-luke --plan-model-id o3-mini
 
 cloudy run \
-  --build-engine codex --build-provider codex --build-model-id o3 \
-  --task-review-engine claude-code --task-review-provider claude --task-review-model-id claude-sonnet-4-6 \
-  --run-review-engine pi-mono --run-review-provider openai --run-review-model-id gpt-5
+  --build-engine codex --build-provider codex --build-account codex-luke --build-model-id o3 \
+  --task-review-engine claude-code --task-review-provider claude --task-review-account claude-review --task-review-model-id claude-sonnet-4-6 \
+  --run-review-engine pi-mono --run-review-provider openai --run-review-account openai-main --run-review-model-id gpt-5
 ```
 
 ### 💬 Chat tab
@@ -403,7 +403,7 @@ The Chat tab shows both Cloudy sessions (started from the web) and Claude Code C
 The dashboard uses hash-based routing — refresh always restores your position:
 
 ```
-http://localhost:3117/#/myproject/chat/cc%3A1498d6da-...
+http://localhost:1510/#/myproject/chat/cc%3A1498d6da-...
                           ↑project  ↑tab  ↑session id
 ```
 
@@ -815,7 +815,7 @@ Full config reference (`.cloudy/config.json`):
     "port": 7842
   },
   "dashboard": true,
-  "dashboardPort": 3117,
+  "dashboardPort": 1510,
   "approval": {
     "mode": "never",
     "timeoutSec": 300,

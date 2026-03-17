@@ -98,6 +98,27 @@ describe('CLI contract', () => {
     expect(result.stdout).toContain('Usage: cloudy run');
     expect(result.stdout).toContain('--build-engine');
     expect(result.stdout).toContain('--plan-engine');
+    expect(result.stdout).toContain('--build-account');
+    expect(result.stdout).toContain('--task-review-account');
+    expect(result.stdout).toContain('--run-review-account');
+    expect(result.stdout).not.toContain('--plan-account-id');
+    expect(result.stdout).not.toContain('--build-account-id');
+    expect(result.stdout).not.toContain('--task-review-account-id');
+    expect(result.stdout).not.toContain('--run-review-account-id');
+    expect(result.stderr).toBe('');
+    expect(await cloudyDirExists(cwd)).toBe(false);
+  }));
+
+  it('prints chain help without legacy account-id flags', async () => withTempCwd(async (cwd) => {
+    const result = await runCli(['chain', '--help'], cwd);
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('Usage: cloudy chain');
+    expect(result.stdout).toContain('--plan-account');
+    expect(result.stdout).toContain('--build-account');
+    expect(result.stdout).not.toContain('--plan-account-id');
+    expect(result.stdout).not.toContain('--task-review-account-id');
+    expect(result.stdout).not.toContain('--run-review-account-id');
     expect(result.stderr).toBe('');
     expect(await cloudyDirExists(cwd)).toBe(false);
   }));

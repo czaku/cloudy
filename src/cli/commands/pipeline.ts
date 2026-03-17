@@ -3,7 +3,7 @@ import path from 'node:path';
 import { Command } from 'commander';
 import { c, bold, dim, red, green, cyan, cyanBright, yellow } from '../../utils/colors.js';
 import { initLogger } from '../../utils/logger.js';
-import { CLAWDASH_DIR, RUNS_DIR } from '../../config/defaults.js';
+import { CLAWDASH_DIR, DAEMON_DEFAULT_PORT, RUNS_DIR } from '../../config/defaults.js';
 import { loadConfig } from '../../config/config.js';
 import { getPhaseRuntime } from '../../config/phase-runtime.js';
 import type { PhaseRuntimeConfig } from '../../core/types.js';
@@ -116,9 +116,6 @@ export const pipelineCommand = new Command('chain')
   .option('--build-effort <level>', 'Build effort for all phases: low|medium|high|max')
   .option('--keel-slug <slug>', 'Keel project slug to write outcomes back to')
   .option('--keel-task <id>', 'Keel task ID to read runtime defaults from and update on completion')
-  .option('--plan-account-id <id>', 'Plan provider account/profile ID from omnai estate for all phases')
-  .option('--task-review-account-id <id>', 'Per-task review provider account/profile ID from omnai estate for all phases')
-  .option('--run-review-account-id <id>', 'Holistic run-review provider account/profile ID from omnai estate for all phases')
   .option('--no-auto-fix', 'Disable automatic fix-task generation from review notes')
   .option('--verbose', 'Pass --verbose to each run')
   .option('--heartbeat-interval <seconds>', 'Write status.json every N seconds during each phase', parseInt)
@@ -236,7 +233,7 @@ export const pipelineCommand = new Command('chain')
     console.log('');
 
     // Always open the dashboard in the browser when pipeline starts
-    const dashboardPort = 1510;
+    const dashboardPort = config.dashboardPort ?? DAEMON_DEFAULT_PORT;
     const dashboardUrl = `http://localhost:${dashboardPort}`;
     console.log(`${c(cyan, '🌐')}  ${c(cyanBright + bold, dashboardUrl)}  ${c(dim, '(dashboard — opens in browser)')}`);
     import('open').then(({ default: open }) => open(dashboardUrl)).catch(() => {});
