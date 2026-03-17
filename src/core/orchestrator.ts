@@ -847,7 +847,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
     const maxAttempts = task.maxRetries + 1;
     const executionDefaults = getExecutionDefaults(task);
     const toolPolicy = getTaskToolPolicy(task);
-    task.executionMode = inferExecutionMode(task);
+    task.executionMode = task.executionMode ?? inferExecutionMode(task);
     const taskRisk = assessTaskRisk(task);
     task.executionMetrics = {
       timeToFirstWriteMs: task.executionMetrics?.timeToFirstWriteMs,

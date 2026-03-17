@@ -878,6 +878,35 @@ describe('Orchestrator', () => {
     expect(eventTypes).toContain('run_completed');
   });
 
+  it('preserves an explicit execution mode instead of re-inferring verify_proof', async () => {
+    const task = makeTask('task-1');
+    task.title = 'Prove the detail route';
+    task.description = 'Implement the detail route/content split and keep screenshot plumbing unchanged';
+    task.acceptanceCriteria = [
+      'TrainingPlanDetailScreen exposes a route entry point',
+      'Proof screenshots remain unchanged',
+    ];
+    task.executionMode = 'implement_ui_surface';
+    task.allowedWritePaths = ['src/mock-output.ts'];
+    task.contextPatterns = ['src/TrainingPlanDetailScreen.kt'];
+    task.implementationSteps = ['Split the screen into route and content'];
+    task.maxRetries = 0;
+
+    const state = makeState([task]);
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: makeConfig(),
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(state.plan?.tasks[0].status).toBe('completed');
+    expect(state.plan?.tasks[0].executionMode).toBe('implement_ui_surface');
+    expect(state.plan?.tasks[0].executionMetrics?.executionMode).toBe('implement_ui_surface');
+  });
+
   it('passes the earliest checkpoint SHA into holistic review', async () => {
     const { createCheckpoint } = await import('../../src/git/checkpoint.js');
     const { isGitRepo } = await import('../../src/git/git.js');

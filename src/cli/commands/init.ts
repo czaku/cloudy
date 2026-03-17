@@ -23,6 +23,7 @@ import { getPhaseRuntime } from '../../config/phase-runtime.js';
 import type { Task } from '../../core/types.js';
 import { resolvePlanningRetryModel } from '../../planner/planning-fallback.js';
 import type { TaskValidationOverrides } from '../../core/types.js';
+import type { TaskExecutionMode } from '../../core/types.js';
 
 interface ExternalTaskGraph {
   goal?: string;
@@ -30,7 +31,13 @@ interface ExternalTaskGraph {
     id: string;
     title: string;
     description: string;
+    executionMode?: TaskExecutionMode;
     acceptanceCriteria: string[];
+    proofRequirements?: string[];
+    nonGoals?: string[];
+    surfaceScope?: string[];
+    collisionRisks?: string[];
+    definitionOfDone?: string[];
     dependencies?: string[];
     contextPatterns?: string[];
     outputArtifacts?: string[];
@@ -54,7 +61,13 @@ function toPlannedTask(raw: ExternalTaskGraph['tasks'][number], maxRetries: numb
     id: raw.id,
     title: raw.title,
     description: raw.description,
+    executionMode: raw.executionMode,
     acceptanceCriteria: raw.acceptanceCriteria,
+    proofRequirements: raw.proofRequirements,
+    nonGoals: raw.nonGoals,
+    surfaceScope: raw.surfaceScope,
+    collisionRisks: raw.collisionRisks,
+    definitionOfDone: raw.definitionOfDone,
     dependencies: raw.dependencies ?? [],
     contextPatterns: raw.contextPatterns ?? [],
     status: 'pending',
@@ -851,7 +864,6 @@ Respond with ONLY valid JSON:
     updatePlan(state, plan);
     state.runName = runName;
     await saveState(cwd, state);
-    await saveConfig(cwd, config);
 
     await log.info(`Plan saved: ${plan.tasks.length} tasks`);
 
