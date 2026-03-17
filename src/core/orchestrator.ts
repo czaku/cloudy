@@ -1257,7 +1257,6 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
 
         await log.error(`  Execution failed: ${result.error}`);
 
-        const canRetry = queue.incrementRetry(task.id);
         const entry: RetryHistoryEntry = {
           attempt,
           timestamp: new Date().toISOString(),
@@ -1267,6 +1266,14 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           durationMs: Date.now() - attemptStart,
         };
         task.retryHistory!.push(entry);
+        const terminalFailureTypes: RetryHistoryEntry['failureType'][] = [
+          'over_exploration',
+          'out_of_scope_drift',
+          'validation_config_error',
+        ];
+        const canRetry = terminalFailureTypes.includes(entry.failureType)
+          ? false
+          : queue.incrementRetry(task.id);
 
         if (canRetry) {
           lastValidationErrors = result.error ?? 'Execution failed';

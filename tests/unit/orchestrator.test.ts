@@ -384,6 +384,37 @@ describe('Orchestrator', () => {
     dateNowSpy.mockRestore();
   });
 
+  it('does not retry terminal over-exploration failures', async () => {
+    const { runEngine } = await import('../../src/executor/engine.js');
+    const mockedRunEngine = vi.mocked(runEngine);
+
+    mockedRunEngine.mockResolvedValueOnce({
+      success: false,
+      output: '',
+      error: 'Over-exploration detected: 9 discovery operations before any verification or file writes',
+      usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      durationMs: 100,
+      costUsd: 0,
+    });
+
+    const task = makeTask('task-1');
+    task.maxRetries = 2;
+    const state = makeState([task]);
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: makeConfig(),
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(mockedRunEngine).toHaveBeenCalledTimes(1);
+    expect(state.plan?.tasks[0].status).toBe('failed');
+    expect(state.plan?.tasks[0].retries).toBe(0);
+    expect(state.plan?.tasks[0].retryHistory?.[0]?.failureType).toBe('over_exploration');
+  });
+
   it('stops on task failure when ifFailed is halt', async () => {
     const { runEngine } = await import('../../src/executor/engine.js');
     const mockedRunEngine = vi.mocked(runEngine);
