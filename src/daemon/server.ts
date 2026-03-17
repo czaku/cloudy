@@ -122,6 +122,20 @@ interface SavedPlan {
   specSha?: string;       // Short SHA-256 of the first spec file (8 hex chars)
 }
 
+function makePlanningState(runName?: string): {
+  runName?: string;
+  status: 'planning';
+  plan: { tasks: [] };
+  costSummary: { totalEstimatedUsd: number };
+} {
+  return {
+    ...(runName ? { runName } : {}),
+    status: 'planning',
+    plan: { tasks: [] },
+    costSummary: { totalEstimatedUsd: 0 },
+  };
+}
+
 // ── Plan persistence helpers ──────────────────────────────────────────
 
 async function updatePlanStatus(
@@ -1320,7 +1334,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         const stateFile = currentRun
           ? path.join(meta.path, CLAWDASH_DIR, RUNS_DIR, currentRun, 'state.json')
           : path.join(meta.path, CLAWDASH_DIR, 'state.json');
-        const state = await readJson(stateFile);
+        const state = await readJson(stateFile) ?? (currentRun ? makePlanningState(currentRun) : {});
         sendJson(res, 200, state ?? {});
       } catch {
         sendJson(res, 200, {});
@@ -1424,7 +1438,13 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         const raw = await fs.readFile(stateFile, 'utf-8');
         sendJson(res, 200, JSON.parse(raw));
       } catch {
-        send404(res);
+        const specFile = path.join(meta.path, CLAWDASH_DIR, RUNS_DIR, runName, 'spec.md');
+        const hasSpec = await fs.access(specFile).then(() => true).catch(() => false);
+        if (hasSpec) {
+          sendJson(res, 200, makePlanningState(runName));
+        } else {
+          send404(res);
+        }
       }
       return;
     }

@@ -12,6 +12,9 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type http from 'node:http';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 const {
   stopFed,
@@ -430,6 +433,23 @@ describe('GET /api/projects/:id/state', () => {
     expect(body).toEqual({});
   });
 
+  it('returns synthetic planning state when current run exists but state.json is missing', async () => {
+    const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cloudy-daemon-state-'));
+    await fs.mkdir(path.join(projectDir, '.cloudy', 'runs', 'run-123'), { recursive: true });
+    await fs.writeFile(path.join(projectDir, '.cloudy', 'current'), 'run-123');
+    await fs.writeFile(path.join(projectDir, '.cloudy', 'runs', 'run-123', 'spec.md'), '# spec');
+    vi.mocked(findProject).mockResolvedValue(makeProject({ path: projectDir }));
+
+    const { status, body } = await get(base, '/api/projects/test-project/state');
+    expect(status).toBe(200);
+    expect(body).toEqual({
+      runName: 'run-123',
+      status: 'planning',
+      plan: { tasks: [] },
+      costSummary: { totalEstimatedUsd: 0 },
+    });
+  });
+
   it('returns 404 when project does not exist', async () => {
     vi.mocked(findProject).mockResolvedValue(undefined);
 
@@ -463,6 +483,24 @@ describe('GET /api/projects/:id/config', () => {
 
     const { status } = await get(base, '/api/projects/ghost/config');
     expect(status).toBe(404);
+  });
+});
+
+describe('GET /api/projects/:id/run-state/:runName', () => {
+  it('returns synthetic planning state when a run has spec.md but no state.json yet', async () => {
+    const projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cloudy-daemon-run-state-'));
+    await fs.mkdir(path.join(projectDir, '.cloudy', 'runs', 'run-456'), { recursive: true });
+    await fs.writeFile(path.join(projectDir, '.cloudy', 'runs', 'run-456', 'spec.md'), '# spec');
+    vi.mocked(findProject).mockResolvedValue(makeProject({ path: projectDir }));
+
+    const { status, body } = await get(base, '/api/projects/test-project/run-state/run-456');
+    expect(status).toBe(200);
+    expect(body).toEqual({
+      runName: 'run-456',
+      status: 'planning',
+      plan: { tasks: [] },
+      costSummary: { totalEstimatedUsd: 0 },
+    });
   });
 });
 
