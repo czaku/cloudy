@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { updatePlan } from '../../src/core/state.js';
+import { normalizePlanTasks, updatePlan } from '../../src/core/state.js';
 import type { ProjectState, Plan, Task } from '../../src/core/types.js';
 
 function makeTask(id: string): Task {
@@ -31,7 +31,10 @@ function makeState(overrides: Partial<ProjectState> = {}): ProjectState {
   return {
     version: 2,
     plan: null,
-    config: {} as any,
+    config: {
+      maxRetries: 3,
+      taskTimeoutMs: 900000,
+    } as any,
     costSummary: {
       totalInputTokens: 500,
       totalOutputTokens: 300,
@@ -52,7 +55,7 @@ describe('updatePlan', () => {
     const state = makeState();
     const plan = makePlan([makeTask('task-1')]);
     updatePlan(state, plan);
-    expect(state.plan).toBe(plan);
+    expect(state.plan).toMatchObject(plan);
     expect(state.plan?.tasks).toHaveLength(1);
   });
 
@@ -109,5 +112,55 @@ describe('updatePlan', () => {
     expect(state.plan?.tasks).toHaveLength(1);
     expect(state.startedAt).toBeUndefined();
     expect(state.completedAt).toBeUndefined();
+  });
+
+  it('normalizes imported packet tasks that omit runtime defaults', () => {
+    const state = makeState();
+    const importedPlan = makePlan([
+      {
+        id: 'task-raw',
+        title: 'Raw packet task',
+        description: '',
+        acceptanceCriteria: [],
+        dependencies: [],
+        contextPatterns: [],
+        status: 'pending',
+      } as unknown as Task,
+    ]);
+
+    updatePlan(state, importedPlan);
+
+    expect(state.plan?.tasks[0]).toMatchObject({
+      retries: 0,
+      maxRetries: 3,
+      ifFailed: 'skip',
+      timeout: 900000,
+    });
+  });
+});
+
+describe('normalizePlanTasks', () => {
+  it('converts timeoutMinutes into task timeout when timeout is missing', () => {
+    const normalized = normalizePlanTasks(
+      makePlan([
+        {
+          id: 'task-timeout',
+          title: 'Timeout packet',
+          description: '',
+          acceptanceCriteria: [],
+          dependencies: [],
+          contextPatterns: [],
+          status: 'pending',
+          timeoutMinutes: 12,
+        } as unknown as Task,
+      ]),
+      {
+        maxRetries: 2,
+        taskTimeoutMs: 600000,
+      } as any,
+    );
+
+    expect(normalized.tasks[0]?.timeout).toBe(720000);
+    expect(normalized.tasks[0]?.maxRetries).toBe(2);
   });
 });

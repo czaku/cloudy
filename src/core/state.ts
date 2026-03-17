@@ -12,6 +12,7 @@ import {
 import { ensureDir, readJson, writeJson, fileExists } from '../utils/fs.js';
 import { getCurrentRunDir } from '../utils/run-dir.js';
 import { EventStore } from './event-store.js';
+import type { Task } from './types.js';
 
 // ── Run name generation ───────────────────────────────────────────────
 
@@ -92,6 +93,37 @@ function emptyCostSummary(): CostSummary {
   };
 }
 
+function normalizeTask(task: Task, config: CloudyConfig): Task {
+  const fallbackTimeout = config.taskTimeoutMs || DEFAULT_CONFIG.taskTimeoutMs;
+  const fallbackMaxRetries = config.maxRetries ?? DEFAULT_CONFIG.maxRetries;
+  const rawTimeoutMinutes = (task as Task & { timeoutMinutes?: unknown }).timeoutMinutes;
+  const timeoutFromMinutes =
+    typeof rawTimeoutMinutes === 'number' && Number.isFinite(rawTimeoutMinutes)
+      ? Math.max(1, rawTimeoutMinutes) * 60_000
+      : undefined;
+
+  return {
+    ...task,
+    acceptanceCriteria: Array.isArray(task.acceptanceCriteria) ? task.acceptanceCriteria : [],
+    dependencies: Array.isArray(task.dependencies) ? task.dependencies : [],
+    contextPatterns: Array.isArray(task.contextPatterns) ? task.contextPatterns : [],
+    outputArtifacts: Array.isArray(task.outputArtifacts) ? task.outputArtifacts : [],
+    allowedWritePaths: Array.isArray(task.allowedWritePaths) ? task.allowedWritePaths : [],
+    retries: Number.isFinite(task.retries) ? task.retries : 0,
+    maxRetries: Number.isFinite(task.maxRetries) ? task.maxRetries : fallbackMaxRetries,
+    ifFailed: task.ifFailed === 'halt' || task.ifFailed === 'skip' ? task.ifFailed : 'skip',
+    timeout: Number.isFinite(task.timeout) && task.timeout > 0 ? task.timeout : (timeoutFromMinutes ?? fallbackTimeout),
+    status: task.status ?? 'pending',
+  };
+}
+
+export function normalizePlanTasks(plan: Plan, config: CloudyConfig): Plan {
+  return {
+    ...plan,
+    tasks: plan.tasks.map((task) => normalizeTask(task, config)),
+  };
+}
+
 export function createInitialState(config?: CloudyConfig): ProjectState {
   return {
     version: STATE_VERSION,
@@ -106,9 +138,17 @@ export async function loadState(cwd: string): Promise<ProjectState | null> {
   if (await fileExists(ePath)) {
     const baseState = (await readJson<ProjectState>(await statePath(cwd))) ?? createInitialState();
     const store = new EventStore(baseState, ePath);
-    return store.replay();
+    const replayed = await store.replay();
+    if (replayed.plan) {
+      replayed.plan = normalizePlanTasks(replayed.plan, replayed.config ?? DEFAULT_CONFIG);
+    }
+    return replayed;
   }
-  return readJson<ProjectState>(await statePath(cwd));
+  const loaded = await readJson<ProjectState>(await statePath(cwd));
+  if (loaded?.plan) {
+    loaded.plan = normalizePlanTasks(loaded.plan, loaded.config ?? DEFAULT_CONFIG);
+  }
+  return loaded;
 }
 
 export async function saveState(
@@ -137,7 +177,7 @@ export async function loadOrCreateState(
 }
 
 export function updatePlan(state: ProjectState, plan: Plan): void {
-  state.plan = plan;
+  state.plan = normalizePlanTasks(plan, state.config ?? DEFAULT_CONFIG);
   // Reset run-level timestamps and costs so the dashboard starts fresh for the new plan
   state.startedAt = undefined;
   state.completedAt = undefined;

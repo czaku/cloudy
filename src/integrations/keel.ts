@@ -100,29 +100,6 @@ async function addTaskNote(ctx: KeelContext, taskId: string, text: string): Prom
   });
 }
 
-async function createDecisionDraft(ctx: KeelContext, taskId: string, outcome: RunOutcome, runName: string): Promise<void> {
-  const title = `Cloudy run blocked ${taskId}`;
-  const context = [
-    `Run ${runName} failed while updating ${ctx.slug}/${taskId}.`,
-    `Completed tasks: ${outcome.tasksDone}.`,
-    `Failed tasks: ${outcome.tasksFailed}.`,
-    `Cost: $${outcome.costUsd.toFixed(4)}.`,
-    `Duration: ${formatDuration(outcome.durationMs)}.`,
-    outcome.topError ? `Top error: ${outcome.topError}` : null,
-  ].filter(Boolean).join('\n');
-
-  await requestJson(`${baseUrl(ctx)}/api/projects/${ctx.slug}/decisions`, {
-    method: 'POST',
-    body: JSON.stringify({
-      title,
-      context,
-      outcome: 'Investigate the failed cloudy run, then decide whether to retry, split the task, or revise the spec.',
-      affects: [taskId],
-      status: 'proposed',
-    }),
-  });
-}
-
 function buildSummary(outcome: RunOutcome, runName: string): string {
   const parts = [
     `Cloudy run ${runName} ${outcome.success ? 'completed successfully' : 'failed'}.`,
@@ -245,10 +222,6 @@ export async function writeRunOutcome(ctx: KeelContext, outcome: RunOutcome, cwd
       },
     });
     await addTaskNote(ctx, ctx.taskId, buildAssessmentNote(assessment));
-
-    if (!outcome.success) {
-      await createDecisionDraft(ctx, ctx.taskId, outcome, runName);
-    }
 
     await log.info(`[keel] Updated ${ctx.slug}/${ctx.taskId} → ${status} (${outcome.tasksDone} done, ${outcome.tasksFailed} failed, $${outcome.costUsd.toFixed(4)})`);
   } catch (error) {

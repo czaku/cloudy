@@ -96,7 +96,7 @@ describe('keel integration', () => {
     expect(logInfo).toHaveBeenCalledWith(expect.stringContaining('Updated demo-project/T-123'));
   });
 
-  it('adds a proposed decision when a run fails', async () => {
+  it('updates the task and adds a note when a run fails without creating a decision draft', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200, statusText: 'OK', text: async () => '' }));
     vi.stubGlobal('fetch', fetchMock);
 
@@ -109,7 +109,7 @@ describe('keel integration', () => {
       projectDir,
     );
 
-    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
       'http://127.0.0.1:9000/api/projects/demo-project/tasks/T-123',
@@ -125,11 +125,11 @@ describe('keel integration', () => {
       }),
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
-      'http://127.0.0.1:9000/api/projects/demo-project/decisions',
+      2,
+      'http://127.0.0.1:9000/api/projects/demo-project/tasks/T-123/notes',
       expect.objectContaining({
         method: 'POST',
-        body: expect.stringContaining('"title":"Cloudy run blocked T-123"'),
+        body: expect.stringContaining('Acceptance status: blocked'),
       }),
     );
   });
