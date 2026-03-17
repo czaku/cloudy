@@ -67,8 +67,8 @@ async function findPhaseStartSha(cwd: string): Promise<string | undefined> {
 /**
  * Build task summary block for the review prompt.
  */
-function buildTaskSummary(plan: Plan): string {
-  return plan.tasks
+function buildTaskSummary(tasks: Task[]): string {
+  return tasks
     .map((task) => {
       const acResults = task.acceptanceCriteriaResults && task.acceptanceCriteriaResults.length > 0
         ? '\nAcceptance Criteria Results:\n' +
@@ -84,10 +84,10 @@ function buildTaskSummary(plan: Plan): string {
 /**
  * Build all acceptance criteria from the plan, numbered, for holistic review grading.
  */
-function buildAllAcceptanceCriteria(plan: Plan): string {
+function buildAllAcceptanceCriteria(tasks: Task[]): string {
   const lines: string[] = ['## All Acceptance Criteria'];
   let n = 0;
-  for (const task of plan.tasks) {
+  for (const task of tasks) {
     for (const criterion of task.acceptanceCriteria) {
       n++;
       lines.push(`${n}. [${task.id}] ${criterion}`);
@@ -177,16 +177,21 @@ function buildReviewPrompt(
   claudeMdContent: string | undefined,
   specContent: string | undefined,
   plan: Plan,
+  reviewTasks: Task[],
   taskSummary: string,
   gitDiff: string,
   verificationSection?: string,
 ): string {
   const specSection = specContent
     ? specContent
-    : `(spec not saved — reviewing from task descriptions only)\n\nGoal: ${plan.goal}\n\n${plan.tasks.map((t) => `### ${t.id}: ${t.title}\n${t.description}`).join('\n\n')}`;
+    : `(spec not saved — reviewing from task descriptions only)\n\nGoal: ${plan.goal}\n\n${reviewTasks.map((t) => `### ${t.id}: ${t.title}\n${t.description}`).join('\n\n')}`;
 
   const conventionsSection = claudeMdContent ?? '(CLAUDE.md not found)';
-  const allCriteria = buildAllAcceptanceCriteria(plan);
+  const allCriteria = buildAllAcceptanceCriteria(reviewTasks);
+  const scopedTaskIds = reviewTasks.map((task) => task.id);
+  const scopeSection = scopedTaskIds.length > 0 && scopedTaskIds.length !== plan.tasks.length
+    ? `## Active Review Scope\nOnly evaluate this execution slice: ${scopedTaskIds.join(', ')}.\nDo NOT fail the review because other tasks in the overall packet are still skipped, pending, or incomplete.\n`
+    : '';
 
   return `You are performing a holistic post-run review of a completed implementation batch.
 
@@ -198,6 +203,8 @@ ${specSection}
 
 ## Task Execution Summary
 ${taskSummary}
+
+${scopeSection}
 
 ## Full Implementation Changes
 \`\`\`diff
@@ -247,6 +254,7 @@ export async function runHolisticReview(
   onOutput?: (text: string) => void,
   fromSha?: string,
   runtime?: PhaseRuntimeConfig,
+  activeTaskIds?: string[],
 ): Promise<ReviewResult> {
   const startMs = Date.now();
 
@@ -315,10 +323,13 @@ export async function runHolisticReview(
   }
 
   // 6. Build task summary
-  const taskSummary = buildTaskSummary(plan);
+  const reviewTasks = activeTaskIds && activeTaskIds.length > 0
+    ? plan.tasks.filter((task) => activeTaskIds.includes(task.id))
+    : plan.tasks;
+  const taskSummary = buildTaskSummary(reviewTasks);
 
   // 7. Build review prompt
-  const prompt = buildReviewPrompt(claudeMdContent, specContent, plan, taskSummary, gitDiff, verificationSection);
+  const prompt = buildReviewPrompt(claudeMdContent, specContent, plan, reviewTasks, taskSummary, gitDiff, verificationSection);
 
   // 8. Run review model through the provider-agnostic executor
   const claudeResult = await runPhaseModel({

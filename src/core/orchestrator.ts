@@ -612,6 +612,7 @@ export class Orchestrator {
         (text) => this.onEvent({ type: 'review_output', text }),
         this.reviewBaseSha,
         getPhaseRuntime(this.config, 'review'),
+        this.state.activeTaskIds,
       );
       this.onEvent({ type: 'review_completed', result });
       return result;

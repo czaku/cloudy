@@ -194,6 +194,27 @@ describe('runHolisticReview', () => {
     expect(callArgs.prompt).toContain('47820, 47821, 47822');
   });
 
+  it('limits holistic review scope to active task ids when provided', async () => {
+    const plan = makePlan();
+
+    await runHolisticReview(
+      cwd,
+      plan,
+      'sonnet',
+      undefined,
+      undefined,
+      undefined,
+      ['task-2'],
+    );
+
+    const callArgs = vi.mocked(runPhaseModel).mock.calls[0][0] as any;
+    const prompt = callArgs.prompt as string;
+    expect(prompt).toContain('Only evaluate this execution slice: task-2.');
+    expect(prompt).toContain('### task-2: Add UI component');
+    expect(prompt).not.toContain('### task-1: Implement API');
+    expect(prompt).not.toContain('[task-1] POST /api/v1/items returns 201');
+  });
+
   it('omits CLAUDE.md section when not found', async () => {
     vi.mocked(fs.readFile).mockRejectedValue(new Error('ENOENT'));
 
