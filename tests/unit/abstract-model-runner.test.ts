@@ -58,6 +58,36 @@ describe('abstract model runner', () => {
     });
   });
 
+  it('attaches allowed and disallowed tool policies through Claude hooks', async () => {
+    const run = vi.fn(async function* (_prompt: string, opts: any) {
+      expect(opts.allowedTools).toEqual(['Read', 'Edit']);
+      expect(opts.disallowedTools).toEqual(['Bash', 'ToolSearch']);
+      expect(opts.hooks?.PreToolUse).toEqual(
+        expect.arrayContaining([expect.objectContaining({ matcher: '*' })]),
+      );
+      yield {
+        type: 'result',
+        output: 'done',
+        usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        costUsd: 0,
+        durationMs: 1,
+      };
+    });
+    mockSelectViaDaemon.mockResolvedValueOnce(makeRunner('claude-code', run as any) as any);
+
+    const result = await runOmnai({
+      prompt: 'do work',
+      cwd: '/tmp',
+      engine: 'claude-code',
+      provider: 'claude',
+      taskType: 'coding',
+      allowedTools: ['Read', 'Edit'],
+      disallowedTools: ['Bash', 'ToolSearch'],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it('does not attach Claude hooks for non-claude engines', async () => {
     const run = vi.fn(async function* (_prompt: string, opts: any) {
       expect(opts.model).toBe('o3');

@@ -13,6 +13,11 @@ export interface TaskExecutionDefaults {
   requireFirstWrite: boolean;
 }
 
+export interface TaskToolPolicy {
+  allowedTools?: string[];
+  disallowedTools?: string[];
+}
+
 function normalizedText(task: Task): string {
   return `${task.title}\n${task.description}\n${task.acceptanceCriteria.join('\n')}`.toLowerCase();
 }
@@ -81,6 +86,35 @@ export function getExecutionDefaults(task: Task): TaskExecutionDefaults {
     default:
       return { executionMode: mode, model: 'sonnet', effort: 'medium', disallowSubagents: false, requireFirstWrite: false };
   }
+}
+
+export function getTaskToolPolicy(task: Task): TaskToolPolicy {
+  const defaults = getExecutionDefaults(task);
+  const disallowed = new Set<string>();
+
+  if (defaults.disallowSubagents) {
+    disallowed.add('Agent');
+  }
+
+  const tightlyScopedImplementation =
+    defaults.requireFirstWrite &&
+    (task.allowedWritePaths?.length ?? 0) > 0 &&
+    (task.allowedWritePaths?.length ?? 0) <= 2 &&
+    (task.contextPatterns?.length ?? 0) > 0 &&
+    (task.contextPatterns?.length ?? 0) <= 2 &&
+    (task.implementationSteps?.length ?? 0) > 0;
+
+  if (tightlyScopedImplementation) {
+    return {
+      allowedTools: ['Read', 'Edit', 'MultiEdit', 'Write'],
+      disallowedTools: ['Agent', 'Bash', 'Glob', 'Grep', 'LS', 'Find', 'ToolSearch'],
+    };
+  }
+
+  return {
+    allowedTools: undefined,
+    disallowedTools: disallowed.size > 0 ? [...disallowed] : undefined,
+  };
 }
 
 export function isTerminalFailureType(failureType: TaskFailureType): boolean {

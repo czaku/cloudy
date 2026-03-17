@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { assessTaskRisk, getExecutionDefaults, inferExecutionMode, isTerminalFailureType } from '../../src/core/task-shape.js';
+import { assessTaskRisk, getExecutionDefaults, getTaskToolPolicy, inferExecutionMode, isTerminalFailureType } from '../../src/core/task-shape.js';
 import type { Task } from '../../src/core/types.js';
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -86,6 +86,35 @@ describe('task execution defaults', () => {
       disallowSubagents: true,
       requireFirstWrite: true,
     });
+  });
+});
+
+describe('task tool policy', () => {
+  it('disallows discovery tools for tightly scoped implementation tasks', () => {
+    const policy = getTaskToolPolicy(makeTask({
+      title: 'Add route hooks',
+      description: 'Update the UI routes only',
+      allowedWritePaths: ['src/RootNavigation.kt', 'src/PrototypeScreenshotTests.kt'],
+      contextPatterns: ['src/RootNavigation.kt', 'src/PrototypeScreenshotTests.kt'],
+      implementationSteps: ['Edit the route table', 'Edit the screenshot tests'],
+    }));
+
+    expect(policy.allowedTools).toEqual(['Read', 'Edit', 'MultiEdit', 'Write']);
+    expect(policy.disallowedTools).toEqual(expect.arrayContaining(['Agent', 'Bash', 'Glob', 'Grep', 'LS', 'Find']));
+    expect(policy.disallowedTools).toContain('ToolSearch');
+  });
+
+  it('keeps broader bounded tasks on subagent-only restrictions', () => {
+    const policy = getTaskToolPolicy(makeTask({
+      title: 'Implement API endpoint',
+      description: 'Add route and DTOs',
+      allowedWritePaths: ['api/src/version'],
+      contextPatterns: ['api/src/version/**'],
+      implementationSteps: [],
+    }));
+
+    expect(policy.allowedTools).toBeUndefined();
+    expect(policy.disallowedTools).toEqual(['Agent']);
   });
 });
 

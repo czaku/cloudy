@@ -450,6 +450,41 @@ describe('Orchestrator', () => {
     expect(state.plan?.tasks[0].error).toContain('Pre-write shell discovery is disallowed');
   });
 
+  it('passes strict allowed tools for tiny scoped implementation tasks', async () => {
+    const { runEngine } = await import('../../src/executor/engine.js');
+    const mockedRunEngine = vi.mocked(runEngine);
+
+    mockedRunEngine.mockResolvedValueOnce({
+      success: true,
+      output: 'done',
+      usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      durationMs: 100,
+      costUsd: 0,
+    });
+
+    const task = makeTask('task-1');
+    task.title = 'Add route hooks';
+    task.description = 'Update the UI routes only';
+    task.allowedWritePaths = ['src/RootNavigation.kt', 'src/PrototypeScreenshotTests.kt'];
+    task.contextPatterns = ['src/RootNavigation.kt', 'src/PrototypeScreenshotTests.kt'];
+    task.implementationSteps = ['Edit the route table', 'Edit the screenshot tests'];
+    task.maxRetries = 0;
+    const state = makeState([task]);
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: makeConfig(),
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(mockedRunEngine).toHaveBeenCalledWith(expect.objectContaining({
+      allowedTools: ['Read', 'Edit', 'MultiEdit', 'Write'],
+      disallowedTools: ['Agent', 'Bash', 'Glob', 'Grep', 'LS', 'Find', 'ToolSearch'],
+    }));
+  });
+
   it('treats a successful edit tool result as first-write progress for scoped tasks', async () => {
     const { runEngine } = await import('../../src/executor/engine.js');
     const mockedRunEngine = vi.mocked(runEngine);

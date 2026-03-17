@@ -48,9 +48,9 @@ import { RunLogger } from '../knowledge/run-logger.js';
 import { parseSubtasks } from './subtask-parser.js';
 import { waitForApproval, type ApprovalHandler } from './approval.js';
 import { logApproval } from '../utils/approval-log.js';
-import { assessTaskRisk, getExecutionDefaults, inferExecutionMode, isTerminalFailureType } from './task-shape.js';
+import { assessTaskRisk, getExecutionDefaults, getTaskToolPolicy, inferExecutionMode, isTerminalFailureType } from './task-shape.js';
 
-const DISCOVERY_READ_TOOL_NAMES = new Set(['Read', 'LS', 'Glob', 'Grep', 'Find']);
+const DISCOVERY_READ_TOOL_NAMES = new Set(['Read', 'LS', 'Glob', 'Grep', 'Find', 'ToolSearch']);
 const WRITE_TOOL_NAMES = new Set(['Edit', 'Write', 'MultiEdit']);
 const VERIFY_FIRST_TASK_TYPES = new Set(['verify', 'review', 'closeout']);
 const SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT = 8;
@@ -99,11 +99,12 @@ function matchesAllowedWritePath(filePath: string, cwd: string, allowedWritePath
   });
 }
 
-function findOutOfScopeRepoPath(command: string, cwd: string): string | null {
+function findOutOfScopeRepoPath(command: string, allowedRoots: string[]): string | null {
   const matches = command.match(/\/Users\/[^\s"'`]+/g) ?? [];
   for (const match of matches) {
     const normalized = path.normalize(match);
-    if (normalized.includes('/dev/') && !pathWithin(cwd, normalized)) {
+    const withinAllowedRoot = allowedRoots.some((root) => pathWithin(root, normalized));
+    if (normalized.includes('/dev/') && !withinAllowedRoot) {
       return normalized;
     }
   }
@@ -817,6 +818,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
   ): Promise<void> {
     const maxAttempts = task.maxRetries + 1;
     const executionDefaults = getExecutionDefaults(task);
+    const toolPolicy = getTaskToolPolicy(task);
     task.executionMode = inferExecutionMode(task);
     const taskRisk = assessTaskRisk(task);
     task.executionMetrics = {
@@ -1136,7 +1138,12 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           modelId: this.config.executionModelId,
           claudeModel: executionModel,
           effort: this.config.executionEffort ?? executionDefaults.effort,
-          disallowedTools: VERIFY_FIRST_TASK_TYPES.has(taskType) || executionDefaults.disallowSubagents ? ['Agent'] : undefined,
+          allowedTools: VERIFY_FIRST_TASK_TYPES.has(taskType)
+            ? undefined
+            : toolPolicy.allowedTools,
+          disallowedTools: VERIFY_FIRST_TASK_TYPES.has(taskType)
+            ? ['Agent']
+            : toolPolicy.disallowedTools,
           cwd: taskCwd,
           onOutput: (text) => {
             _lastOutputMs = Date.now(); // reset silence timer on any stdout activity
@@ -1158,7 +1165,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
               const command = typeof (toolInput as { command?: unknown })?.command === 'string'
                 ? (toolInput as { command?: string }).command ?? ''
                 : '';
-              const outOfScopeRepoPath = findOutOfScopeRepoPath(command, taskCwd);
+              const outOfScopeRepoPath = findOutOfScopeRepoPath(command, [taskCwd, this.cwd]);
               if (outOfScopeRepoPath) {
                 forcedAbortReason = `Out-of-scope repo access detected: ${outOfScopeRepoPath}`;
                 abortController.abort();

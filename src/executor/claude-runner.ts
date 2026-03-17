@@ -221,11 +221,26 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
   // Worktree path shape: {mainRepo}/.cloudy/worktrees/{taskId}
   const clawdashIdx = cwd.indexOf('/.cloudy/worktrees/');
   const mainRepoCwd = clawdashIdx !== -1 ? cwd.slice(0, clawdashIdx) : null;
+  const allowedToolSet = allowedTools ? new Set(allowedTools) : undefined;
+  const disallowedToolSet = disallowedTools ? new Set(disallowedTools) : undefined;
 
   const preToolUseHook: FnHook = async (input: unknown) => {
     const h = input as any;
     const toolName: string = h.tool_name ?? '';
     const ti = h.tool_input ?? {};
+
+    if (allowedToolSet && !allowedToolSet.has(toolName)) {
+      return {
+        decision: 'block' as const,
+        reason: `Tool ${toolName} is not allowed for this task. Allowed tools: ${[...allowedToolSet].join(', ')}`,
+      };
+    }
+    if (disallowedToolSet?.has(toolName)) {
+      return {
+        decision: 'block' as const,
+        reason: `Tool ${toolName} is disallowed for this task.`,
+      };
+    }
 
     // Redirect absolute paths that land in the main repo instead of the worktree.
     // This happens when Claude ignores the relative-path instruction and uses
@@ -282,8 +297,8 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
 
   if (runner.engine === 'claude-code') {
     runOpts.hooks = {
-      PostToolUse: [{ matcher: '.*', hooks: [postToolUseHook] }],
-      PreToolUse: [{ matcher: 'Bash', hooks: [preToolUseHook] }],
+      PostToolUse: [{ matcher: '*', hooks: [postToolUseHook] }],
+      PreToolUse: [{ matcher: '*', hooks: [preToolUseHook] }],
     };
   }
 
