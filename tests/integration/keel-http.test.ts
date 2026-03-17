@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const logInfo = vi.fn(async () => {});
 const logWarn = vi.fn(async () => {});
-let mockedRunDir = '/tmp/project/.cloudy/runs/run-20260314-fitkind';
+let mockedRunDir = '/tmp/project/.cloudy/runs/run-20260314-demo-project';
 
 vi.mock('../../src/utils/logger.js', () => ({
   log: {
@@ -83,7 +83,7 @@ describe('keel integration over HTTP', () => {
 
   async function prepareRunDir(): Promise<void> {
     projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cloudy-keel-http-'))
-    mockedRunDir = path.join(projectDir, '.cloudy', 'runs', 'run-20260314-fitkind')
+    mockedRunDir = path.join(projectDir, '.cloudy', 'runs', 'run-20260314-demo-project')
     await fs.mkdir(mockedRunDir, { recursive: true })
   }
 
@@ -95,7 +95,7 @@ describe('keel integration over HTTP', () => {
     await prepareRunDir()
 
     await writeRunOutcome(
-      { slug: 'fitkind', taskId: 'T-123', port: recorder.port },
+      { slug: 'demo-project', taskId: 'T-123', port: recorder.port },
       {
         success: false,
         tasksDone: 2,
@@ -111,29 +111,29 @@ describe('keel integration over HTTP', () => {
 
     expect(recorder.requests[0]).toMatchObject({
       method: 'PATCH',
-      url: '/api/projects/fitkind/tasks/T-123',
+      url: '/api/projects/demo-project/tasks/T-123',
     })
     expect(JSON.parse(recorder.requests[0].body)).toEqual({
       status: 'blocked',
       run_status: 'failed',
       cloudy_run: {
-        runName: 'run-20260314-fitkind',
+        runName: 'run-20260314-demo-project',
         taskId: 'T-123',
       },
     })
 
     expect(recorder.requests[1]).toMatchObject({
       method: 'POST',
-      url: '/api/projects/fitkind/tasks/T-123/notes',
+      url: '/api/projects/demo-project/tasks/T-123/notes',
     })
     expect(JSON.parse(recorder.requests[1].body)).toMatchObject({
       by: 'cloudy',
-      text: expect.stringContaining('Cloudy run run-20260314-fitkind failed.'),
+      text: expect.stringContaining('Cloudy run run-20260314-demo-project failed.'),
     })
 
     expect(recorder.requests[2]).toMatchObject({
       method: 'POST',
-      url: '/api/projects/fitkind/decisions',
+      url: '/api/projects/demo-project/decisions',
     })
     expect(JSON.parse(recorder.requests[2].body)).toMatchObject({
       title: 'Cloudy run blocked T-123',
@@ -142,7 +142,7 @@ describe('keel integration over HTTP', () => {
       outcome: expect.stringContaining('Investigate the failed cloudy run'),
     })
 
-    expect(logInfo).toHaveBeenCalledWith(expect.stringContaining('Updated fitkind/T-123'))
+    expect(logInfo).toHaveBeenCalledWith(expect.stringContaining('Updated demo-project/T-123'))
     expect(logWarn).not.toHaveBeenCalled()
   })
 })

@@ -113,13 +113,13 @@ describe('validateTask — full pipeline integration', () => {
   it('phase 0: infers artifact paths from acceptance criteria when outputArtifacts are omitted', async () => {
     const task = makeTask({
       acceptanceCriteria: [
-        'android-shell-journey.png and /tmp/fake-proof.json exist under ~/Desktop/screenshots/fitkind/',
+        'android-shell-home.png and /tmp/fake-proof.json exist under ~/Desktop/screenshots/demo-project/',
       ],
     });
     await validateTask({ task, config: ALL_OFF, model: 'haiku', cwd: '/tmp' });
     expect(runArtifactCheck).toHaveBeenCalledWith(expect.arrayContaining([
       '/tmp/fake-proof.json',
-      `${process.env.HOME ?? '~'}/Desktop/screenshots/fitkind/android-shell-journey.png`,
+      `${process.env.HOME ?? '~'}/Desktop/screenshots/demo-project/android-shell-home.png`,
     ]), '/tmp');
   });
 
@@ -165,7 +165,7 @@ describe('validateTask — full pipeline integration', () => {
     const { getGitDiff } = await import('../../src/git/git.js');
     vi.mocked(getGitDiff).mockResolvedValueOnce('');
     const task = makeTask({
-      acceptanceCriteria: ['android-shell-journey.png exists under ~/Desktop/screenshots/fitkind/'],
+      acceptanceCriteria: ['android-shell-home.png exists under ~/Desktop/screenshots/demo-project/'],
     });
     const report = await validateTask({ task, config: ALL_ON, model: 'haiku', cwd: '/tmp' });
     expect(report.passed).toBe(true);
@@ -238,9 +238,9 @@ describe('validateTask — full pipeline integration', () => {
 describe('inferArtifactsFromAcceptanceCriteria', () => {
   it('extracts screenshot and repo-relative artifacts from acceptance criteria', () => {
     expect(inferArtifactsFromAcceptanceCriteria([
-      'android-shell-journey.png exists under ~/Desktop/screenshots/fitkind/ and reports/state.json is written',
+      'android-shell-home.png exists under ~/Desktop/screenshots/demo-project/ and reports/state.json is written',
     ])).toEqual([
-      `${process.env.HOME ?? '~'}/Desktop/screenshots/fitkind/android-shell-journey.png`,
+      `${process.env.HOME ?? '~'}/Desktop/screenshots/demo-project/android-shell-home.png`,
       'reports/state.json',
     ]);
   });

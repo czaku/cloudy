@@ -594,7 +594,7 @@ describe('runtime routing via daemon HTTP', () => {
       buildModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
-      keelSlug: 'fitkind',
+      keelSlug: 'demo-project',
       keelTask: 'T-77',
       buildEngine: 'codex',
       buildProvider: 'codex',
@@ -616,7 +616,7 @@ describe('runtime routing via daemon HTTP', () => {
     expect(argv).toContain('--build-engine');
     expect(argv).toContain('codex');
     expect(argv).toContain('--keel-slug');
-    expect(argv).toContain('fitkind');
+    expect(argv).toContain('demo-project');
     expect(argv).toContain('--keel-task');
     expect(argv).toContain('T-77');
     expect(argv).toContain('--build-provider');
@@ -699,7 +699,7 @@ describe('runtime routing via daemon HTTP', () => {
       buildModel: 'sonnet',
       taskReviewModel: 'haiku',
       runReviewModel: 'sonnet',
-      keelSlug: 'fitkind',
+      keelSlug: 'demo-project',
       keelTask: 'T-88',
       buildEngine: 'codex',
       buildProvider: 'codex',
@@ -721,7 +721,7 @@ describe('runtime routing via daemon HTTP', () => {
     expect(argv).toContain('--retry');
     expect(argv).toContain('task-7');
     expect(argv).toContain('--keel-slug');
-    expect(argv).toContain('fitkind');
+    expect(argv).toContain('demo-project');
     expect(argv).toContain('--keel-task');
     expect(argv).toContain('T-88');
     expect(argv).toContain('--build-engine');

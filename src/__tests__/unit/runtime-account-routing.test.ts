@@ -6,15 +6,15 @@ vi.mock('omnai', () => ({
     async getEstate() {
       return {
         accounts: {
-          'claude-pole': {
+          'claude-main': {
             provider: 'claude',
             engine: 'claude-code',
-            configDir: '/Users/luke/.claude-pole',
+            configDir: '/tmp/claude-main',
           },
           'codex-local': {
             provider: 'codex',
             engine: 'codex',
-            configDir: '/Users/luke/.codex-alt',
+            configDir: '/tmp/codex-local',
           },
         },
       };
@@ -28,10 +28,10 @@ vi.mock('omnai', () => ({
 describe('resolveRuntimeAccount', () => {
   it('maps Claude account ids to CLAUDE_CONFIG_DIR', async () => {
     const { resolveRuntimeAccount } = await import('../../executor/claude-runner.js');
-    const result = await resolveRuntimeAccount({ account: 'claude-pole' });
+    const result = await resolveRuntimeAccount({ account: 'claude-main' });
     expect(result.engine).toBe('claude-code');
     expect(result.provider).toBe('claude');
-    expect(result.env).toEqual({ CLAUDE_CONFIG_DIR: '/Users/luke/.claude-pole' });
+    expect(result.env).toEqual({ CLAUDE_CONFIG_DIR: '/tmp/claude-main' });
   });
 
   it('maps Codex account ids to CODEX_HOME', async () => {
@@ -39,7 +39,7 @@ describe('resolveRuntimeAccount', () => {
     const result = await resolveRuntimeAccount({ account: 'codex-local' });
     expect(result.engine).toBe('codex');
     expect(result.provider).toBe('codex');
-    expect(result.env).toEqual({ CODEX_HOME: '/Users/luke/.codex-alt' });
+    expect(result.env).toEqual({ CODEX_HOME: '/tmp/codex-local' });
   });
 
   it('prefers explicit configDir overrides', async () => {
@@ -47,7 +47,7 @@ describe('resolveRuntimeAccount', () => {
     const result = await resolveRuntimeAccount({
       engine: 'claude-code',
       provider: 'claude',
-      account: 'claude-pole',
+      account: 'claude-main',
       configDir: '/tmp/custom-claude',
     });
     expect(result.env).toEqual({ CLAUDE_CONFIG_DIR: '/tmp/custom-claude' });

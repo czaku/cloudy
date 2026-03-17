@@ -5,7 +5,7 @@ import path from 'node:path';
 
 const logInfo = vi.fn(async () => {});
 const logWarn = vi.fn(async () => {});
-let mockedRunDir = '/tmp/project/.cloudy/runs/run-20260314-fitkind';
+let mockedRunDir = '/tmp/project/.cloudy/runs/run-20260314-demo-project';
 
 vi.mock('../../src/utils/logger.js', () => ({
   log: {
@@ -36,7 +36,7 @@ describe('keel integration', () => {
 
   async function prepareRunDir(): Promise<void> {
     projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cloudy-keel-unit-'));
-    runDir = path.join(projectDir, '.cloudy', 'runs', 'run-20260314-fitkind');
+    runDir = path.join(projectDir, '.cloudy', 'runs', 'run-20260314-demo-project');
     mockedRunDir = runDir;
     await fs.mkdir(runDir, { recursive: true });
   }
@@ -60,7 +60,7 @@ describe('keel integration', () => {
     );
 
     await writeRunOutcome(
-      { slug: 'fitkind', taskId: 'T-123', port: 7842 },
+      { slug: 'demo-project', taskId: 'T-123', port: 7842 },
       { success: true, tasksDone: 4, tasksFailed: 0, costUsd: 1.23, durationMs: 65000, filesTouched: ['src/foo.ts'], artifactsProduced: ['docs/proof.md'] },
       projectDir,
     );
@@ -68,14 +68,14 @@ describe('keel integration', () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      'http://127.0.0.1:7842/api/projects/fitkind/tasks/T-123',
+      'http://127.0.0.1:7842/api/projects/demo-project/tasks/T-123',
       expect.objectContaining({
         method: 'PATCH',
         body: JSON.stringify({
           status: 'done',
           run_status: 'succeeded',
           cloudy_run: {
-            runName: 'run-20260314-fitkind',
+            runName: 'run-20260314-demo-project',
             taskId: 'T-123',
           },
         }),
@@ -83,7 +83,7 @@ describe('keel integration', () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
-      'http://127.0.0.1:7842/api/projects/fitkind/tasks/T-123/notes',
+      'http://127.0.0.1:7842/api/projects/demo-project/tasks/T-123/notes',
       expect.objectContaining({
         method: 'POST',
         body: expect.stringContaining('Quality verdict: yellow'),
@@ -93,7 +93,7 @@ describe('keel integration', () => {
     expect(assessment.acceptanceStatus).toBe('needs_review');
     expect(assessment.checksPassed).toContain('bun run test');
     expect(assessment.checksFailed).toContain('bun run build');
-    expect(logInfo).toHaveBeenCalledWith(expect.stringContaining('Updated fitkind/T-123'));
+    expect(logInfo).toHaveBeenCalledWith(expect.stringContaining('Updated demo-project/T-123'));
   });
 
   it('adds a proposed decision when a run fails', async () => {
@@ -104,7 +104,7 @@ describe('keel integration', () => {
     await prepareRunDir();
 
     await writeRunOutcome(
-      { slug: 'fitkind', taskId: 'T-123', port: 9000 },
+      { slug: 'demo-project', taskId: 'T-123', port: 9000 },
       { success: false, tasksDone: 1, tasksFailed: 2, topError: 'validator exploded', costUsd: 4.56, durationMs: 120000 },
       projectDir,
     );
@@ -112,13 +112,13 @@ describe('keel integration', () => {
     expect(fetchMock).toHaveBeenCalledTimes(3);
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
-      'http://127.0.0.1:9000/api/projects/fitkind/tasks/T-123',
+      'http://127.0.0.1:9000/api/projects/demo-project/tasks/T-123',
       expect.objectContaining({
         body: JSON.stringify({
           status: 'blocked',
           run_status: 'failed',
           cloudy_run: {
-            runName: 'run-20260314-fitkind',
+            runName: 'run-20260314-demo-project',
             taskId: 'T-123',
           },
         }),
@@ -126,7 +126,7 @@ describe('keel integration', () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       3,
-      'http://127.0.0.1:9000/api/projects/fitkind/decisions',
+      'http://127.0.0.1:9000/api/projects/demo-project/decisions',
       expect.objectContaining({
         method: 'POST',
         body: expect.stringContaining('"title":"Cloudy run blocked T-123"'),
@@ -142,7 +142,7 @@ describe('keel integration', () => {
     await prepareRunDir();
 
     await writeRunOutcome(
-      { slug: 'fitkind', port: 7842 },
+      { slug: 'demo-project', port: 7842 },
       { success: true, tasksDone: 2, tasksFailed: 0, costUsd: 0.5, durationMs: 5000 },
       projectDir,
     );
@@ -159,11 +159,11 @@ describe('keel integration', () => {
     await prepareRunDir();
 
     await expect(writeRunOutcome(
-      { slug: 'fitkind', taskId: 'T-123', port: 7842 },
+      { slug: 'demo-project', taskId: 'T-123', port: 7842 },
       { success: true, tasksDone: 1, tasksFailed: 0, costUsd: 0.25, durationMs: 1000 },
       projectDir,
     )).rejects.toThrow(/500 Boom/);
 
-    expect(logWarn).toHaveBeenCalledWith(expect.stringContaining('Write-back failed for fitkind/T-123'));
+    expect(logWarn).toHaveBeenCalledWith(expect.stringContaining('Write-back failed for demo-project/T-123'));
   });
 });

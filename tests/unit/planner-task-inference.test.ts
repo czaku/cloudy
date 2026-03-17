@@ -6,7 +6,7 @@ describe('inferTaskType', () => {
     expect(inferTaskType({
       title: 'Verify deterministic Google shell launch states',
       description: 'Capture screenshots and prove parity for root shell states.',
-      acceptanceCriteria: ['android-shell-journey.png exists under ~/Desktop/screenshots/fitkind/'],
+      acceptanceCriteria: ['android-shell-home.png exists under ~/Desktop/screenshots/demo-project/'],
       outputArtifacts: [],
     })).toBe('verify');
   });
@@ -24,10 +24,10 @@ describe('inferTaskType', () => {
 describe('inferArtifactsFromAcceptanceCriteria', () => {
   it('promotes screenshot files under a home-directory proof path', () => {
     expect(inferArtifactsFromAcceptanceCriteria([
-      'android-shell-journey.png, android-shell-vault.png exist under ~/Desktop/screenshots/fitkind/',
+      'android-shell-home.png, android-shell-library.png exist under ~/Desktop/screenshots/demo-project/',
     ])).toEqual([
-      `${process.env.HOME ?? '~'}/Desktop/screenshots/fitkind/android-shell-journey.png`,
-      `${process.env.HOME ?? '~'}/Desktop/screenshots/fitkind/android-shell-vault.png`,
+      `${process.env.HOME ?? '~'}/Desktop/screenshots/demo-project/android-shell-home.png`,
+      `${process.env.HOME ?? '~'}/Desktop/screenshots/demo-project/android-shell-library.png`,
     ]);
   });
 });

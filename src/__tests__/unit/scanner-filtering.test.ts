@@ -148,7 +148,7 @@ describe('loadClaudeCodeMessages — injection filtering', () => {
 
   it('filters "<context>" sub-agent injections', async () => {
     mockSessionFile([
-      makeJsonlLine('user', '<context>\nProject: fitkind\nGoal: ...\n</context>'),
+      makeJsonlLine('user', '<context>\nProject: demo-project\nGoal: ...\n</context>'),
     ]);
     const result = await loadClaudeCodeMessages(FAKE_PROJECT, SESSION_ID);
     expect(result).toHaveLength(0);

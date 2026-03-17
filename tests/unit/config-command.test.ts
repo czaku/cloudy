@@ -45,7 +45,7 @@ function makeConfig() {
     validationRuntime: { engine: 'claude-code', provider: 'claude', modelId: 'claude-sonnet-4-6', effort: 'high' },
     reviewRuntime: { engine: 'claude-code', provider: 'claude', modelId: 'claude-opus-4-6', effort: 'max' },
     review: { enabled: true, model: 'opus', failBlocksRun: false },
-    keel: { slug: 'sitches' },
+    keel: { slug: 'demo-project' },
   } as const;
 }
 

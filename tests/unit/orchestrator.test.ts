@@ -272,17 +272,18 @@ describe('Orchestrator', () => {
   it('fails immediately on out-of-scope writes', async () => {
     const { runEngine } = await import('../../src/executor/engine.js');
     const { validateTask } = await import('../../src/validator/validator.js');
+    const outOfScopePath = path.join(testCwd, '..', 'external', 'validator', 'build-check.ts');
 
     vi.mocked(runEngine).mockImplementationOnce(async ({ onFilesWritten, onOutput }: { onFilesWritten?: (paths: string[]) => void; onOutput?: (text: string) => void }) => {
       onOutput?.('writing outside scope');
-      onFilesWritten?.(['/Users/luke/dev/cloudy/src/validator/strategies/build-check.ts']);
+      onFilesWritten?.([outOfScopePath]);
       return {
         success: true,
         output: 'wrote wrong file',
         usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 },
         durationMs: 100,
         costUsd: 0.001,
-        filesWritten: ['/Users/luke/dev/cloudy/src/validator/strategies/build-check.ts'],
+        filesWritten: [outOfScopePath],
       };
     });
 
@@ -334,6 +335,53 @@ describe('Orchestrator', () => {
     expect(state.plan?.tasks[0].retries).toBe(0);
     expect(state.plan?.tasks[0].implementationCandidateReady).toBe(true);
     expect(state.plan?.tasks[0].implementationCandidateReason).toContain('Validation configuration error');
+  });
+
+  it('fails scoped implementation tasks that keep exploring without making a first write', async () => {
+    const { runEngine } = await import('../../src/executor/engine.js');
+    const mockedRunEngine = vi.mocked(runEngine);
+    let now = 1_700_000_000_000;
+    const dateNowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+
+    mockedRunEngine.mockImplementationOnce(async ({ onToolUse, abortSignal }: { onToolUse?: (toolName: string, toolInput: unknown) => void; abortSignal?: AbortSignal }) => {
+      onToolUse?.('Agent', { description: 'explore files' });
+      onToolUse?.('Read', { file_path: 'app/features/plan/TrainingPlansView.swift' });
+      onToolUse?.('Read', { file_path: 'app/features/plan/TrainingPlanDetailView.swift' });
+      onToolUse?.('Read', { file_path: 'app/features/home/HomeViewModel.swift' });
+      onToolUse?.('Read', { file_path: 'fixtures/home/today.json' });
+      onToolUse?.('Read', { file_path: 'app/core/network/APIResponses.swift' });
+      onToolUse?.('Read', { file_path: 'app/core/network/Fixtures.swift' });
+      now += 76_000;
+
+      onToolUse?.('Read', { file_path: 'app/features/plan/PlanViewModel.swift' });
+
+      return {
+        success: false,
+        output: '',
+        error: abortSignal?.aborted ? 'Task timed out' : 'should have aborted',
+        usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        durationMs: 100,
+        costUsd: 0,
+      };
+    });
+
+    const task = makeTask('task-1');
+    task.allowedWritePaths = ['app/features/plan', 'app/features/home', 'app/core/network', 'fixtures/plans'];
+    task.maxRetries = 0;
+    const state = makeState([task]);
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: makeConfig(),
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(state.plan?.tasks[0].status).toBe('failed');
+    expect(state.plan?.tasks[0].error).toContain('Over-exploration detected');
+    expect(state.plan?.tasks[0].retryHistory?.[0]?.failureType).toBe('over_exploration');
+    dateNowSpy.mockRestore();
   });
 
   it('stops on task failure when ifFailed is halt', async () => {

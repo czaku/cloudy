@@ -82,7 +82,7 @@ describe('keel task runtime', () => {
         validationRuntime: { engine: 'claude-code', provider: 'claude', modelId: 'claude-haiku-4-5-20251001' },
         reviewRuntime: { engine: 'claude-code', provider: 'claude', modelId: 'claude-sonnet-4-6' },
         review: { enabled: true, model: 'sonnet', failBlocksRun: false },
-        keel: { slug: 'fitkind', taskId: 'T-029', port: 7842 },
+        keel: { slug: 'demo-project', taskId: 'T-029', port: 7842 },
       },
       {
         models: {

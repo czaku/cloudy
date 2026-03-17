@@ -54,8 +54,8 @@ export interface PhaseRuntimeConfig {
    * Named account/credential route within the provider.
    *
    * Examples:
-   * - `claude-ted`
-   * - `claude-rai`
+   * - `claude-main`
+   * - `claude-backup`
    * - `dashscope-prod`
    */
   account?: string;
@@ -404,7 +404,7 @@ export interface GlobalConfig {
 }
 
 export interface ProjectMeta {
-  id: string;         // slug, e.g. 'theonlysuite'
+  id: string;         // project slug, e.g. 'demo-project'
   name: string;       // display name, e.g. 'The Only Suite'
   path: string;       // absolute path to project root
   registeredAt: string; // ISO timestamp

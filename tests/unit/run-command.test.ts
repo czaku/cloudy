@@ -266,7 +266,7 @@ describe('run command', () => {
   it('applies keel task runtime defaults before orchestrating the run', async () => {
     mockLoadConfig.mockResolvedValue({
       ...makeConfig(),
-      keel: { slug: 'fitkind', taskId: 'T-029', port: 7842 },
+      keel: { slug: 'demo-project', taskId: 'T-029', port: 7842 },
     });
     mockLoadKeelTaskRuntime.mockResolvedValue({
       models: {
@@ -356,7 +356,7 @@ describe('run command', () => {
     const state = makeState('completed');
     mockLoadConfig.mockResolvedValue({
       ...makeConfig(),
-      keel: { slug: 'fitkind', taskId: 'T-7', port: 9000 },
+      keel: { slug: 'demo-project', taskId: 'T-7', port: 9000 },
     });
     mockLoadState.mockResolvedValue(state);
 
@@ -371,7 +371,7 @@ describe('run command', () => {
     ], { from: 'user' });
 
     expect(mockWriteRunOutcome).toHaveBeenCalledWith(
-      { slug: 'fitkind', taskId: 'T-7', port: 9000 },
+      { slug: 'demo-project', taskId: 'T-7', port: 9000 },
       expect.objectContaining({
         success: true,
         tasksDone: 1,
@@ -385,7 +385,7 @@ describe('run command', () => {
     const state = makeState('failed');
     mockLoadConfig.mockResolvedValue({
       ...makeConfig(),
-      keel: { slug: 'fitkind', taskId: 'T-9', port: 7842 },
+      keel: { slug: 'demo-project', taskId: 'T-9', port: 7842 },
     });
     mockLoadState.mockResolvedValue(state);
 
@@ -400,7 +400,7 @@ describe('run command', () => {
     ], { from: 'user' });
 
     expect(mockWriteRunOutcome).toHaveBeenCalledWith(
-      { slug: 'fitkind', taskId: 'T-9', port: 7842 },
+      { slug: 'demo-project', taskId: 'T-9', port: 7842 },
       expect.objectContaining({
         success: false,
         tasksDone: 0,

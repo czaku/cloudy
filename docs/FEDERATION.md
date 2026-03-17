@@ -31,7 +31,7 @@ The web dashboard aggregates local + peer runs. Projects are grouped by machine:
 
 ```
 macbook-pro ●
-  univiirse   run-042   done   14/14 tasks
+  app-web     run-042   done   14/14 tasks
   keel        run-018   active  7/12 tasks
 
 mac-studio ●

@@ -19,7 +19,7 @@ Use them for different decisions:
 
 - pick `engine` when you care about the execution surface: `claude-code`, `codex`, `pi-mono`
 - pick `provider` when you care about the backend family: `claude`, `codex`, `openai`, `dashscope`, `ollama`
-- pick `account` when you care about the named quota or credential route: `claude-ted`, `claude-rai`, `openai-main`
+- pick `account` when you care about the named quota or credential route: `claude-main`, `claude-backup`, `openai-main`
 - pick `modelId` when you care about the exact model: `claude-sonnet-4-6`, `o3`, `gpt-5`
 
 Example:
@@ -28,7 +28,7 @@ Example:
 cloudy run \
   --build-engine claude-code \
   --build-provider claude \
-  --build-account claude-ted \
+  --build-account claude-main \
   --build-model-id claude-sonnet-4-6
 ```
 
@@ -419,7 +419,7 @@ Planning example:
 
 ```json
 {
-  "specPaths": ["/Users/ted/dev/myapp/specs/auth.md"],
+  "specPaths": ["/workspace/myapp/specs/auth.md"],
   "planModel": "sonnet",
   "planEngine": "codex",
   "planProvider": "codex",
@@ -770,7 +770,7 @@ Full config reference (`.cloudy/config.json`):
   },
   "buildEngine": "claude-code",
   "buildProvider": "claude",
-  "buildAccount": "claude-ted",
+  "buildAccount": "claude-main",
   "buildModelId": "",
   "buildEffort": "high",
   "planRuntime": {

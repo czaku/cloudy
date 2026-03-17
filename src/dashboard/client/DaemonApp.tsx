@@ -3064,7 +3064,7 @@ function RuntimeConfigFields({
           <input
             style={inputStyle}
             list={accountListId}
-            placeholder="claude-ted, dashscope-prod"
+            placeholder="claude-main, dashscope-prod"
             value={account}
             onChange={(e) => onAccountChange((e.target as HTMLInputElement).value)}
           />
@@ -5713,7 +5713,7 @@ const TICKER_ITEMS = [
   '🗂️  Saved plans persist across sessions. Build a library of reusable specs.',
   '🔗  Pipeline chains are drag-and-drop. Orchestrate your entire product in one screen.',
   '⏸️  Stop button kills the active process cleanly. SIGTERM, then clean up. No orphans.',
-  '🌍  Multi-project: fitkind, univiirse, goala — all in the sidebar, all in one daemon.',
+  '🌍  Multi-project: app-web, api-core, admin-console — all in the sidebar, all in one daemon.',
   '🔁  cloudy run --retry-failed resets only failed tasks. Resume from exactly where it broke.',
   '📝  Memory tab stores persistent context that shapes every future AI decision.',
   '🤝  Approval mode: review each task before it runs. You stay in control.',

@@ -336,7 +336,7 @@ export const initCommand = new Command('plan')
         goal = firstLine?.replace(/^#+\s*/, '').trim() ?? 'Implement the specification';
         // For multiple specs, combine their titles
         if (specPaths.length > 1) {
-          const titles = specPaths.map(p => path.basename(p, '.md').replace(/^aiyayai-/, ''));
+          const titles = specPaths.map((p) => path.basename(p, '.md').replace(/^[a-z0-9-]+-/, ''));
           goal = titles.join(' + ');
         }
       } else {

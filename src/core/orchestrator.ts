@@ -50,6 +50,9 @@ import { logApproval } from '../utils/approval-log.js';
 
 const DISCOVERY_READ_TOOL_NAMES = new Set(['Read', 'LS', 'Glob', 'Grep', 'Find']);
 const VERIFY_FIRST_TASK_TYPES = new Set(['verify', 'review', 'closeout']);
+const SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT = 8;
+const SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS = 75_000;
+const SCOPED_IMPLEMENT_FIRST_WRITE_MIN_DISCOVERY_OPS = 6;
 
 function classifyRetryFailure(error: string | undefined): RetryHistoryEntry['failureType'] {
   const message = (error ?? '').toLowerCase();
@@ -1009,7 +1012,12 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       let forcedAbortReason: string | undefined;
       let discoveryOps = 0;
       let verificationOps = 0;
-      const maxDiscoveryOps = VERIFY_FIRST_TASK_TYPES.has(taskType) ? 10 : 18;
+      const scopedImplementationTask = !VERIFY_FIRST_TASK_TYPES.has(taskType) && allowedWritePaths.length > 0;
+      const maxDiscoveryOps = VERIFY_FIRST_TASK_TYPES.has(taskType)
+        ? 10
+        : scopedImplementationTask
+          ? SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT
+          : 18;
       const _heartbeatId = setInterval(() => {
         const elapsedMs  = Date.now() - _engineStart;
         const silenceMs  = Date.now() - _lastOutputMs;
@@ -1073,11 +1081,22 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
               if (isBroadDiscoveryCommand(command)) {
                 discoveryOps++;
               }
+            } else if (toolName === 'Agent' && scopedImplementationTask) {
+              discoveryOps += 2;
             } else if (DISCOVERY_READ_TOOL_NAMES.has(toolName)) {
               discoveryOps++;
             }
             if (VERIFY_FIRST_TASK_TYPES.has(taskType) && discoveryOps > maxDiscoveryOps && verificationOps === 0 && !(task.filesWritten?.length)) {
               forcedAbortReason = `Over-exploration detected: ${discoveryOps} discovery operations before any verification or file writes`;
+              abortController.abort();
+            } else if (
+              scopedImplementationTask &&
+              discoveryOps >= SCOPED_IMPLEMENT_FIRST_WRITE_MIN_DISCOVERY_OPS &&
+              verificationOps === 0 &&
+              !(task.filesWritten?.length) &&
+              Date.now() - _engineStart >= SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS
+            ) {
+              forcedAbortReason = `Over-exploration detected: ${discoveryOps} discovery operations and no file writes after ${Math.round((Date.now() - _engineStart) / 1000)}s for a scoped implementation task`;
               abortController.abort();
             }
             this.onEvent({ type: 'task_tool_call', taskId: task.id, toolName, toolInput });
@@ -1126,7 +1145,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       }
 
       // Persist session ID and file list for resume on next retry
-      if (forcedAbortReason && result.success) {
+      if (forcedAbortReason && (result.success || /timed out/i.test(result.error ?? ''))) {
         result = {
           ...result,
           success: false,

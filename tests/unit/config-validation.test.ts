@@ -104,7 +104,7 @@ describe('validateConfig', () => {
 
   it('errors on invalid keel port', () => {
     const errors = validateConfig(makeConfig({
-      keel: { slug: 'fitkind', port: 70000 },
+      keel: { slug: 'demo-project', port: 70000 },
     }));
     expect(errors.some((e) => e.includes('keel.port'))).toBe(true);
   });
