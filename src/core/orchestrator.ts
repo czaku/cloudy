@@ -1018,6 +1018,15 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
         : scopedImplementationTask
           ? SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT
           : 18;
+      const _firstWriteDeadlineId = scopedImplementationTask
+        ? setTimeout(() => {
+            if (!(task.filesWritten?.length)) {
+              forcedAbortReason = `Over-exploration detected: no file writes after ${Math.round(SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS / 1000)}s for a scoped implementation task`;
+              log.warn(`  ⏳ first-write deadline reached — "${task.title}" has not written any files`).catch(() => {});
+              abortController.abort();
+            }
+          }, SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS)
+        : undefined;
       const _heartbeatId = setInterval(() => {
         const elapsedMs  = Date.now() - _engineStart;
         const silenceMs  = Date.now() - _lastOutputMs;
@@ -1110,6 +1119,9 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           },
           onFilesWritten: (paths) => {
             _lastOutputMs = Date.now(); // file writes prove the task is moving
+            if (_firstWriteDeadlineId) {
+              clearTimeout(_firstWriteDeadlineId);
+            }
             const normalizedPaths = paths.map((candidate) => normalizePathForScope(candidate, taskCwd));
             const outOfScopeWrite = normalizedPaths.find((candidate) => !matchesAllowedWritePath(candidate, taskCwd, allowedWritePaths));
             if (outOfScopeWrite) {
@@ -1141,6 +1153,9 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
         };
       } finally {
         clearInterval(_heartbeatId);
+        if (_firstWriteDeadlineId) {
+          clearTimeout(_firstWriteDeadlineId);
+        }
         clearTimeout(timeoutId);
       }
 
