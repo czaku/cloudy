@@ -34,7 +34,7 @@ vi.mock('../../src/utils/logger.js', () => ({
   log: { info: vi.fn(async () => {}), warn: vi.fn(async () => {}), error: vi.fn(async () => {}) },
 }));
 
-import { validateTask } from '../../src/validator/validator.js';
+import { inferArtifactsFromAcceptanceCriteria, validateTask } from '../../src/validator/validator.js';
 import { runArtifactCheck } from '../../src/validator/strategies/artifact-check.js';
 import { runTypeCheck } from '../../src/validator/strategies/type-check.js';
 import { runAiReview } from '../../src/validator/strategies/ai-review.js';
@@ -108,6 +108,19 @@ describe('validateTask — full pipeline integration', () => {
     expect(runArtifactCheck).toHaveBeenCalledWith(['src/foo.ts'], '/tmp');
   });
 
+  it('phase 0: infers artifact paths from acceptance criteria when outputArtifacts are omitted', async () => {
+    const task = makeTask({
+      acceptanceCriteria: [
+        'android-shell-journey.png and /tmp/fake-proof.json exist under ~/Desktop/screenshots/fitkind/',
+      ],
+    });
+    await validateTask({ task, config: ALL_OFF, model: 'haiku', cwd: '/tmp' });
+    expect(runArtifactCheck).toHaveBeenCalledWith(expect.arrayContaining([
+      '/tmp/fake-proof.json',
+      `${process.env.HOME ?? '~'}/Desktop/screenshots/fitkind/android-shell-journey.png`,
+    ]), '/tmp');
+  });
+
   it('phase 0: short-circuits on missing artifacts without running later phases', async () => {
     vi.mocked(runArtifactCheck).mockResolvedValueOnce({
       strategy: 'artifacts',
@@ -164,6 +177,17 @@ describe('validateTask — full pipeline integration', () => {
   });
 });
 
+describe('inferArtifactsFromAcceptanceCriteria', () => {
+  it('extracts screenshot and repo-relative artifacts from acceptance criteria', () => {
+    expect(inferArtifactsFromAcceptanceCriteria([
+      'android-shell-journey.png exists under ~/Desktop/screenshots/fitkind/ and reports/state.json is written',
+    ])).toEqual([
+      `${process.env.HOME ?? '~'}/Desktop/screenshots/fitkind/android-shell-journey.png`,
+      'reports/state.json',
+    ]);
+  });
+});
+
 describe('validateTask — two-stage AI review (Phase 2a → 2b)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -207,7 +231,7 @@ describe('validateTask — two-stage AI review (Phase 2a → 2b)', () => {
       expect.any(Array),
       undefined,
       undefined,
-      undefined,
+      expect.any(Array),
       expect.any(Array),
       runtime,
     );

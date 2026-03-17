@@ -24,6 +24,7 @@ import type { PriorArtifact } from '../planner/prompts.js';
 const MAX_FILES_FOR_REVIEW = 20;
 const CONTEXT_LINES = 40;          // lines of context around each changed hunk
 const MAX_SECTION_CHARS = 40_000;  // per-file budget (covers even large files like orchestrator.py)
+const ARTIFACT_PATH_RE = /(?:~\/[^\s,;:'"`]+|(?:\/[^\s,;:'"`]+)+|(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.[A-Za-z0-9]{2,8}|[A-Za-z0-9_.-]+\.(?:png|jpg|jpeg|webp|gif|pdf|json|md|txt|html|csv|xml|svg))/g;
 
 /**
  * Parse a unified diff and return changed line ranges (in the new file) per file path.
@@ -69,6 +70,38 @@ export function mergeRanges(
     }
   }
   return merged;
+}
+
+export function inferArtifactsFromAcceptanceCriteria(criteria: string[]): string[] {
+  const artifacts = new Set<string>();
+
+  for (const criterion of criteria) {
+    const homeDir = process.env.HOME ?? '~';
+    const matches = (criterion.match(ARTIFACT_PATH_RE) ?? [])
+      .map((rawMatch) => rawMatch
+        .replace(/[),.;:]+$/, '')
+        .replace(/^["'`]+/, '')
+        .replace(/["'`]+$/, ''))
+      .filter(Boolean)
+      .map((cleaned) => cleaned.startsWith('~/') ? cleaned.replace(/^~\//, `${homeDir}/`) : cleaned);
+
+    const baseDir = matches.find((match) => match.startsWith(`${homeDir}/`) && match.endsWith('/'));
+    const bareFiles = matches.filter((match) => !match.includes('/') && /\.[A-Za-z0-9]{2,8}$/.test(match));
+
+    if (baseDir) {
+      for (const bareFile of bareFiles) {
+        artifacts.add(path.join(baseDir, bareFile));
+      }
+    }
+
+    for (const cleaned of matches) {
+      if (baseDir && cleaned === baseDir) continue;
+      if (baseDir && !cleaned.includes('/') && /\.[A-Za-z0-9]{2,8}$/.test(cleaned)) continue;
+      artifacts.add(cleaned);
+    }
+  }
+
+  return [...artifacts].sort();
 }
 
 /**
@@ -232,13 +265,14 @@ export async function validateTask(
   const { task, config, model, qualityModel, runtime, cwd, checkpointSha, priorArtifacts } = options;
   const resolvedQualityModel: ClaudeModel = qualityModel ?? model;
   const results: ValidationResult[] = [];
+  const artifactPaths = [...new Set([...(task.outputArtifacts ?? []), ...inferArtifactsFromAcceptanceCriteria(task.acceptanceCriteria)])];
 
   await log.info(`Validating task "${task.id}": ${task.title}`);
 
   // Phase 0: Artifact check (must exist before running other checks)
-  if (task.outputArtifacts && task.outputArtifacts.length > 0) {
+  if (artifactPaths.length > 0) {
     await log.info('  Running artifact check...');
-    const artifactResult = await runArtifactCheck(task.outputArtifacts, cwd);
+    const artifactResult = await runArtifactCheck(artifactPaths, cwd);
     if (!artifactResult.passed) {
       await log.warn('  Artifact check FAILED');
       return { taskId: task.id, passed: false, results: [artifactResult] };
@@ -403,7 +437,7 @@ export async function validateTask(
         fileSections,
         priorArtifacts,
         artifactCheckPassedEarly,
-        task.outputArtifacts,
+        artifactPaths,
         commandResults,
         runtime,
       );
@@ -444,7 +478,7 @@ export async function validateTask(
         changedFileSections,
         priorArtifacts,
         artifactCheckPassed,
-        task.outputArtifacts,
+        artifactPaths,
         commandResults,
         runtime,
       );
