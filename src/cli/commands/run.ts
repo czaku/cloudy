@@ -1005,6 +1005,10 @@ export const runCommand = new Command('run')
           }
         }
 
+        freshState.activeTaskIds = freshState.plan.tasks
+          .filter((task) => task.status === 'pending' || task.status === 'in_progress')
+          .map((task) => task.id);
+
         // #10 — main/master branch guard
         try {
           const branchResult = await execa('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, reject: false });

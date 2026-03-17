@@ -509,6 +509,14 @@ export class Orchestrator {
             await log.info(`Reviewer FAIL with empty rerunTaskIds — falling back to failed tasks: ${ids.join(', ')}`);
           }
         }
+        const activeTaskIds = new Set(this.state.activeTaskIds ?? []);
+        if (activeTaskIds.size > 0) {
+          const outOfScopeIds = ids.filter((id) => !activeTaskIds.has(id));
+          if (outOfScopeIds.length > 0) {
+            await log.info(`Skipping reviewer re-run outside active task scope: ${outOfScopeIds.join(', ')}`);
+          }
+          ids = ids.filter((id) => activeTaskIds.has(id));
+        }
         if (ids.length === 0) {
           await log.info('Reviewer FAIL but no tasks to re-run (all completed). Review issues may need manual attention.');
         } else {

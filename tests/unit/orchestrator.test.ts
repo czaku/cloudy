@@ -603,6 +603,54 @@ describe('Orchestrator', () => {
     expect(state.plan?.tasks[0].status).toBe('failed');
   });
 
+  it('does not let holistic review rerun tasks outside the active invocation scope', async () => {
+    const { runEngine } = await import('../../src/executor/engine.js');
+    const { runHolisticReview } = await import('../../src/reviewer.js');
+    const mockedRunEngine = vi.mocked(runEngine);
+
+    mockedRunEngine.mockResolvedValueOnce({
+      success: true,
+      output: 'done',
+      usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      durationMs: 100,
+      costUsd: 0.01,
+    });
+
+    vi.mocked(runHolisticReview).mockResolvedValueOnce({
+      verdict: 'FAIL',
+      summary: 'rerun completed dependency',
+      criteriaResults: [],
+      issues: [],
+      conventionViolations: [],
+      suggestions: [],
+      rerunTaskIds: ['task-2'],
+      costUsd: 0,
+      durationMs: 10,
+      model: 'opus',
+    } as any);
+
+    const task1 = makeTask('task-1');
+    const task2 = makeTask('task-2');
+    task2.status = 'completed';
+    task2.resultSummary = 'Already done before this invocation';
+
+    const state = makeState([task1, task2]);
+    state.activeTaskIds = ['task-1'];
+    state.config.review = { enabled: true, model: 'opus' };
+
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: state.config,
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(mockedRunEngine).toHaveBeenCalledTimes(1);
+    expect(state.plan?.tasks.find((task) => task.id === 'task-2')?.status).toBe('completed');
+  });
+
   it('stops on task failure when ifFailed is halt', async () => {
     const { runEngine } = await import('../../src/executor/engine.js');
     const mockedRunEngine = vi.mocked(runEngine);

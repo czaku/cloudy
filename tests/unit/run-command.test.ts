@@ -326,6 +326,63 @@ describe('run command', () => {
     }));
   });
 
+  it('records the active task slice for --only-task runs', async () => {
+    mockLoadState.mockResolvedValue({
+      ...makeState(),
+      plan: {
+        goal: 'Ship the feature',
+        tasks: [
+          {
+            id: 'task-1',
+            title: 'Done dependency',
+            description: 'Already complete',
+            acceptanceCriteria: ['It works'],
+            dependencies: [],
+            contextPatterns: [],
+            status: 'completed',
+            retries: 0,
+            maxRetries: 1,
+            ifFailed: 'halt',
+            timeout: 3_600_000,
+          },
+          {
+            id: 'task-2',
+            title: 'Active task',
+            description: 'Do the work',
+            acceptanceCriteria: ['It works'],
+            dependencies: ['task-1'],
+            contextPatterns: [],
+            status: 'pending',
+            retries: 0,
+            maxRetries: 1,
+            ifFailed: 'halt',
+            timeout: 3_600_000,
+          },
+        ],
+        createdAt: '2025-01-01T00:00:00Z',
+        updatedAt: '2025-01-01T00:00:00Z',
+      },
+    });
+
+    const program = createProgram();
+
+    await program.parseAsync([
+      'run',
+      '--non-interactive',
+      '--build-model', 'sonnet',
+      '--task-review-model', 'haiku',
+      '--run-review-model', 'sonnet',
+      '--only-task', 'task-2',
+      '--no-dashboard',
+    ], { from: 'user' });
+
+    expect(mockOrchestratorCtor).toHaveBeenCalledWith(expect.objectContaining({
+      state: expect.objectContaining({
+        activeTaskIds: ['task-2'],
+      }),
+    }));
+  });
+
   it('exits non-zero when the requested engine/provider is unavailable', async () => {
     const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new Error(`EXIT:${code ?? 0}`);

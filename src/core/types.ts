@@ -333,6 +333,12 @@ export interface ProjectState {
   plan: Plan | null;
   config: CloudyConfig;
   costSummary: CostSummary;
+  /**
+   * Task IDs that were actually selected for this invocation after applying
+   * filters like --only-task / --start-from / retry. Holistic review should
+   * not re-run tasks outside this active execution slice.
+   */
+  activeTaskIds?: string[];
   startedAt?: string;
   completedAt?: string;
   /** Name of the run directory (e.g. 2026-03-08-1430-implement-ai-chain). */

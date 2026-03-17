@@ -123,6 +123,16 @@ describe('validateTask — full pipeline integration', () => {
     ]), '/tmp');
   });
 
+  it('phase 0: ignores negated file mentions when inferring artifacts from acceptance criteria', async () => {
+    const task = makeTask({
+      acceptanceCriteria: [
+        'google/app/src/main/kotlin/com/fitkind/features/vault/TrainingPlansRoute.kt is not required, but TrainingPlansScreen.kt exposes a route entry point',
+      ],
+    });
+    await validateTask({ task, config: ALL_OFF, model: 'haiku', cwd: '/tmp' });
+    expect(runArtifactCheck).not.toHaveBeenCalled();
+  });
+
   it('phase 0: short-circuits on missing artifacts without running later phases', async () => {
     vi.mocked(runArtifactCheck).mockResolvedValueOnce({
       strategy: 'artifacts',

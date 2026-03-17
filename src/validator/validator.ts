@@ -177,6 +177,16 @@ function parseShellArgs(cmd: string): string[] {
 }
 
 const VALIDATION_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes per validation command
+const NEGATED_ARTIFACT_CRITERION_RE = /\b(?:is|are)\s+not\s+required\b|\bnot\s+required\b|\bnot\s+needed\b|\bnot\s+necessary\b|\boptional\b/i;
+
+function inferValidationArtifacts(task: Task): string[] {
+  if (task.outputArtifacts && task.outputArtifacts.length > 0) {
+    return [...new Set(task.outputArtifacts)];
+  }
+
+  const filteredCriteria = task.acceptanceCriteria.filter((criterion) => !NEGATED_ARTIFACT_CRITERION_RE.test(criterion));
+  return inferArtifactsFromAcceptanceCriteria(filteredCriteria);
+}
 
 async function runShellCommand(cmd: string, cwd: string): Promise<ValidationResult> {
   const start = Date.now();
@@ -233,7 +243,7 @@ export async function validateTask(
   const { task, config, model, qualityModel, runtime, cwd, checkpointSha, priorArtifacts } = options;
   const resolvedQualityModel: ClaudeModel = qualityModel ?? model;
   const results: ValidationResult[] = [];
-  const artifactPaths = [...new Set([...(task.outputArtifacts ?? []), ...inferArtifactsFromAcceptanceCriteria(task.acceptanceCriteria)])];
+  const artifactPaths = inferValidationArtifacts(task);
   const commandChecks = [...(config.commands ?? []), ...(task.validationOverrides?.commands ?? [])];
   let alreadySatisfied = false;
 
