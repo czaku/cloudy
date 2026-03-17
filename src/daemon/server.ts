@@ -2297,7 +2297,7 @@ function getEmbedRunHtml(runId: string, projectName: string, state: unknown): st
 
   const anyInProgress = tasks.some((t) => t.status === 'in_progress');
   const anyFailed = tasks.some((t) => t.status === 'failed');
-  const allDone = tasks.length > 0 && tasks.every((t) => t.status === 'completed' || t.status === 'skipped');
+  const allDone = tasks.length > 0 && tasks.every((t) => t.status === 'completed' || t.status === 'completed_without_changes' || t.status === 'skipped');
 
   let runStatus: string;
   let statusColor: string;
@@ -2308,7 +2308,7 @@ function getEmbedRunHtml(runId: string, projectName: string, state: unknown): st
   else { runStatus = 'planning'; statusColor = '#f59e0b'; }
 
   function dotFor(status: string): string {
-    if (status === 'completed' || status === 'skipped') return '<span style="color:#22c55e">●</span>';
+    if (status === 'completed' || status === 'completed_without_changes' || status === 'skipped') return '<span style="color:#22c55e">●</span>';
     if (status === 'failed') return '<span style="color:#ef4444">●</span>';
     if (status === 'in_progress') return '<span style="color:#f59e0b">◌</span>';
     return '<span style="color:#3b82f6">○</span>';

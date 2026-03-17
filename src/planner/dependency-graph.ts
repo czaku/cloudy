@@ -68,7 +68,7 @@ export function topologicalSort(tasks: Task[]): string[] {
  */
 export function getReadyTasks(tasks: Task[]): Task[] {
   const completedIds = new Set(
-    tasks.filter((t) => t.status === 'completed').map((t) => t.id),
+    tasks.filter((t) => t.status === 'completed' || t.status === 'completed_without_changes').map((t) => t.id),
   );
 
   return tasks.filter(

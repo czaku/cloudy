@@ -37,7 +37,7 @@ async function readRunSummaries(runsDir: string): Promise<RunSummary[]> {
         const raw = await fs.readFile(stateFile, 'utf-8');
         const state = JSON.parse(raw) as ProjectState;
         const tasks = state.plan?.tasks ?? [];
-        const completedTasks = tasks.filter((t) => t.status === 'completed' || t.status === 'skipped').length;
+        const completedTasks = tasks.filter((t) => t.status === 'completed' || t.status === 'completed_without_changes' || t.status === 'skipped').length;
         const failedTasks = tasks.filter((t) => t.status === 'failed').length;
         const inProgress = tasks.some((t) => t.status === 'in_progress');
         let status: RunSummary['status'] = 'idle';

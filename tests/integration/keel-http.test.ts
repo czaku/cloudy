@@ -1,8 +1,12 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const logInfo = vi.fn(async () => {});
 const logWarn = vi.fn(async () => {});
+let mockedRunDir = '/tmp/project/.cloudy/runs/run-20260314-fitkind';
 
 vi.mock('../../src/utils/logger.js', () => ({
   log: {
@@ -14,7 +18,7 @@ vi.mock('../../src/utils/logger.js', () => ({
 }));
 
 vi.mock('../../src/utils/run-dir.js', () => ({
-  getCurrentRunDir: vi.fn(async () => '/tmp/project/.cloudy/runs/run-20260314-fitkind'),
+  getCurrentRunDir: vi.fn(async () => mockedRunDir),
 }));
 
 interface CapturedRequest {
@@ -58,9 +62,11 @@ async function startRecorder(): Promise<{ server: Server; port: number; requests
 
 describe('keel integration over HTTP', () => {
   let server: Server | undefined
+  let projectDir = '/tmp/project'
 
   beforeEach(() => {
     vi.clearAllMocks()
+    projectDir = ''
   })
 
   afterEach(async () => {
@@ -75,11 +81,18 @@ describe('keel integration over HTTP', () => {
     }
   })
 
+  async function prepareRunDir(): Promise<void> {
+    projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cloudy-keel-http-'))
+    mockedRunDir = path.join(projectDir, '.cloudy', 'runs', 'run-20260314-fitkind')
+    await fs.mkdir(mockedRunDir, { recursive: true })
+  }
+
   it('writes blocked outcomes through the real HTTP path', async () => {
     const recorder = await startRecorder()
     server = recorder.server
 
     const { writeRunOutcome } = await import('../../src/integrations/keel.js')
+    await prepareRunDir()
 
     await writeRunOutcome(
       { slug: 'fitkind', taskId: 'T-123', port: recorder.port },
@@ -91,7 +104,7 @@ describe('keel integration over HTTP', () => {
         costUsd: 3.21,
         durationMs: 91000,
       },
-      '/tmp/project',
+      projectDir,
     )
 
     expect(recorder.requests).toHaveLength(3)

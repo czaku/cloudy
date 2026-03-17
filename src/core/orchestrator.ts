@@ -47,6 +47,24 @@ import { parseSubtasks } from './subtask-parser.js';
 import { waitForApproval, type ApprovalHandler } from './approval.js';
 import { logApproval } from '../utils/approval-log.js';
 
+const DISCOVERY_READ_TOOL_NAMES = new Set(['Read', 'LS', 'Glob', 'Grep', 'Find']);
+const VERIFY_FIRST_TASK_TYPES = new Set(['verify', 'review', 'closeout']);
+
+function classifyRetryFailure(error: string | undefined): RetryHistoryEntry['failureType'] {
+  const message = (error ?? '').toLowerCase();
+  if (message.includes('over-exploration')) return 'over_exploration';
+  if (message.includes('already satisf') || message.includes('already complete')) return 'already_satisfied';
+  if (message.includes('timed out') || message.includes('hung engine')) return 'timeout';
+  if (message.includes('daemon') || message.includes('config profile') || message.includes('not found') || message.includes('engine "') || message.includes('install')) {
+    return 'environment';
+  }
+  return 'execution';
+}
+
+function isBroadDiscoveryCommand(command: string): boolean {
+  return /\b(find|grep\s+-r|grep\s+-R|ls\s+-R|tree)\b/.test(command) || /\| head\b/.test(command);
+}
+
 // ── Project conventions loader ────────────────────────────────────────────────
 
 /**
@@ -633,6 +651,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
     const executionModel = this.getModelForTask(task);
     const engine = this.config.engine ?? 'claude-code';
     const provider = this.config.provider;
+    const taskType = task.type ?? 'implement';
     const engineModel =
       engine === 'claude-code'
         ? executionModel
@@ -842,6 +861,10 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       let _lastOutputMs = Date.now();            // updated on every onOutput chunk
       const _SILENCE_WARN_MS  = 3 * 60 * 1000;  // 3 min no output → warn
       const _SILENCE_ABORT_MS = 5 * 60 * 1000;  // 5 min no output → abort via AbortController (was 10 min)
+      let forcedAbortReason: string | undefined;
+      let discoveryOps = 0;
+      let verificationOps = 0;
+      const maxDiscoveryOps = VERIFY_FIRST_TASK_TYPES.has(taskType) ? 10 : 18;
       const _heartbeatId = setInterval(() => {
         const elapsedMs  = Date.now() - _engineStart;
         const silenceMs  = Date.now() - _lastOutputMs;
@@ -880,6 +903,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           modelId: this.config.executionModelId,
           claudeModel: executionModel,
           effort: this.config.executionEffort,
+          disallowedTools: VERIFY_FIRST_TASK_TYPES.has(taskType) ? ['Agent'] : undefined,
           cwd: taskCwd,
           onOutput: (text) => {
             _lastOutputMs = Date.now(); // reset silence timer on any stdout activity
@@ -888,6 +912,23 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           },
           onToolUse: (toolName, toolInput) => {
             _lastOutputMs = Date.now(); // tool activity means the runtime is alive
+            if (toolName === 'Bash') {
+              const command = typeof (toolInput as { command?: unknown })?.command === 'string'
+                ? (toolInput as { command?: string }).command ?? ''
+                : '';
+              if (/\b(gradlew|npm|pnpm|yarn|bun|swift build|xcodebuild|sentinel|simemu|keel)\b/.test(command)) {
+                verificationOps++;
+              }
+              if (isBroadDiscoveryCommand(command)) {
+                discoveryOps++;
+              }
+            } else if (DISCOVERY_READ_TOOL_NAMES.has(toolName)) {
+              discoveryOps++;
+            }
+            if (VERIFY_FIRST_TASK_TYPES.has(taskType) && discoveryOps > maxDiscoveryOps && verificationOps === 0 && !(task.filesWritten?.length)) {
+              forcedAbortReason = `Over-exploration detected: ${discoveryOps} discovery operations before any verification or file writes`;
+              abortController.abort();
+            }
             this.onEvent({ type: 'task_tool_call', taskId: task.id, toolName, toolInput });
             logTaskOutput(task.id, `[tool] ${toolName}`, this.cwd).catch(() => {});
           },
@@ -916,7 +957,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
         result = {
           success: false,
           output: '',
-          error: isTimeout ? 'Task timed out' : String(err),
+          error: forcedAbortReason ?? (isTimeout ? 'Task timed out' : String(err)),
           usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
           durationMs: Date.now() - attemptStart,
           costUsd: 0,
@@ -1012,7 +1053,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
         const entry: RetryHistoryEntry = {
           attempt,
           timestamp: new Date().toISOString(),
-          failureType: result.error?.includes('timed out') ? 'timeout' : 'execution',
+          failureType: classifyRetryFailure(result.error),
           reason: result.error ?? 'Execution failed',
           fullError: result.error ?? '',
           durationMs: Date.now() - attemptStart,
@@ -1173,7 +1214,8 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       // Collect output artifacts from all completed dependency tasks so the
       // AI reviewer knows which files already exist and aren't in this diff
       const priorArtifacts = queue
-        .getTasksByStatus('completed')
+        .getAllTasks()
+        .filter((t) => t.status === 'completed' || t.status === 'completed_without_changes')
         .filter((t) => task.dependencies.includes(t.id))
         .flatMap((t) =>
           (t.outputArtifacts ?? []).map((file) => ({
@@ -1231,7 +1273,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
 
       if (report.passed) {
         task.durationMs = Date.now() - taskStartTime;
-        queue.updateStatus(task.id, 'completed');
+        queue.updateStatus(task.id, report.alreadySatisfied ? 'completed_without_changes' : 'completed');
         this.onEvent({
           type: 'task_completed',
           taskId: task.id,
@@ -1247,7 +1289,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
         await writeHandoff(
           task.id,
           task.title,
-          task.resultSummary ?? '',
+          `${task.resultSummary ?? ''}${report.alreadySatisfied ? '\nAlready satisfied: verified existing implementation/proof without code changes.' : ''}`,
           task.acceptanceCriteriaResults ?? [],
           this.cwd,
           filesChanged,
@@ -1292,7 +1334,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       const entry: RetryHistoryEntry = {
         attempt,
         timestamp: new Date().toISOString(),
-        failureType: 'acceptance',
+        failureType: report.alreadySatisfied ? 'already_satisfied' : 'acceptance',
         reason: 'Validation failed',
         fullError: lastValidationErrors,
         durationMs: Date.now() - attemptStart,

@@ -20,6 +20,8 @@ export interface EngineRunOptions {
   maxBudgetUsd?: number;
   effort?: 'low' | 'medium' | 'high' | 'max';
   thinking?: ThinkingLevel;
+  allowedTools?: string[];
+  disallowedTools?: string[];
 }
 
 export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunResult> {
@@ -40,6 +42,8 @@ export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunRes
     maxBudgetUsd,
     effort,
     thinking,
+    allowedTools,
+    disallowedTools,
   } = options;
 
   const resolvedModelId =
@@ -63,5 +67,7 @@ export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunRes
     maxBudgetUsd,
     effort,
     thinking,
+    allowedTools,
+    disallowedTools,
   });
 }

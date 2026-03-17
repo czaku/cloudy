@@ -20,6 +20,10 @@ import { acquireLock } from '../../utils/lock.js';
 import { execa } from 'execa';
 import { applyKeelTaskRuntime, loadKeelTaskRuntime } from '../../integrations/keel-task-runtime.js';
 
+function formatRuntime(label: string, runtime: { engine?: string; provider?: string; account?: string; modelId?: string; effort?: string }): string {
+  return `${label}: engine=${runtime.engine ?? '(default)'} provider=${runtime.provider ?? '(default)'} account=${runtime.account ?? '(default)'} modelId=${runtime.modelId ?? '(abstract)'} effort=${runtime.effort ?? '(default)'}`;
+}
+
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
@@ -35,7 +39,7 @@ function summarizeKeelOutcome(
   reviewVerdict?: 'PASS' | 'PASS_WITH_NOTES' | 'FAIL',
   error?: string,
 ) {
-  const tasksDone = tasks.filter((t) => t.status === 'completed').length;
+  const tasksDone = tasks.filter((t) => t.status === 'completed' || t.status === 'completed_without_changes').length;
   const tasksFailed = tasks.filter((t) => t.status === 'failed').length;
   const success =
     !error &&
@@ -67,7 +71,7 @@ function summarizeKeelOutcome(
       filesTouched: [...new Set(tasks.flatMap((task) => task.filesWritten ?? []))].sort(),
       artifactsProduced: [...new Set(
         tasks
-          .filter((task) => task.status === 'completed')
+          .filter((task) => task.status === 'completed' || task.status === 'completed_without_changes')
           .flatMap((task) => task.outputArtifacts ?? []),
       )].sort(),
     },
@@ -328,6 +332,22 @@ export const runCommand = new Command('run')
       if (opts.runReviewAccount) config.reviewRuntime = { ...config.reviewRuntime, account: opts.runReviewAccount };
       if (opts.runReviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.runReviewModelId };
       if (opts.runReviewEffort) config.reviewRuntime = { ...config.reviewRuntime, effort: opts.runReviewEffort as any };
+
+      console.log(c(dim, '[runtime] effective phase routes'));
+      console.log(c(dim, `  ${formatRuntime('planning', config.planningRuntime ?? {})}`));
+      console.log(c(dim, `  ${formatRuntime('execution', { engine: config.engine, provider: config.provider, account: config.account, modelId: config.executionModelId, effort: config.executionEffort })}`));
+      console.log(c(dim, `  ${formatRuntime('validation', config.validationRuntime ?? {})}`));
+      console.log(c(dim, `  ${formatRuntime('review', config.reviewRuntime ?? {})}`));
+      if (keelTaskRuntime) {
+        console.log(c(dim, `  [runtime source] keel task ${opts.keelTask ?? baseConfig.keel?.taskId ?? '(unknown)'} contributed runtime defaults`));
+        if (
+          keelTaskRuntime.execution?.engine !== undefined ||
+          keelTaskRuntime.execution?.provider !== undefined ||
+          keelTaskRuntime.execution?.account !== undefined
+        ) {
+          console.log(c(yellow, '  [stale-state check] task-level execution runtime override detected — make sure this worktree contains the latest keel/tasks/*.json before running.'));
+        }
+      }
 
       // ── Interactive model selection (when not provided via flags) ────────────
       const MODEL_OPTIONS = [
@@ -1087,7 +1107,7 @@ export const runCommand = new Command('run')
           const writeHeartbeat = async () => {
             try {
               const tasks = freshState.plan?.tasks ?? [];
-              const completed = tasks.filter((t) => t.status === 'completed').length;
+              const completed = tasks.filter((t) => t.status === 'completed' || t.status === 'completed_without_changes').length;
               const failed = tasks.filter((t) => t.status === 'failed').length;
               const inProgress = tasks.find((t) => t.status === 'in_progress');
               const status = {
@@ -1122,7 +1142,7 @@ export const runCommand = new Command('run')
           abortCurrentRun = null;
           if (!orchestrator.aborted) {
             broadcast?.({ type: 'run_status', status: 'completed' });
-            const completedCount = freshState.plan!.tasks.filter((t) => t.status === 'completed').length;
+            const completedCount = freshState.plan!.tasks.filter((t) => t.status === 'completed' || t.status === 'completed_without_changes').length;
             void notifyRunComplete(completedCount, freshState.costSummary.totalEstimatedUsd, config.notifications);
 
             // Re-run recovery is now handled automatically inside the orchestrator

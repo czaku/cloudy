@@ -136,9 +136,10 @@ describe('1. maxCostPerRunUsd budget guard', () => {
   it('aborts run and emits run_failed when cumulative cost exceeds limit', async () => {
     const tasks = [makeTask('task-1'), makeTask('task-2', ['task-1'])];
     const events: Array<{ type: string; error?: string }> = [];
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'cloudy-improvements-'));
 
     const orchestrator = new Orchestrator({
-      cwd: '/tmp/test',
+      cwd,
       state: makeState(tasks),
       config: makeConfig({ maxCostPerRunUsd: 1.0 }), // limit $1, but runEngine costs $5
       onEvent: (e) => events.push(e as { type: string; error?: string }),
@@ -154,9 +155,10 @@ describe('1. maxCostPerRunUsd budget guard', () => {
   it('does not abort when maxCostPerRunUsd is 0 (unlimited)', async () => {
     const tasks = [makeTask('task-1')];
     const events: Array<{ type: string }> = [];
+    const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'cloudy-improvements-'));
 
     const orchestrator = new Orchestrator({
-      cwd: '/tmp/test',
+      cwd,
       state: makeState(tasks),
       config: makeConfig({ maxCostPerRunUsd: 0 }),
       onEvent: (e) => events.push(e as { type: string }),

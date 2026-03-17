@@ -1,4 +1,4 @@
-import type { ClaudeModel, PhaseRuntimeConfig, Plan, Task } from '../core/types.js';
+import type { ClaudeModel, PhaseRuntimeConfig, Plan, Task, TaskType } from '../core/types.js';
 import { runPhaseModel } from '../executor/model-runner.js';
 import { buildPlanningPrompt } from './prompts.js';
 import { exploreCodebase } from './codebase-explorer.js';
@@ -26,6 +26,7 @@ interface RawTask {
   outputArtifacts?: string[];
   implementationSteps?: string[];
   timeoutMinutes?: number;
+  type?: TaskType;
 }
 
 interface RawPlan {
@@ -38,12 +39,55 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+const ARTIFACT_PATH_RE = /(?:~\/[^\s,;:'"`]+|(?:\/[^\s,;:'"`]+)+|(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.[A-Za-z0-9]{2,8}|[A-Za-z0-9_.-]+\.(?:png|jpg|jpeg|webp|gif|pdf|json|md|txt|html|csv|xml|svg))/g;
+
 function normalizeRepoAbsolutePath(value: string, cwd: string): string {
   if (!value.includes(cwd)) return value;
 
   return value
     .replace(new RegExp(`\\bcd\\s+${escapeRegExp(cwd)}(?=\\s|$)`, 'g'), 'cd .')
     .replace(new RegExp(`${escapeRegExp(cwd)}/`, 'g'), '');
+}
+
+export function inferTaskType(raw: Pick<RawTask, 'title' | 'description' | 'acceptanceCriteria' | 'outputArtifacts' | 'type'>): TaskType {
+  if (raw.type) return raw.type;
+  const haystack = `${raw.title} ${raw.description} ${(raw.acceptanceCriteria ?? []).join(' ')}`.toLowerCase();
+  if (/\b(close|closeout|mark done|close the keel task|task update)\b/.test(haystack)) return 'closeout';
+  if (/\b(review|audit|compare|parity notes|semantic review)\b/.test(haystack)) return 'review';
+  if (/\b(verify|proof|screenshot|capture|launchable|deterministic|exists under|record proof|shell parity)\b/.test(haystack)) return 'verify';
+  return 'implement';
+}
+
+export function inferArtifactsFromAcceptanceCriteria(criteria: string[]): string[] {
+  const artifacts = new Set<string>();
+  const homeDir = process.env.HOME ?? '~';
+
+  for (const criterion of criteria) {
+    const matches = (criterion.match(ARTIFACT_PATH_RE) ?? [])
+      .map((rawMatch) => rawMatch
+        .replace(/[),.;:]+$/, '')
+        .replace(/^["'`]+/, '')
+        .replace(/["'`]+$/, ''))
+      .filter(Boolean)
+      .map((cleaned) => cleaned.startsWith('~/') ? cleaned.replace(/^~\//, `${homeDir}/`) : cleaned);
+
+    const baseDir = matches.find((match) => match.startsWith(`${homeDir}/`) && match.endsWith('/'));
+    const bareFiles = matches.filter((match) => !match.includes('/') && /\.[A-Za-z0-9]{2,8}$/.test(match));
+
+    if (baseDir) {
+      for (const bareFile of bareFiles) {
+        artifacts.add(path.join(baseDir, bareFile));
+      }
+    }
+
+    for (const match of matches) {
+      if (baseDir && match === baseDir) continue;
+      if (baseDir && !match.includes('/') && /\.[A-Za-z0-9]{2,8}$/.test(match)) continue;
+      artifacts.add(match);
+    }
+  }
+
+  return [...artifacts].sort();
 }
 
 /**
@@ -553,14 +597,19 @@ function parsePlanOutput(output: string): RawPlan {
 }
 
 function toTask(raw: RawTask, cwd: string): Task {
+  const normalizedAcceptanceCriteria = (raw.acceptanceCriteria ?? []).map((criterion) => normalizeRepoAbsolutePath(criterion, cwd));
+  const normalizedOutputArtifacts = (raw.outputArtifacts ?? []).map((artifact) => normalizeRepoAbsolutePath(artifact, cwd));
+  const promotedArtifacts = inferArtifactsFromAcceptanceCriteria(normalizedAcceptanceCriteria)
+    .map((artifact) => normalizeRepoAbsolutePath(artifact, cwd));
   return {
     id: raw.id,
     title: raw.title,
     description: raw.description,
-    acceptanceCriteria: (raw.acceptanceCriteria ?? []).map((criterion) => normalizeRepoAbsolutePath(criterion, cwd)),
+    type: inferTaskType({ ...raw, acceptanceCriteria: normalizedAcceptanceCriteria, outputArtifacts: normalizedOutputArtifacts }),
+    acceptanceCriteria: normalizedAcceptanceCriteria,
     dependencies: raw.dependencies ?? [],
     contextPatterns: (raw.contextPatterns ?? []).map((pattern) => normalizeRepoAbsolutePath(pattern, cwd)),
-    outputArtifacts: (raw.outputArtifacts ?? []).map((artifact) => normalizeRepoAbsolutePath(artifact, cwd)),
+    outputArtifacts: [...new Set([...normalizedOutputArtifacts, ...promotedArtifacts])],
     implementationSteps: raw.implementationSteps && raw.implementationSteps.length > 0 ? raw.implementationSteps : undefined,
     status: 'pending',
     retries: 0,

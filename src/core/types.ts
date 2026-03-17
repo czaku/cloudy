@@ -64,11 +64,18 @@ export interface PhaseRuntimeConfig {
   configDir?: string;
 }
 
+export type TaskType =
+  | 'implement'
+  | 'verify'
+  | 'review'
+  | 'closeout';
+
 // ── Task types ───────────────────────────────────────────────────────
 export type TaskStatus =
   | 'pending'
   | 'in_progress'
   | 'completed'
+  | 'completed_without_changes'
   | 'failed'
   | 'skipped'
   | 'rolled_back';
@@ -76,7 +83,7 @@ export type TaskStatus =
 export interface RetryHistoryEntry {
   attempt: number;
   timestamp: string;
-  failureType: 'execution' | 'acceptance' | 'timeout';
+  failureType: 'execution' | 'acceptance' | 'timeout' | 'over_exploration' | 'already_satisfied' | 'environment';
   reason: string;
   fullError: string;
   durationMs: number;
@@ -92,6 +99,7 @@ export interface Task {
   id: string;
   title: string;
   description: string;
+  type?: TaskType;
   acceptanceCriteria: string[];
   dependencies: string[]; // task IDs this task depends on
   contextPatterns: string[]; // file globs relevant to this task
@@ -173,6 +181,7 @@ export interface ValidationReport {
   taskId: string;
   passed: boolean;
   results: ValidationResult[];
+  alreadySatisfied?: boolean;
 }
 
 // ── Cost types ───────────────────────────────────────────────────────

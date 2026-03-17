@@ -93,7 +93,7 @@ describe('prior artifacts threaded through validation pipeline', () => {
     const call = vi.mocked(runAiReview).mock.calls[0];
     expect(call[6]).toEqual(priorArtifacts);
     expect(call[7]).toBeUndefined();
-    expect(call[8]).toBeUndefined();
+    expect(call[8]).toEqual([]);
     expect(call[9]).toEqual([]);
     expect(call[10]).toBeUndefined();
   });
@@ -109,7 +109,7 @@ describe('prior artifacts threaded through validation pipeline', () => {
     const call = vi.mocked(runAiReview).mock.calls[0];
     expect(call[6]).toBeUndefined();
     expect(call[7]).toBeUndefined();
-    expect(call[8]).toBeUndefined();
+    expect(call[8]).toEqual([]);
     expect(call[9]).toEqual([]);
     expect(call[10]).toBeUndefined();
   });

@@ -31,6 +31,8 @@ export interface ClaudeRunOptions {
    * off | minimal | low | medium | high | xhigh
    */
   thinking?: ThinkingLevel;
+  allowedTools?: string[];
+  disallowedTools?: string[];
 }
 
 export type ModelRunOptions = ClaudeRunOptions;
@@ -62,6 +64,8 @@ export interface OmnaiRunOptions {
   effort?: 'low' | 'medium' | 'high' | 'max';
   thinking?: ThinkingLevel;
   taskType?: 'coding' | 'analysis' | 'planning' | 'review' | 'chat' | 'research';
+  allowedTools?: string[];
+  disallowedTools?: string[];
 }
 
 // ── Dangerous command guard ──────────────────────────────────────────────────
@@ -151,6 +155,8 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
     effort,
     thinking,
     taskType,
+    allowedTools,
+    disallowedTools,
   } = options;
 
   const runtime = await resolveRuntimeAccount({
@@ -270,6 +276,8 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
     effort,
     thinking,
     env: runtime.env,
+    allowedTools,
+    disallowedTools,
   };
 
   if (runner.engine === 'claude-code') {
@@ -383,6 +391,8 @@ export async function runAbstractModel(
     effort: options.effort,
     thinking: options.thinking,
     taskType: options.taskType,
+    allowedTools: options.allowedTools,
+    disallowedTools: options.disallowedTools,
   });
 }
 

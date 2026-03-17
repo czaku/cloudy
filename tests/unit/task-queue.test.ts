@@ -83,7 +83,7 @@ describe('TaskQueue', () => {
   it('tracks completion', () => {
     const q = new TaskQueue(makeTasks());
     expect(q.isComplete()).toBe(false);
-    q.updateStatus('task-1', 'completed');
+    q.updateStatus('task-1', 'completed_without_changes');
     q.updateStatus('task-2', 'completed');
     q.updateStatus('task-3', 'completed');
     expect(q.isComplete()).toBe(true);
@@ -107,7 +107,7 @@ describe('TaskQueue', () => {
     const q = new TaskQueue(makeTasks());
     expect(q.getProgress()).toEqual({ completed: 0, total: 3, percentage: 0 });
 
-    q.updateStatus('task-1', 'completed');
+    q.updateStatus('task-1', 'completed_without_changes');
     expect(q.getProgress()).toEqual({ completed: 1, total: 3, percentage: 33 });
   });
 

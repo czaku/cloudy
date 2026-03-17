@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 const logInfo = vi.fn(async () => {});
 const logWarn = vi.fn(async () => {});
+let mockedRunDir = '/tmp/project/.cloudy/runs/run-20260314-fitkind';
 
 vi.mock('../../src/utils/logger.js', () => ({
   log: {
@@ -14,17 +17,29 @@ vi.mock('../../src/utils/logger.js', () => ({
 }));
 
 vi.mock('../../src/utils/run-dir.js', () => ({
-  getCurrentRunDir: vi.fn(async () => '/tmp/project/.cloudy/runs/run-20260314-fitkind'),
+  getCurrentRunDir: vi.fn(async () => mockedRunDir),
 }));
 
 describe('keel integration', () => {
+  let projectDir = '/tmp/project';
+  let runDir = mockedRunDir;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    projectDir = '';
+    runDir = '';
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
   });
+
+  async function prepareRunDir(): Promise<void> {
+    projectDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cloudy-keel-unit-'));
+    runDir = path.join(projectDir, '.cloudy', 'runs', 'run-20260314-fitkind');
+    mockedRunDir = runDir;
+    await fs.mkdir(runDir, { recursive: true });
+  }
 
   it('updates keel task state, note, and cloudy run on success', async () => {
     const fetchMock = vi.fn(async () => ({ ok: true, status: 200, statusText: 'OK', text: async () => '' }));
@@ -32,14 +47,14 @@ describe('keel integration', () => {
 
     const { writeRunOutcome } = await import('../../src/integrations/keel.js');
 
-    await fs.mkdir('/tmp/project/.cloudy/runs/run-20260314-fitkind', { recursive: true });
+    await prepareRunDir();
     await fs.writeFile(
-      '/tmp/project/.cloudy/runs/run-20260314-fitkind/review.json',
+      path.join(runDir, 'review.json'),
       JSON.stringify({ verdict: 'PASS_WITH_NOTES', issues: [{ severity: 'major', description: 'Needs one more acceptance pass' }] }),
       'utf-8',
     );
     await fs.writeFile(
-      '/tmp/project/.cloudy/runs/run-20260314-fitkind/verification.json',
+      path.join(runDir, 'verification.json'),
       JSON.stringify({ checks: [{ command: 'bun run test', passed: true }, { command: 'bun run build', passed: false }] }),
       'utf-8',
     );
@@ -47,7 +62,7 @@ describe('keel integration', () => {
     await writeRunOutcome(
       { slug: 'fitkind', taskId: 'T-123', port: 7842 },
       { success: true, tasksDone: 4, tasksFailed: 0, costUsd: 1.23, durationMs: 65000, filesTouched: ['src/foo.ts'], artifactsProduced: ['docs/proof.md'] },
-      '/tmp/project',
+      projectDir,
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -74,7 +89,7 @@ describe('keel integration', () => {
         body: expect.stringContaining('Quality verdict: yellow'),
       }),
     );
-    const assessment = JSON.parse(await fs.readFile('/tmp/project/.cloudy/runs/run-20260314-fitkind/assessment.json', 'utf-8'));
+    const assessment = JSON.parse(await fs.readFile(path.join(runDir, 'assessment.json'), 'utf-8'));
     expect(assessment.acceptanceStatus).toBe('needs_review');
     expect(assessment.checksPassed).toContain('bun run test');
     expect(assessment.checksFailed).toContain('bun run build');
@@ -86,11 +101,12 @@ describe('keel integration', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { writeRunOutcome } = await import('../../src/integrations/keel.js');
+    await prepareRunDir();
 
     await writeRunOutcome(
       { slug: 'fitkind', taskId: 'T-123', port: 9000 },
       { success: false, tasksDone: 1, tasksFailed: 2, topError: 'validator exploded', costUsd: 4.56, durationMs: 120000 },
-      '/tmp/project',
+      projectDir,
     );
 
     expect(fetchMock).toHaveBeenCalledTimes(3);
@@ -123,11 +139,12 @@ describe('keel integration', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { writeRunOutcome } = await import('../../src/integrations/keel.js');
+    await prepareRunDir();
 
     await writeRunOutcome(
       { slug: 'fitkind', port: 7842 },
       { success: true, tasksDone: 2, tasksFailed: 0, costUsd: 0.5, durationMs: 5000 },
-      '/tmp/project',
+      projectDir,
     );
 
     expect(fetchMock).not.toHaveBeenCalled();
@@ -139,11 +156,12 @@ describe('keel integration', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { writeRunOutcome } = await import('../../src/integrations/keel.js');
+    await prepareRunDir();
 
     await expect(writeRunOutcome(
       { slug: 'fitkind', taskId: 'T-123', port: 7842 },
       { success: true, tasksDone: 1, tasksFailed: 0, costUsd: 0.25, durationMs: 1000 },
-      '/tmp/project',
+      projectDir,
     )).rejects.toThrow(/500 Boom/);
 
     expect(logWarn).toHaveBeenCalledWith(expect.stringContaining('Write-back failed for fitkind/T-123'));

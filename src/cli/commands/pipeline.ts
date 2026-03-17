@@ -9,6 +9,10 @@ import { getPhaseRuntime } from '../../config/phase-runtime.js';
 import type { PhaseRuntimeConfig } from '../../core/types.js';
 import { applyKeelTaskRuntime, loadKeelTaskRuntime } from '../../integrations/keel-task-runtime.js';
 
+function formatRuntime(label: string, runtime: { engine?: string; provider?: string; account?: string; modelId?: string; effort?: string }): string {
+  return `${label}: engine=${runtime.engine ?? '(default)'} provider=${runtime.provider ?? '(default)'} account=${runtime.account ?? '(default)'} modelId=${runtime.modelId ?? '(abstract)'} effort=${runtime.effort ?? '(default)'}`;
+}
+
 const PIPELINE_CONTEXT_FILE = '.cloudy/pipeline-context.md';
 
 async function extractPhaseContracts(
@@ -172,6 +176,22 @@ export const pipelineCommand = new Command('chain')
     if (opts.runReviewEffort) config.reviewRuntime = { ...config.reviewRuntime, effort: opts.runReviewEffort as any };
     if (opts.buildAccount) config.account = opts.buildAccount;
     if (opts.buildEffort) config.executionEffort = opts.buildEffort as typeof config.executionEffort;
+
+    console.log(c(dim, '[runtime] effective phase routes'));
+    console.log(c(dim, `  ${formatRuntime('planning', config.planningRuntime ?? {})}`));
+    console.log(c(dim, `  ${formatRuntime('execution', { engine: config.engine, provider: config.provider, account: config.account, modelId: config.executionModelId, effort: config.executionEffort })}`));
+    console.log(c(dim, `  ${formatRuntime('validation', config.validationRuntime ?? {})}`));
+    console.log(c(dim, `  ${formatRuntime('review', config.reviewRuntime ?? {})}`));
+    if (keelTaskRuntime) {
+      console.log(c(dim, `  [runtime source] keel task ${opts.keelTask ?? baseConfig.keel?.taskId ?? '(unknown)'} contributed runtime defaults`));
+      if (
+        keelTaskRuntime.execution?.engine !== undefined ||
+        keelTaskRuntime.execution?.provider !== undefined ||
+        keelTaskRuntime.execution?.account !== undefined
+      ) {
+        console.log(c(yellow, '  [stale-state check] task-level execution runtime override detected — make sure this worktree contains the latest keel/tasks/*.json before running.'));
+      }
+    }
 
     if (opts.spec.length === 0) {
       console.error(c(red, '✖  --spec required (repeatable): cloudy chain --spec p1.md --spec p2.md'));

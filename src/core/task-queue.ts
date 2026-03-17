@@ -32,7 +32,7 @@ export class TaskQueue {
     if (status === 'in_progress') {
       task.startedAt = new Date().toISOString();
     }
-    if (status === 'completed' || status === 'failed') {
+    if (status === 'completed' || status === 'completed_without_changes' || status === 'failed') {
       task.completedAt = new Date().toISOString();
     }
   }
@@ -58,7 +58,7 @@ export class TaskQueue {
 
   isComplete(): boolean {
     return this.getAllTasks().every(
-      (t) => t.status === 'completed' || t.status === 'skipped',
+      (t) => t.status === 'completed' || t.status === 'completed_without_changes' || t.status === 'skipped',
     );
   }
 
@@ -126,10 +126,11 @@ export class TaskQueue {
   getProgress(): { completed: number; total: number; percentage: number } {
     const all = this.getAllTasks();
     const completed = all.filter((t) => t.status === 'completed').length;
+    const completedWithoutChanges = all.filter((t) => t.status === 'completed_without_changes').length;
     return {
-      completed,
+      completed: completed + completedWithoutChanges,
       total: all.length,
-      percentage: all.length > 0 ? Math.round((completed / all.length) * 100) : 0,
+      percentage: all.length > 0 ? Math.round(((completed + completedWithoutChanges) / all.length) * 100) : 0,
     };
   }
 }

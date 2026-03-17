@@ -34,6 +34,7 @@ Break this goal into sequential implementation tasks. Each task should be:
 For each task, provide:
 - A short title
 - A concise description (2-3 sentences max) of what to implement and which files to touch. Do NOT reproduce the full spec detail — the executor has access to the full spec.
+- type: one of "implement", "verify", "review", or "closeout". Use "verify" for screenshot/proof/parity/check tasks, "review" for semantic/audit tasks, and "closeout" for Keel/task-update closure work.
 - Implementation approach (optional, 1 sentence): if the task involves new logic or a non-obvious implementation choice, state the approach. Otherwise omit.
 - implementationSteps (optional array): if the task produces testable units (functions, endpoints, components), provide an ordered list of implementation steps. For TDD tasks this is typically: ["Write failing test(s) for the acceptance criteria", "Run tests — confirm they are red", "Implement the minimum code to pass", "Run tests — confirm they are green"]. For non-TDD tasks (config, migration, scaffolding) omit this field entirely. Tailor the steps to the task type — the goal is to give the executor a clear sequence, not to mandate a fixed template.
 - Specific acceptance criteria — each criterion MUST be one of:
@@ -46,6 +47,11 @@ For each task, provide:
 - Context patterns: file glob patterns for existing files that are relevant to the task (e.g. "src/components/Header.tsx", "api/routes/**", "lib/utils/*.ts"). These help the executor understand the codebase context. Use glob syntax where appropriate.
 - outputArtifacts: List key files this task must create. Only include files this task is responsible for creating (not files that already exist). Use exact paths, not globs.
 - timeoutMinutes: Estimate how long this task might take Claude to execute. Use 15 for simple edits, 30 for typical coding tasks, 60 for the largest tasks. Cap at 60 — if a task needs more than 60 minutes it should be split into smaller tasks instead.
+
+Proof/verification planning rules:
+- If a task is mainly about screenshots, proof capture, parity review, or task closure, prefer a verify/review/closeout task instead of an implementation task.
+- For verify tasks, acceptance criteria should start with existing artifacts/commands before any code change requirement.
+- If the task may already be satisfied by existing files or screenshots, still create the task, but write the criteria so the executor can verify and move on without inventing code changes.
 
 Task Sizing Rules:
 - IDEAL: A task whose acceptance criterion is a single shell command (e.g. "tsc --noEmit exits 0"). If you can state the criterion as one command, the task size is right.
@@ -63,6 +69,7 @@ Respond with ONLY valid JSON (no markdown, no explanation), matching this struct
       "id": "task-1",
       "title": "Short descriptive title",
       "description": "Detailed description of what to implement",
+      "type": "implement",
       "acceptanceCriteria": [
         "Specific testable condition 1",
         "Specific testable condition 2"

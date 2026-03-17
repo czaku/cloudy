@@ -1,4 +1,7 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { OrchestratorEvent, ProjectState, CloudyConfig, Plan, Task } from '../../src/core/types.js';
 
 // Mock external dependencies
@@ -145,8 +148,18 @@ function makeState(tasks: Task[]): ProjectState {
 const { Orchestrator } = await import('../../src/core/orchestrator.js');
 
 describe('Orchestrator', () => {
+  let testCwd: string;
+
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  beforeEach(async () => {
+    testCwd = await fs.mkdtemp(path.join(os.tmpdir(), 'cloudy-orchestrator-'));
+  });
+
+  afterEach(async () => {
+    await fs.rm(testCwd, { recursive: true, force: true });
   });
 
   it('executes tasks in sequential order and emits events', async () => {
@@ -154,7 +167,7 @@ describe('Orchestrator', () => {
     const events: OrchestratorEvent[] = [];
 
     const orchestrator = new Orchestrator({
-      cwd: '/tmp/test',
+      cwd: testCwd,
       state: makeState(tasks),
       config: makeConfig(),
       onEvent: (e) => events.push(e),
@@ -172,6 +185,29 @@ describe('Orchestrator', () => {
 
     const runCompleted = events.find((e) => e.type === 'run_completed');
     expect(runCompleted).toBeDefined();
+  });
+
+  it('marks already-satisfied tasks as completed_without_changes', async () => {
+    const { validateTask } = await import('../../src/validator/validator.js');
+    vi.mocked(validateTask).mockResolvedValueOnce({
+      taskId: 'task-1',
+      passed: true,
+      alreadySatisfied: true,
+      results: [],
+    });
+
+    const tasks = [makeTask('task-1')];
+    const state = makeState(tasks);
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: makeConfig(),
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(state.plan?.tasks[0].status).toBe('completed_without_changes');
   });
 
   it('stops on task failure when ifFailed is halt', async () => {
@@ -203,7 +239,7 @@ describe('Orchestrator', () => {
 
     const events: OrchestratorEvent[] = [];
     const orchestrator = new Orchestrator({
-      cwd: '/tmp/test',
+      cwd: testCwd,
       state: makeState(tasks),
       config: makeConfig(),
       onEvent: (e) => events.push(e),
@@ -256,7 +292,7 @@ describe('Orchestrator', () => {
 
     const events: OrchestratorEvent[] = [];
     orchestratorRef = new Orchestrator({
-      cwd: '/tmp/test',
+      cwd: testCwd,
       state: makeState(tasks),
       config: makeConfig(),
       onEvent: (e) => events.push(e),
@@ -280,7 +316,7 @@ describe('Orchestrator', () => {
     const consoleSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 
     const orchestrator = new Orchestrator({
-      cwd: '/tmp/test',
+      cwd: testCwd,
       state: makeState(tasks),
       config: makeConfig(),
       dryRun: true,
@@ -301,7 +337,7 @@ describe('Orchestrator', () => {
     const eventTypes: string[] = [];
 
     const orchestrator = new Orchestrator({
-      cwd: '/tmp/test',
+      cwd: testCwd,
       state: makeState(tasks),
       config: makeConfig(),
       onEvent: (e) => eventTypes.push(e.type),
@@ -337,7 +373,7 @@ describe('Orchestrator', () => {
     config.review.enabled = true;
 
     const orchestrator = new Orchestrator({
-      cwd: '/tmp/test',
+      cwd: testCwd,
       state: makeState(tasks),
       config,
       onEvent: () => {},

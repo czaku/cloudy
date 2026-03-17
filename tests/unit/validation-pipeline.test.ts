@@ -34,7 +34,8 @@ vi.mock('../../src/utils/logger.js', () => ({
   log: { info: vi.fn(async () => {}), warn: vi.fn(async () => {}), error: vi.fn(async () => {}) },
 }));
 
-import { inferArtifactsFromAcceptanceCriteria, validateTask } from '../../src/validator/validator.js';
+import { validateTask } from '../../src/validator/validator.js';
+import { inferArtifactsFromAcceptanceCriteria } from '../../src/planner/planner.js';
 import { runArtifactCheck } from '../../src/validator/strategies/artifact-check.js';
 import { runTypeCheck } from '../../src/validator/strategies/type-check.js';
 import { runAiReview } from '../../src/validator/strategies/ai-review.js';
@@ -157,6 +158,17 @@ describe('validateTask — full pipeline integration', () => {
     const report = await validateTask({ task: makeTask(), config: ALL_ON, model: 'haiku', cwd: '/tmp' });
     expect(runAiReview).toHaveBeenCalledOnce();
     expect(report.passed).toBe(true);
+  });
+
+  it('marks report as alreadySatisfied when no diff exists and artifacts are present', async () => {
+    const { getGitDiff } = await import('../../src/git/git.js');
+    vi.mocked(getGitDiff).mockResolvedValueOnce('');
+    const task = makeTask({
+      acceptanceCriteria: ['android-shell-journey.png exists under ~/Desktop/screenshots/fitkind/'],
+    });
+    const report = await validateTask({ task, config: ALL_ON, model: 'haiku', cwd: '/tmp' });
+    expect(report.passed).toBe(true);
+    expect(report.alreadySatisfied).toBe(true);
   });
 
   it('report contains taskId matching the task', async () => {

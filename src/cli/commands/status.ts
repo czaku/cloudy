@@ -10,6 +10,7 @@ const STATUS_ICONS: Record<string, string> = {
   pending: '○',
   in_progress: '⚡',
   completed: '✅',
+  completed_without_changes: '☑',
   failed: '✗',
   skipped: '⊘',
   rolled_back: '↺',
@@ -46,7 +47,7 @@ async function render(
 
   const plan = state.plan;
   const tasks = plan.tasks;
-  const completed = tasks.filter((t) => t.status === 'completed').length;
+  const completed = tasks.filter((t) => t.status === 'completed' || t.status === 'completed_without_changes').length;
   const failed = tasks.filter((t) => t.status === 'failed').length;
   const pct = tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0;
   const now = Date.now();
@@ -89,9 +90,9 @@ async function render(
     let elapsed = '—';
     let displayLabel: string = task.status;
 
-    if (task.status === 'completed' && task.durationMs != null) {
+    if ((task.status === 'completed' || task.status === 'completed_without_changes') && task.durationMs != null) {
       elapsed = formatElapsed(task.durationMs);
-      displayLabel = 'done';
+      displayLabel = task.status === 'completed_without_changes' ? 'verified' : 'done';
     } else if (task.status === 'in_progress' && task.startedAt) {
       const ms = now - Date.parse(task.startedAt);
       elapsed = formatElapsed(ms);
@@ -110,7 +111,7 @@ async function render(
     const statusPad = displayLabel.padEnd(10);
 
     let line: string;
-    if (task.status === 'completed') {
+    if (task.status === 'completed' || task.status === 'completed_without_changes') {
       const taskCost = task.costData?.estimatedUsd
         ? c(dim, `$${task.costData.estimatedUsd.toFixed(3)}`.padStart(7))
         : c(dim, '       ');
