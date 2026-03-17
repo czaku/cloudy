@@ -53,6 +53,11 @@ const VERIFY_FIRST_TASK_TYPES = new Set(['verify', 'review', 'closeout']);
 const SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT = 8;
 const SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS = 75_000;
 const SCOPED_IMPLEMENT_FIRST_WRITE_MIN_DISCOVERY_OPS = 6;
+const TERMINAL_FAILURE_TYPES: RetryHistoryEntry['failureType'][] = [
+  'over_exploration',
+  'out_of_scope_drift',
+  'validation_config_error',
+];
 
 function classifyRetryFailure(error: string | undefined): RetryHistoryEntry['failureType'] {
   const message = (error ?? '').toLowerCase();
@@ -470,6 +475,19 @@ export class Orchestrator {
         if (ids.length === 0) {
           await log.info('Reviewer FAIL but no tasks to re-run (all completed). Review issues may need manual attention.');
         } else {
+        const filteredIds = ids.filter((id) => {
+          const task = plan.tasks.find((candidate) => candidate.id === id);
+          const lastFailureType = task?.retryHistory?.[task.retryHistory.length - 1]?.failureType;
+          return !lastFailureType || !TERMINAL_FAILURE_TYPES.includes(lastFailureType);
+        });
+        const blockedIds = ids.filter((id) => !filteredIds.includes(id));
+        if (blockedIds.length > 0) {
+          await log.info(`Skipping reviewer re-run for terminal failure tasks: ${blockedIds.join(', ')}`);
+        }
+        ids = filteredIds;
+        if (ids.length === 0) {
+          await log.info('Reviewer requested only terminal-failure tasks for re-run — leaving run failed for manual intervention.');
+        } else {
         await log.info(`Reviewer flagged ${ids.length} task(s) for re-run: ${ids.join(', ')}`);
         this.onEvent({ type: 'rerun_started', taskIds: ids });
 
@@ -502,6 +520,7 @@ export class Orchestrator {
 
           // Second review after re-run
           await this.runHolisticReview();
+        }
         }
         } // else (ids.length > 0)
       }
@@ -1266,12 +1285,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           durationMs: Date.now() - attemptStart,
         };
         task.retryHistory!.push(entry);
-        const terminalFailureTypes: RetryHistoryEntry['failureType'][] = [
-          'over_exploration',
-          'out_of_scope_drift',
-          'validation_config_error',
-        ];
-        const canRetry = terminalFailureTypes.includes(entry.failureType)
+        const canRetry = TERMINAL_FAILURE_TYPES.includes(entry.failureType)
           ? false
           : queue.incrementRetry(task.id);
 

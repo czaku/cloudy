@@ -415,6 +415,50 @@ describe('Orchestrator', () => {
     expect(state.plan?.tasks[0].retryHistory?.[0]?.failureType).toBe('over_exploration');
   });
 
+  it('does not let holistic review rerun terminal failure tasks', async () => {
+    const { runEngine } = await import('../../src/executor/engine.js');
+    const { runHolisticReview } = await import('../../src/reviewer.js');
+    const mockedRunEngine = vi.mocked(runEngine);
+
+    mockedRunEngine.mockResolvedValueOnce({
+      success: false,
+      output: '',
+      error: 'Over-exploration detected: no file writes after 75s for a scoped implementation task',
+      usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+      durationMs: 100,
+      costUsd: 0,
+    });
+
+    vi.mocked(runHolisticReview).mockResolvedValueOnce({
+      verdict: 'FAIL',
+      summary: 'retry it',
+      criteriaResults: [],
+      issues: [],
+      conventionViolations: [],
+      suggestions: [],
+      rerunTaskIds: ['task-1'],
+      costUsd: 0,
+      durationMs: 10,
+      model: 'opus',
+    } as any);
+
+    const task = makeTask('task-1');
+    task.maxRetries = 2;
+    const state = makeState([task]);
+    state.config.review = { enabled: true, model: 'opus' };
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: state.config,
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(mockedRunEngine).toHaveBeenCalledTimes(1);
+    expect(state.plan?.tasks[0].status).toBe('failed');
+  });
+
   it('stops on task failure when ifFailed is halt', async () => {
     const { runEngine } = await import('../../src/executor/engine.js');
     const mockedRunEngine = vi.mocked(runEngine);
