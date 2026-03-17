@@ -27,4 +27,11 @@ describe('dashboard runtime controls', () => {
     expect(source).toContain('IconChecklist size={13} color="currentColor" /> Plan');
     expect(source).not.toContain('title="Go to Build"');
   });
+
+  it('wraps tab content in an error boundary instead of blanking the whole dashboard', () => {
+    expect(source).toContain('class TabErrorBoundary extends React.Component');
+    expect(source).toContain('tab crashed');
+    expect(source).toContain('<TabErrorBoundary key={`${selectedProject.id}:${activeTab}`}');
+    expect(source).toContain('Retry tab');
+  });
 });

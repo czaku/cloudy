@@ -195,6 +195,60 @@ function useProjectRuntimeConfig(projectId: string): ProjectRuntimeConfig | null
   return config;
 }
 
+interface TabErrorBoundaryProps {
+  tab: ActiveTab;
+  projectName?: string | null;
+  children: React.ReactNode;
+}
+
+interface TabErrorBoundaryState {
+  error: Error | null;
+}
+
+class TabErrorBoundary extends React.Component<TabErrorBoundaryProps, TabErrorBoundaryState> {
+  constructor(props: TabErrorBoundaryProps) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error: Error): TabErrorBoundaryState {
+    return { error };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error(`[cloudy dashboard] ${this.props.tab} tab crashed`, error, info.componentStack);
+  }
+
+  componentDidUpdate(prevProps: TabErrorBoundaryProps) {
+    if (this.state.error && (prevProps.tab !== this.props.tab || prevProps.projectName !== this.props.projectName)) {
+      this.setState({ error: null });
+    }
+  }
+
+  render() {
+    if (this.state.error) {
+      const projectLabel = this.props.projectName ? ` for ${this.props.projectName}` : '';
+      return (
+        <div className="daemon-empty" role="alert">
+          <div className="daemon-empty-icon">⚠️</div>
+          <div className="daemon-empty-title">{this.props.tab} tab crashed{projectLabel}</div>
+          <div className="daemon-empty-sub" style={{ maxWidth: 560, textAlign: 'center' }}>
+            {this.state.error.message || 'Unknown dashboard error'}
+          </div>
+          <button
+            className="daemon-btn primary"
+            onClick={() => this.setState({ error: null })}
+            style={{ marginTop: 14 }}
+          >
+            Retry tab
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 // ── Plumpy icon components ─────────────────────────────────────────────
 
 function IconChat({ size = 20, color = 'currentColor' }: { size?: number; color?: string }) {
@@ -6713,47 +6767,49 @@ export function DaemonApp() {
 
               {/* Tab content */}
               <div className={`daemon-content${['chat', 'plan', 'run', 'history', 'memory'].includes(activeTab) ? ' chat-content' : ''}`}>
-                {activeTab === 'dashboard' && (
-                  <DashboardTab
-                    key={selectedProject.id}
-                    project={selectedProject}
-                    onSwitchTab={setActiveTabAndPush}
-                  />
-                )}
-                {activeTab === 'plan' && (
-                  <PlanBuildTab
-                    key={selectedProject.id}
-                    project={selectedProject}
-                    onPlanSavedEvent={planSavedEvent}
-                  />
-                )}
-                {activeTab === 'run' && (
-                  <RunTab
-                    key={selectedProject.id}
-                    project={selectedProject}
-                  />
-                )}
-                {activeTab === 'chat' && (
-                  <ChatTab
-                    key={selectedProject.id}
-                    project={selectedProject}
-                    onSwitchTab={setActiveTabAndPush}
-                    initialSessionId={urlSessionId}
-                    onSessionSelect={onChatSessionSelect}
-                  />
-                )}
-                {activeTab === 'history' && (
-                  <HistoryTab
-                    key={selectedProject.id}
-                    project={selectedProject}
-                  />
-                )}
-                {activeTab === 'memory' && (
-                  <MemoryTab
-                    key={selectedProject.id}
-                    project={selectedProject}
-                  />
-                )}
+                <TabErrorBoundary key={`${selectedProject.id}:${activeTab}`} tab={activeTab} projectName={selectedProject.name}>
+                  {activeTab === 'dashboard' && (
+                    <DashboardTab
+                      key={selectedProject.id}
+                      project={selectedProject}
+                      onSwitchTab={setActiveTabAndPush}
+                    />
+                  )}
+                  {activeTab === 'plan' && (
+                    <PlanBuildTab
+                      key={selectedProject.id}
+                      project={selectedProject}
+                      onPlanSavedEvent={planSavedEvent}
+                    />
+                  )}
+                  {activeTab === 'run' && (
+                    <RunTab
+                      key={selectedProject.id}
+                      project={selectedProject}
+                    />
+                  )}
+                  {activeTab === 'chat' && (
+                    <ChatTab
+                      key={selectedProject.id}
+                      project={selectedProject}
+                      onSwitchTab={setActiveTabAndPush}
+                      initialSessionId={urlSessionId}
+                      onSessionSelect={onChatSessionSelect}
+                    />
+                  )}
+                  {activeTab === 'history' && (
+                    <HistoryTab
+                      key={selectedProject.id}
+                      project={selectedProject}
+                    />
+                  )}
+                  {activeTab === 'memory' && (
+                    <MemoryTab
+                      key={selectedProject.id}
+                      project={selectedProject}
+                    />
+                  )}
+                </TabErrorBoundary>
               </div>
             </>
           )}
