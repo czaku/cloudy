@@ -3908,11 +3908,11 @@ function RunTab({ project }: RunTabProps) {
                     account={buildAccount}
                     modelId={buildModelId}
                     effort={buildEffort || effort}
-                    onEngineChange={setExecutionEngine}
-                    onProviderChange={setExecutionProvider}
+                    onEngineChange={setBuildEngine}
+                    onProviderChange={setBuildProvider}
                     onAccountChange={setBuildAccount}
-                    onModelIdChange={setExecutionModelId}
-                    onEffortChange={(value) => { setExecutionEffort(value); setEffort(value); }}
+                    onModelIdChange={setBuildModelId}
+                    onEffortChange={(value) => { setBuildEffort(value); setEffort(value); }}
                     onClear={clearRunRuntimeOverrides}
                     hint="Execution defaults come from project config. Override here only when this retry needs a specific implementation route."
                     defaultRoute={{ engine: projectConfig?.buildEngine, provider: projectConfig?.buildProvider, account: projectConfig?.buildAccount, modelId: projectConfig?.buildModelId, effort: projectConfig?.buildEffort }}
@@ -4187,11 +4187,11 @@ function RunTab({ project }: RunTabProps) {
                 account={buildAccount}
                 modelId={buildModelId}
                 effort={buildEffort || effort}
-                onEngineChange={setExecutionEngine}
-                onProviderChange={setExecutionProvider}
+                onEngineChange={setBuildEngine}
+                onProviderChange={setBuildProvider}
                 onAccountChange={setBuildAccount}
-                onModelIdChange={setExecutionModelId}
-                onEffortChange={(value) => { setExecutionEffort(value); setEffort(value); }}
+                onModelIdChange={setBuildModelId}
+                onEffortChange={(value) => { setBuildEffort(value); setEffort(value); }}
                 onClear={clearRunRuntimeOverrides}
                 hint="Execution defaults come from project config. Override here only when this chain needs a specific implementation route."
                 defaultRoute={{ engine: projectConfig?.buildEngine, provider: projectConfig?.buildProvider, account: projectConfig?.buildAccount, modelId: projectConfig?.buildModelId, effort: projectConfig?.buildEffort }}

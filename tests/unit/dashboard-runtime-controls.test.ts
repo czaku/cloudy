@@ -34,4 +34,14 @@ describe('dashboard runtime controls', () => {
     expect(source).toContain('<TabErrorBoundary key={`${selectedProject.id}:${activeTab}`}');
     expect(source).toContain('Retry tab');
   });
+
+  it('wires run-tab build route controls to build state setters', () => {
+    expect(source).toContain('onEngineChange={setBuildEngine}');
+    expect(source).toContain('onProviderChange={setBuildProvider}');
+    expect(source).toContain('onModelIdChange={setBuildModelId}');
+    expect(source).toContain('onEffortChange={(value) => { setBuildEffort(value); setEffort(value); }}');
+    expect(source).not.toContain('onEngineChange={setExecutionEngine}');
+    expect(source).not.toContain('onProviderChange={setExecutionProvider}');
+    expect(source).not.toContain('onModelIdChange={setExecutionModelId}');
+  });
 });
