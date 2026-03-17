@@ -57,6 +57,25 @@ const SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT = 8;
 const SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS = 75_000;
 const SCOPED_IMPLEMENT_FIRST_WRITE_MIN_DISCOVERY_OPS = 6;
 const SCOPED_IMPLEMENT_PREWRITE_SHELL_DISCOVERY_LIMIT = 2;
+
+function getScopedFirstWriteDiscoveryLimit(task: Task): number {
+  const writeScopeSize = task.allowedWritePaths?.length ?? 0;
+  if (writeScopeSize <= 2) return SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT;
+  return Math.min(12, SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT + (writeScopeSize - 2));
+}
+
+function getScopedFirstWriteMinDiscoveryOps(task: Task): number {
+  const discoveryLimit = getScopedFirstWriteDiscoveryLimit(task);
+  const writeScopeSize = task.allowedWritePaths?.length ?? 0;
+  return Math.min(discoveryLimit - 1, SCOPED_IMPLEMENT_FIRST_WRITE_MIN_DISCOVERY_OPS + Math.max(0, writeScopeSize - 2));
+}
+
+function getScopedFirstWriteTimeMs(task: Task): number {
+  const writeScopeSize = task.allowedWritePaths?.length ?? 0;
+  if (writeScopeSize <= 2) return SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS;
+  return SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS + Math.min(30_000, (writeScopeSize - 2) * 10_000);
+}
+
 function classifyRetryFailure(error: string | undefined): RetryHistoryEntry['failureType'] {
   const message = (error ?? '').toLowerCase();
   if (message.includes('out-of-scope') || message.includes('outside allowed task scope')) return 'out_of_scope_drift';
@@ -1003,6 +1022,9 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       if (this.aborted) return;
       attempt++;
       const attemptStart = Date.now();
+      const scopedFirstWriteDiscoveryLimit = getScopedFirstWriteDiscoveryLimit(task);
+      const scopedFirstWriteMinDiscoveryOps = getScopedFirstWriteMinDiscoveryOps(task);
+      const scopedFirstWriteTimeMs = getScopedFirstWriteTimeMs(task);
       await log.info(`  Attempt ${attempt}/${maxAttempts}`);
 
       // On retry, expand context and roll back to a clean slate
@@ -1105,16 +1127,16 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       const maxDiscoveryOps = VERIFY_FIRST_TASK_TYPES.has(taskType)
         ? 10
         : scopedImplementationTask
-          ? SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT
+          ? scopedFirstWriteDiscoveryLimit
           : 18;
       const _firstWriteDeadlineId = scopedImplementationTask
         ? setTimeout(() => {
             if (!(task.filesWritten?.length)) {
-              forcedAbortReason = `Over-exploration detected: no file writes after ${Math.round(SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS / 1000)}s for a scoped implementation task`;
+              forcedAbortReason = `Over-exploration detected: no file writes after ${Math.round(scopedFirstWriteTimeMs / 1000)}s for a scoped implementation task`;
               log.warn(`  ⏳ first-write deadline reached — "${task.title}" has not written any files`).catch(() => {});
               abortController.abort();
             }
-          }, SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS)
+          }, scopedFirstWriteTimeMs)
         : undefined;
       const _heartbeatId = setInterval(() => {
         const elapsedMs  = Date.now() - _engineStart;
@@ -1219,7 +1241,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
             }
             if (
               scopedImplementationTask &&
-              discoveryOps >= SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT &&
+              discoveryOps >= scopedFirstWriteDiscoveryLimit &&
               verificationOps === 0 &&
               !(task.filesWritten?.length)
             ) {
@@ -1232,10 +1254,10 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
               abortController.abort();
             } else if (
               scopedImplementationTask &&
-              discoveryOps >= SCOPED_IMPLEMENT_FIRST_WRITE_MIN_DISCOVERY_OPS &&
+              discoveryOps >= scopedFirstWriteMinDiscoveryOps &&
               verificationOps === 0 &&
               !(task.filesWritten?.length) &&
-              Date.now() - _engineStart >= SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS
+              Date.now() - _engineStart >= scopedFirstWriteTimeMs
             ) {
               forcedAbortReason = `Over-exploration detected: ${discoveryOps} discovery operations and no file writes after ${Math.round((Date.now() - _engineStart) / 1000)}s for a scoped implementation task`;
               abortController.abort();

@@ -366,7 +366,18 @@ describe('Orchestrator', () => {
     });
 
     const task = makeTask('task-1');
-    task.allowedWritePaths = ['app/features/plan', 'app/features/home', 'app/core/network', 'fixtures/plans'];
+    task.executionMode = 'implement_ui_surface';
+    task.allowedWritePaths = ['app/features/plan/TrainingPlansView.swift', 'app/features/plan/TrainingPlanDetailView.swift'];
+    task.contextPatterns = [
+      'app/features/plan/TrainingPlansView.swift',
+      'app/features/plan/TrainingPlanDetailView.swift',
+      'app/features/home/HomeViewModel.swift',
+      'fixtures/home/today.json',
+      'app/core/network/APIResponses.swift',
+      'app/core/network/Fixtures.swift',
+      'app/features/plan/PlanViewModel.swift',
+    ];
+    task.implementationSteps = ['Inspect the two plan views', 'Make the required edit without broadening scope'];
     task.maxRetries = 0;
     const state = makeState([task]);
     const orchestrator = new Orchestrator({
@@ -448,6 +459,75 @@ describe('Orchestrator', () => {
     expect(state.plan?.tasks[0].status).toBe('failed');
     expect(state.plan?.tasks[0].failureClass).toBe('executor_nonperformance');
     expect(state.plan?.tasks[0].error).toContain('Pre-write shell discovery is disallowed');
+  });
+
+  it('allows bounded four-file tasks a larger read budget before the first write', async () => {
+    const { runEngine } = await import('../../src/executor/engine.js');
+    const mockedRunEngine = vi.mocked(runEngine);
+
+    mockedRunEngine.mockImplementationOnce(async ({ onToolUse, onFilesWritten, onOutput }: {
+      onToolUse?: (toolName: string, toolInput: unknown) => void;
+      onFilesWritten?: (paths: string[]) => void;
+      onOutput?: (text: string) => void;
+    }) => {
+      const reads = [
+        'src/TrainingPlanDetailScreen.kt',
+        'src/TrainingPlansViewModel.kt',
+        'src/RootNavigation.kt',
+        'src/PrototypeScreenshotTests.kt',
+        'src/RootNavigation.kt',
+        'src/TrainingPlansRepository.kt',
+        'src/TemplateDetailScreen.kt',
+        'src/PrototypeScreenshotTests.kt',
+      ];
+      for (const file of reads) {
+        onToolUse?.('Read', { file_path: file });
+      }
+      onOutput?.('about to write');
+      onFilesWritten?.(['src/TrainingPlanDetailScreen.kt']);
+      return {
+        success: true,
+        output: 'done',
+        usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        durationMs: 100,
+        costUsd: 0,
+      };
+    });
+
+    const task = makeTask('task-1');
+    task.executionMode = 'implement_ui_surface';
+    task.allowedWritePaths = [
+      'src/RootNavigation.kt',
+      'src/TrainingPlansViewModel.kt',
+      'src/TrainingPlanDetailScreen.kt',
+      'src/PrototypeScreenshotTests.kt',
+    ];
+    task.contextPatterns = [
+      'src/RootNavigation.kt',
+      'src/TrainingPlansViewModel.kt',
+      'src/TrainingPlanDetailScreen.kt',
+      'src/TrainingPlansRepository.kt',
+      'src/TemplateDetailScreen.kt',
+      'src/PrototypeScreenshotTests.kt',
+    ];
+    task.implementationSteps = [
+      'Split the detail screen into route and content',
+      'Thread override state through RootNavigation',
+      'Thread the same override through screenshot tests',
+    ];
+    task.maxRetries = 0;
+
+    const state = makeState([task]);
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: makeConfig(),
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(state.plan?.tasks[0].status).toBe('completed');
   });
 
   it('passes strict allowed tools for tiny scoped implementation tasks', async () => {
