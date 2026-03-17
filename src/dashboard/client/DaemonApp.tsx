@@ -3821,6 +3821,28 @@ function RunTab({ project }: RunTabProps) {
                         <div className="run-task-detail-text">{task.resultSummary}</div>
                       </div>
                     )}
+                    {(task.executionMode || task.failureClass || task.executionMetrics) && (
+                      <div className="run-task-detail-section">
+                        <div className="run-task-detail-label">Execution</div>
+                        <div className="run-task-detail-text">
+                          {task.executionMode ? <div><strong>Mode:</strong> {task.executionMode}</div> : null}
+                          {task.failureClass ? <div><strong>Failure class:</strong> {task.failureClass}</div> : null}
+                          {task.executionMetrics ? (
+                            <div style={{ marginTop: 6 }}>
+                              <div><strong>Time to first write:</strong> {task.executionMetrics.timeToFirstWriteMs ? `${Math.round(task.executionMetrics.timeToFirstWriteMs / 1000)}s` : 'none'}</div>
+                              <div><strong>Discovery ops before first write:</strong> {task.executionMetrics.discoveryOpsBeforeFirstWrite}</div>
+                              <div><strong>Subagent calls:</strong> {task.executionMetrics.subagentCalls}</div>
+                              <div><strong>Write count:</strong> {task.executionMetrics.writeCount}</div>
+                              <div><strong>Verification ops:</strong> {task.executionMetrics.verificationOps}</div>
+                              {task.executionMetrics.riskLevel ? <div><strong>Risk:</strong> {task.executionMetrics.riskLevel}</div> : null}
+                              {(task.executionMetrics.riskReasons?.length ?? 0) > 0 ? (
+                                <div><strong>Risk reasons:</strong> {task.executionMetrics.riskReasons!.join(', ')}</div>
+                              ) : null}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    )}
                     {(task.acceptanceCriteria?.length ?? 0) > 0 && (
                       <div className="run-task-detail-section">
                         <div className="run-task-detail-label">Acceptance Criteria</div>

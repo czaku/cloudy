@@ -380,7 +380,7 @@ describe('Orchestrator', () => {
 
     expect(state.plan?.tasks[0].status).toBe('failed');
     expect(state.plan?.tasks[0].error).toContain('Over-exploration detected');
-    expect(state.plan?.tasks[0].retryHistory?.[0]?.failureType).toBe('over_exploration');
+    expect(state.plan?.tasks[0].retryHistory?.[0]?.failureType).toBe('executor_nonperformance');
     dateNowSpy.mockRestore();
   });
 
@@ -412,7 +412,7 @@ describe('Orchestrator', () => {
     expect(mockedRunEngine).toHaveBeenCalledTimes(1);
     expect(state.plan?.tasks[0].status).toBe('failed');
     expect(state.plan?.tasks[0].retries).toBe(0);
-    expect(state.plan?.tasks[0].retryHistory?.[0]?.failureType).toBe('over_exploration');
+    expect(state.plan?.tasks[0].retryHistory?.[0]?.failureType).toBe('executor_nonperformance');
   });
 
   it('does not let holistic review rerun terminal failure tasks', async () => {

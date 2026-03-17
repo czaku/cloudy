@@ -396,7 +396,7 @@ describe('7. Cross-run learning (loadRecentRunInsights)', () => {
       costUsd: 0.12,
       finalError: 'TypeScript error in schema',
       retryHistory: [
-        { attempt: 1, timestamp: new Date().toISOString(), failureType: 'typecheck', aiReview: 'Missing type annotation on entity field' },
+        { attempt: 1, timestamp: new Date().toISOString(), failureType: 'validation_problem', aiReview: 'Missing type annotation on entity field' },
       ],
       criteriaResults: [],
       lastAiReview: 'Missing type annotation on entity field',

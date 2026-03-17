@@ -4,17 +4,48 @@ export type TaskStatus =
   | 'pending'
   | 'in_progress'
   | 'completed'
+  | 'completed_without_changes'
   | 'failed'
   | 'skipped'
   | 'rolled_back';
 
+export type TaskExecutionMode =
+  | 'generic'
+  | 'implement_ui_surface'
+  | 'verify_proof'
+  | 'closeout_keel'
+  | 'refactor_bounded'
+  | 'write_or_stop';
+
+export type TaskFailureType =
+  | 'implementation_failure'
+  | 'acceptance_failure'
+  | 'timeout'
+  | 'executor_nonperformance'
+  | 'already_satisfied'
+  | 'environment_failure'
+  | 'validation_problem'
+  | 'out_of_scope_drift'
+  | 'task_spec_problem';
+
 export interface RetryHistoryEntry {
   attempt: number;
   timestamp: string;
-  failureType: 'execution' | 'acceptance' | 'timeout';
+  failureType: TaskFailureType;
   reason: string;
   fullError: string;
   durationMs: number;
+}
+
+export interface TaskExecutionMetrics {
+  timeToFirstWriteMs?: number;
+  discoveryOpsBeforeFirstWrite: number;
+  subagentCalls: number;
+  writeCount: number;
+  verificationOps: number;
+  executionMode: TaskExecutionMode;
+  riskLevel?: 'low' | 'medium' | 'high';
+  riskReasons?: string[];
 }
 
 export interface AcceptanceCriterionResult {
@@ -40,6 +71,7 @@ export interface Task {
   id: string;
   title: string;
   description: string;
+  executionMode?: TaskExecutionMode;
   acceptanceCriteria: string[];
   dependencies: string[];
   status: TaskStatus;
@@ -51,6 +83,8 @@ export interface Task {
   retryHistory?: RetryHistoryEntry[];
   acceptanceCriteriaResults?: AcceptanceCriterionResult[];
   validationReport?: ValidationReport;
+  executionMetrics?: TaskExecutionMetrics;
+  failureClass?: TaskFailureType;
 }
 
 export interface Plan {

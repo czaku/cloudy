@@ -47,31 +47,28 @@ import { RunLogger } from '../knowledge/run-logger.js';
 import { parseSubtasks } from './subtask-parser.js';
 import { waitForApproval, type ApprovalHandler } from './approval.js';
 import { logApproval } from '../utils/approval-log.js';
+import { assessTaskRisk, getExecutionDefaults, inferExecutionMode, isTerminalFailureType } from './task-shape.js';
 
 const DISCOVERY_READ_TOOL_NAMES = new Set(['Read', 'LS', 'Glob', 'Grep', 'Find']);
 const VERIFY_FIRST_TASK_TYPES = new Set(['verify', 'review', 'closeout']);
 const SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT = 8;
 const SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS = 75_000;
 const SCOPED_IMPLEMENT_FIRST_WRITE_MIN_DISCOVERY_OPS = 6;
-const TERMINAL_FAILURE_TYPES: RetryHistoryEntry['failureType'][] = [
-  'over_exploration',
-  'out_of_scope_drift',
-  'validation_config_error',
-];
-
 function classifyRetryFailure(error: string | undefined): RetryHistoryEntry['failureType'] {
   const message = (error ?? '').toLowerCase();
   if (message.includes('out-of-scope') || message.includes('outside allowed task scope')) return 'out_of_scope_drift';
   if (message.includes('validation configuration') || message.includes('validator mismatch') || message.includes('build override required')) {
-    return 'validation_config_error';
+    return 'validation_problem';
   }
-  if (message.includes('over-exploration')) return 'over_exploration';
+  if (message.includes('over-exploration') || message.includes('no file writes after')) return 'executor_nonperformance';
   if (message.includes('already satisf') || message.includes('already complete')) return 'already_satisfied';
+  if (message.includes('task spec') || message.includes('missing validation override') || message.includes('risk preflight refused')) return 'task_spec_problem';
   if (message.includes('timed out') || message.includes('hung engine')) return 'timeout';
   if (message.includes('daemon') || message.includes('config profile') || message.includes('not found') || message.includes('engine "') || message.includes('install')) {
-    return 'environment';
+    return 'environment_failure';
   }
-  return 'execution';
+  if (message.includes('acceptance criteria') || message.includes('criteria not met')) return 'acceptance_failure';
+  return 'implementation_failure';
 }
 
 function isBroadDiscoveryCommand(command: string): boolean {
@@ -478,7 +475,7 @@ export class Orchestrator {
         const filteredIds = ids.filter((id) => {
           const task = plan.tasks.find((candidate) => candidate.id === id);
           const lastFailureType = task?.retryHistory?.[task.retryHistory.length - 1]?.failureType;
-          return !lastFailureType || !TERMINAL_FAILURE_TYPES.includes(lastFailureType);
+          return !lastFailureType || !isTerminalFailureType(lastFailureType);
         });
         const blockedIds = ids.filter((id) => !filteredIds.includes(id));
         if (blockedIds.length > 0) {
@@ -780,7 +777,22 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
     taskCwd: string,
   ): Promise<void> {
     const maxAttempts = task.maxRetries + 1;
-    const executionModel = this.getModelForTask(task);
+    const executionDefaults = getExecutionDefaults(task);
+    task.executionMode = inferExecutionMode(task);
+    const taskRisk = assessTaskRisk(task);
+    task.executionMetrics = {
+      timeToFirstWriteMs: task.executionMetrics?.timeToFirstWriteMs,
+      discoveryOpsBeforeFirstWrite: 0,
+      subagentCalls: 0,
+      writeCount: task.filesWritten?.length ?? 0,
+      verificationOps: 0,
+      executionMode: task.executionMode,
+      riskLevel: taskRisk.level,
+      riskReasons: taskRisk.reasons,
+    };
+    const executionModel = this.config.autoModelRouting
+      ? executionDefaults.model
+      : this.getModelForTask(task);
     const engine = this.config.engine ?? 'claude-code';
     const provider = this.config.provider;
     const taskType = task.type ?? 'implement';
@@ -1031,6 +1043,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       let forcedAbortReason: string | undefined;
       let discoveryOps = 0;
       let verificationOps = 0;
+      let subagentCalls = 0;
       const scopedImplementationTask = !VERIFY_FIRST_TASK_TYPES.has(taskType) && allowedWritePaths.length > 0;
       const maxDiscoveryOps = VERIFY_FIRST_TASK_TYPES.has(taskType)
         ? 10
@@ -1083,8 +1096,8 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           account: this.config.account,
           modelId: this.config.executionModelId,
           claudeModel: executionModel,
-          effort: this.config.executionEffort,
-          disallowedTools: VERIFY_FIRST_TASK_TYPES.has(taskType) ? ['Agent'] : undefined,
+          effort: this.config.executionEffort ?? executionDefaults.effort,
+          disallowedTools: VERIFY_FIRST_TASK_TYPES.has(taskType) || executionDefaults.disallowSubagents ? ['Agent'] : undefined,
           cwd: taskCwd,
           onOutput: (text) => {
             _lastOutputMs = Date.now(); // reset silence timer on any stdout activity
@@ -1110,6 +1123,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
                 discoveryOps++;
               }
             } else if (toolName === 'Agent' && scopedImplementationTask) {
+              subagentCalls++;
               discoveryOps += 2;
             } else if (DISCOVERY_READ_TOOL_NAMES.has(toolName)) {
               discoveryOps++;
@@ -1140,6 +1154,18 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
             _lastOutputMs = Date.now(); // file writes prove the task is moving
             if (_firstWriteDeadlineId) {
               clearTimeout(_firstWriteDeadlineId);
+            }
+            if (!task.executionMetrics?.timeToFirstWriteMs) {
+              task.executionMetrics = {
+                ...(task.executionMetrics ?? {
+                  discoveryOpsBeforeFirstWrite: 0,
+                  subagentCalls: 0,
+                  writeCount: 0,
+                  verificationOps: 0,
+                  executionMode: task.executionMode ?? executionDefaults.executionMode,
+                }),
+                timeToFirstWriteMs: Date.now() - _engineStart,
+              };
             }
             const normalizedPaths = paths.map((candidate) => normalizePathForScope(candidate, taskCwd));
             const outOfScopeWrite = normalizedPaths.find((candidate) => !matchesAllowedWritePath(candidate, taskCwd, allowedWritePaths));
@@ -1203,6 +1229,19 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           ...new Set([...(task.filesWritten ?? []), ...normalizedFilesWritten]),
         ];
       }
+      task.executionMetrics = {
+        ...(task.executionMetrics ?? {
+          executionMode: task.executionMode ?? executionDefaults.executionMode,
+          discoveryOpsBeforeFirstWrite: 0,
+          subagentCalls: 0,
+          writeCount: 0,
+          verificationOps: 0,
+        }),
+        discoveryOpsBeforeFirstWrite: task.executionMetrics?.timeToFirstWriteMs ? task.executionMetrics.discoveryOpsBeforeFirstWrite : discoveryOps,
+        subagentCalls,
+        writeCount: task.filesWritten?.length ?? 0,
+        verificationOps,
+      };
 
       // Track cost
       this.costTracker.record(String(engineModel), 'execution', result, engine);
@@ -1285,7 +1324,8 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           durationMs: Date.now() - attemptStart,
         };
         task.retryHistory!.push(entry);
-        const canRetry = TERMINAL_FAILURE_TYPES.includes(entry.failureType)
+        task.failureClass = entry.failureType;
+        const canRetry = isTerminalFailureType(entry.failureType)
           ? false
           : queue.incrementRetry(task.id);
 
@@ -1528,13 +1568,14 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
         attempt,
         timestamp: new Date().toISOString(),
         failureType: validationConfigError
-          ? 'validation_config_error'
-          : (report.alreadySatisfied ? 'already_satisfied' : 'acceptance'),
+          ? 'validation_problem'
+          : (report.alreadySatisfied ? 'already_satisfied' : 'acceptance_failure'),
         reason: validationConfigError ?? 'Validation failed',
         fullError: lastValidationErrors,
         durationMs: Date.now() - attemptStart,
       };
       task.retryHistory!.push(entry);
+      task.failureClass = entry.failureType;
 
       if (!canRetry) {
         // Failure escalation gate for validation failure

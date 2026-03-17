@@ -117,6 +117,7 @@ export const pipelineCommand = new Command('chain')
   .option('--keel-slug <slug>', 'Keel project slug to write outcomes back to')
   .option('--keel-task <id>', 'Keel task ID to read runtime defaults from and update on completion')
   .option('--no-auto-fix', 'Disable automatic fix-task generation from review notes')
+  .option('--strict-batch', 'Deterministic batch mode: use task graphs as-is, disable creative recovery, and stop on terminal failures')
   .option('--verbose', 'Pass --verbose to each run')
   .option('--heartbeat-interval <seconds>', 'Write status.json every N seconds during each phase', parseInt)
   .option('--planning-timeout <seconds>', 'Max seconds to wait for planning before failing (default: 300)', parseInt)
@@ -147,6 +148,7 @@ export const pipelineCommand = new Command('chain')
     keelSlug?: string;
     keelTask?: string;
     autoFix?: boolean;
+    strictBatch?: boolean;
     verbose?: boolean;
     heartbeatInterval?: number;
     planningTimeout?: number;
@@ -331,6 +333,7 @@ export const pipelineCommand = new Command('chain')
         ...(opts.keelSlug ?? config.keel?.slug ? ['--keel-slug', opts.keelSlug ?? config.keel?.slug ?? ''] : []),
         ...(opts.keelTask ?? config.keel?.taskId ? ['--keel-task', opts.keelTask ?? config.keel?.taskId ?? ''] : []),
       ];
+      if (opts.strictBatch) runArgs.push('--strict-batch');
       if (opts.qualityReviewModel) runArgs.push('--quality-review-model', opts.qualityReviewModel);
       if (opts.verbose) runArgs.push('--verbose');
       if (opts.heartbeatInterval) runArgs.push('--heartbeat-interval', String(opts.heartbeatInterval));
@@ -380,7 +383,7 @@ export const pipelineCommand = new Command('chain')
       console.log(c(green, `✅  Phase ${phaseNum} review: ${review?.verdict ?? 'unknown'}${score}`));
 
       // ── Auto-fix: inject repair tasks for major/critical issues ──────────────
-      if (autoFix && review) {
+      if (autoFix && !opts.strictBatch && review) {
         const actionable: Array<{ severity: string; description: string; location?: string }> =
           (review.issues ?? []).filter(
             (iss: any) => iss.severity === 'major' || iss.severity === 'critical',

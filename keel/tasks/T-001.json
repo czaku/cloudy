@@ -12,7 +12,7 @@
   "depends_on": [],
   "spec": "/Users/luke/dev/cloudy/keel/specs/quality/T-001.md",
   "notes": [
-    "Started from the overnight aiyayai acceptance drift: Cloudy wrote a shallow successful note, but Keel and QA diverged."
+    "Started from an overnight acceptance drift case: Cloudy wrote a shallow successful note, but Keel and QA diverged."
   ],
   "createdAt": "2026-03-16T14:45:00.000Z",
   "updatedAt": "2026-03-16T14:45:00.000Z"

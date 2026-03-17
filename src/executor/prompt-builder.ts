@@ -1,5 +1,6 @@
 import type { Task, Plan } from '../core/types.js';
 import { buildContextSection, type ContextFile } from './context-resolver.js';
+import { assessTaskRisk, inferExecutionMode } from '../core/task-shape.js';
 
 export interface ExecutionPromptOptions {
   task: Task;
@@ -53,6 +54,12 @@ export function buildExecutionPrompt(
     completedTaskTitles = completedTitlesArg ?? [];
     contextFiles = contextFilesArg ?? [];
   }
+
+  const executionMode = inferExecutionMode(task);
+  const boundedContextModes = new Set(['implement_ui_surface', 'refactor_bounded', 'write_or_stop', 'verify_proof', 'closeout_keel']);
+  const effectiveContextFiles = boundedContextModes.has(executionMode)
+    ? contextFiles.slice(0, 8)
+    : contextFiles;
 
   const parts: string[] = [];
 
@@ -109,6 +116,12 @@ export function buildExecutionPrompt(
 
   parts.push(`# Your Task: ${task.title}\n${task.description}\n`);
 
+  const taskRisk = assessTaskRisk(task);
+  parts.push(`# Execution Mode\n${executionMode}\n`);
+  if (taskRisk.reasons.length > 0) {
+    parts.push(`# Task Risk\nLevel: ${taskRisk.level}\nReasons: ${taskRisk.reasons.join(', ')}\n`);
+  }
+
   if (task.acceptanceCriteria.length > 0) {
     parts.push('# Acceptance Criteria');
     for (const criterion of task.acceptanceCriteria) {
@@ -150,7 +163,7 @@ export function buildExecutionPrompt(
     parts.push('');
   }
 
-  const contextSection = buildContextSection(contextFiles);
+  const contextSection = buildContextSection(effectiveContextFiles);
   if (contextSection) {
     parts.push(contextSection);
   }
@@ -176,6 +189,26 @@ export function buildExecutionPrompt(
   parts.push('');
   parts.push('**CRITICAL — Repo boundary:** Stay inside this project repo. Do not inspect or modify sibling repos or Cloudy internals unless the task explicitly requires cross-repo work.');
   parts.push('');
+  if (executionMode === 'implement_ui_surface' || executionMode === 'refactor_bounded' || executionMode === 'write_or_stop') {
+    parts.push('**CRITICAL — First-action policy:**');
+    parts.push('- Start with the exact target files from context, not broad repo discovery.');
+    parts.push('- Do not use subagents for exploration.');
+    parts.push('- Make a concrete write attempt quickly after reading the target files.');
+    parts.push('- If you still do not know what to edit after the target-file read, stop and explain the blocker instead of roaming the repo.');
+    parts.push('');
+  }
+  if (executionMode === 'verify_proof') {
+    parts.push('**CRITICAL — Proof-first policy:**');
+    parts.push('- Verify screenshots, artifacts, and commands before reading code.');
+    parts.push('- If everything is already satisfied, do not make code changes.');
+    parts.push('');
+  }
+  if (executionMode === 'closeout_keel') {
+    parts.push('**CRITICAL — Closeout policy:**');
+    parts.push('- Keep edits limited to the explicit task-tracking and proof files.');
+    parts.push('- Do not broaden the task into feature work.');
+    parts.push('');
+  }
   parts.push('**CRITICAL — Discovery discipline:** Start from the provided context files before exploring.');
   parts.push('Prefer targeted `rg`, `sed`, and `ls` commands over broad `find` scans.');
   parts.push('Do not crawl unrelated parts of the repo just to learn the structure.');

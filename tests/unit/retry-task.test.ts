@@ -19,7 +19,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
       {
         attempt: 1,
         timestamp: '2024-01-01T00:00:00.000Z',
-        failureType: 'acceptance',
+        failureType: 'acceptance_failure',
         reason: 'Validation failed',
         fullError: 'tsc error',
         durationMs: 1000,

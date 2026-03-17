@@ -80,4 +80,13 @@ describe('routeModelForTask', () => {
     // desc: 5*2=10, criteria: 5*3=15, deps: 2*1=2, context: 1*1=1 -> 28
     expect(routeModelForTask(task)).toBe('opus');
   });
+
+  it('uses task-shape defaults for bounded ui tasks', () => {
+    const task = makeTask({
+      title: 'Implement Dashboard screen',
+      description: 'Update the screen UI and cards.',
+      allowedWritePaths: ['src/dashboard/client'],
+    });
+    expect(routeModelForTask(task)).toBe('sonnet');
+  });
 });

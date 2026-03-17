@@ -6,6 +6,36 @@
 
 Cloudy breaks a project goal into a dependency-ordered task graph, then works through each task using local agent CLIs or API-backed runtimes via `omnai` — with validation, automatic retry, and real-time feedback. Works with any language or stack.
 
+## Scoped execution hardening
+
+Cloudy now distinguishes bounded task shapes instead of treating every implementation task the same.
+
+- `implement_ui_surface`: scoped UI work with exact write targets
+- `verify_proof`: artifact and screenshot verification work
+- `closeout_keel`: status, notes, and task-closeout work
+- `refactor_bounded`: targeted refactors with explicit file scope
+- `write_or_stop`: bounded implementation tasks that must produce an edit quickly or fail fast
+
+For these modes, Cloudy now:
+
+- tracks `timeToFirstWriteMs`, discovery ops before first write, subagent calls, write count, verification ops, risk level, and failure class
+- shows those metrics in the dashboard task details
+- enforces a stronger first-action policy for bounded implementation work
+- disables exploratory subagents by default for scoped tasks
+- supports `--strict-batch` so multi-task delivery runs stay deterministic and stop on terminal failures
+
+Failure classes are now explicit:
+
+- `executor_nonperformance`
+- `task_spec_problem`
+- `validation_problem`
+- `implementation_failure`
+- `acceptance_failure`
+- `out_of_scope_drift`
+- `already_satisfied`
+- `environment_failure`
+- `timeout`
+
 ## Runtime routing model
 
 Cloudy routes every AI phase with four dimensions:
@@ -223,6 +253,9 @@ cloudy run --start-from task-4
 # Parallel execution
 cloudy run --parallel --max-parallel 4
 
+# Deterministic batch execution
+cloudy run --strict-batch
+
 # No web dashboard
 cloudy run --no-dashboard
 ```
@@ -237,6 +270,7 @@ cloudy run --no-dashboard
 | `--max-retries <n>` | Override retry budget for this run |
 | `--parallel` | Run independent tasks concurrently |
 | `--max-parallel <n>` | Concurrency cap (default: 3) |
+| `--strict-batch` | Deterministic execution: no creative recovery, stop on terminal failures, honor task-graph/risk guards |
 | `--no-validate` | Skip all validation |
 | `--no-dashboard` | Disable the web dashboard |
 | `--verbose` | Stream live agent output per task |
@@ -251,6 +285,20 @@ cloudy run --no-dashboard
 | `--build-engine <e>` / `--build-provider <p>` / `--build-account <a>` / `--build-model-id <id>` | Build runtime override |
 | `--task-review-engine <e>` / `--task-review-provider <p>` / `--task-review-account <a>` / `--task-review-model-id <id>` | Per-task AI task-review runtime override |
 | `--run-review-engine <e>` / `--run-review-provider <p>` / `--run-review-account <a>` / `--run-review-model-id <id>` | Run-review runtime override |
+
+For batch delivery, prefer:
+
+```bash
+cloudy chain \
+  --spec ./phase-1.md \
+  --spec ./phase-2.md \
+  --build-model sonnet \
+  --task-review-model haiku \
+  --run-review-model opus \
+  --strict-batch
+```
+
+`--strict-batch` expects deterministic task graphs and exact validation commands. It disables creative repair passes and halts on terminal scoped-task failures.
 
 ---
 

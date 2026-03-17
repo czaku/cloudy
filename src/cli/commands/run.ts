@@ -19,6 +19,7 @@ import { notifyRunComplete, notifyRunFailed } from '../../notifications/notify.j
 import { acquireLock } from '../../utils/lock.js';
 import { execa } from 'execa';
 import { applyKeelTaskRuntime, loadKeelTaskRuntime } from '../../integrations/keel-task-runtime.js';
+import { analyzePlanRisk } from '../../core/risk-preflight.js';
 
 function formatRuntime(label: string, runtime: { engine?: string; provider?: string; account?: string; modelId?: string; effort?: string }): string {
   return `${label}: engine=${runtime.engine ?? '(default)'} provider=${runtime.provider ?? '(default)'} account=${runtime.account ?? '(default)'} modelId=${runtime.modelId ?? '(abstract)'} effort=${runtime.effort ?? '(default)'}`;
@@ -214,6 +215,7 @@ export const runCommand = new Command('run')
   .option('--non-interactive', 'Skip all interactive prompts — requires explicit model flags, exits when run completes')
   .option('--agent-output', 'Emit structured plain-text lines (no ANSI, no emoji) — auto-enabled with --non-interactive')
   .option('--build-effort <level>', 'Thinking effort for build tasks: low|medium|high|max (high/max enable extended thinking; max requires opus)')
+  .option('--strict-batch', 'Deterministic batch mode: no creative recovery, stop on terminal failures and risk-preflight blocks')
   .option('--keel-slug <slug>', 'Keel project slug to write outcomes back to')
   .option('--keel-task <id>', 'Keel task ID to update on completion')
   .action(
@@ -261,6 +263,7 @@ export const runCommand = new Command('run')
       agentOutput?: boolean;
       worktrees?: boolean;
       buildEffort?: string;
+      strictBatch?: boolean;
       keelSlug?: string;
       keelTask?: string;
     }) => {
@@ -463,6 +466,7 @@ export const runCommand = new Command('run')
       if (opts.parallel) config.parallel = true;
       if (opts.maxParallel) config.maxParallel = opts.maxParallel;
       if (opts.worktrees) config.worktrees = true;
+      if (opts.strictBatch) config.strictBatch = true;
       if (opts.buildEffort) config.executionEffort = opts.buildEffort as typeof config.executionEffort;
       if (opts.maxRetries !== undefined) config.maxRetries = opts.maxRetries;
       if (!opts.dashboard) config.dashboard = false; // --no-dashboard for headless CI
@@ -1017,6 +1021,23 @@ export const runCommand = new Command('run')
             }
           }
         } catch { /* non-fatal — git may not be available */ }
+
+        const preflightRisks = analyzePlanRisk(freshState.plan);
+        const blockingRisks = preflightRisks.filter((risk) => risk.shouldBlock);
+        if (blockingRisks.length > 0) {
+          console.error(c(red, `✖  risk preflight refused ${blockingRisks.length} task(s): ${blockingRisks.map((risk) => risk.taskId).join(', ')}`));
+          for (const risk of blockingRisks) {
+            console.error(c(dim, `   ${risk.taskId} [${risk.executionMode}] ${risk.reasons.join(', ')}`));
+          }
+          if (config.strictBatch) {
+            return;
+          }
+        } else {
+          const mediumRisks = preflightRisks.filter((risk) => risk.level !== 'low');
+          if (mediumRisks.length > 0) {
+            console.log(c(yellow, `⚠  risk preflight: ${mediumRisks.length} task(s) have elevated execution risk`));
+          }
+        }
 
         // #6 — Plan pre-flight review (interactive mode only — can't act on concerns in non-interactive)
         if (!isNonInteractive && !opts.retry && !opts.retryFailed) {

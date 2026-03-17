@@ -70,6 +70,25 @@ export type TaskType =
   | 'review'
   | 'closeout';
 
+export type TaskExecutionMode =
+  | 'generic'
+  | 'implement_ui_surface'
+  | 'verify_proof'
+  | 'closeout_keel'
+  | 'refactor_bounded'
+  | 'write_or_stop';
+
+export type TaskFailureType =
+  | 'implementation_failure'
+  | 'acceptance_failure'
+  | 'timeout'
+  | 'executor_nonperformance'
+  | 'already_satisfied'
+  | 'environment_failure'
+  | 'validation_problem'
+  | 'out_of_scope_drift'
+  | 'task_spec_problem';
+
 // ── Task types ───────────────────────────────────────────────────────
 export type TaskStatus =
   | 'pending'
@@ -83,10 +102,21 @@ export type TaskStatus =
 export interface RetryHistoryEntry {
   attempt: number;
   timestamp: string;
-  failureType: 'execution' | 'acceptance' | 'timeout' | 'over_exploration' | 'already_satisfied' | 'environment' | 'validation_config_error' | 'out_of_scope_drift';
+  failureType: TaskFailureType;
   reason: string;
   fullError: string;
   durationMs: number;
+}
+
+export interface TaskExecutionMetrics {
+  timeToFirstWriteMs?: number;
+  discoveryOpsBeforeFirstWrite: number;
+  subagentCalls: number;
+  writeCount: number;
+  verificationOps: number;
+  executionMode: TaskExecutionMode;
+  riskLevel?: 'low' | 'medium' | 'high';
+  riskReasons?: string[];
 }
 
 export interface TaskValidationOverrides {
@@ -107,6 +137,7 @@ export interface Task {
   title: string;
   description: string;
   type?: TaskType;
+  executionMode?: TaskExecutionMode;
   acceptanceCriteria: string[];
   dependencies: string[]; // task IDs this task depends on
   contextPatterns: string[]; // file globs relevant to this task
@@ -134,6 +165,8 @@ export interface Task {
   filesWritten?: string[];   // auto-tracked via SDK PostToolUse hooks
   implementationCandidateReady?: boolean; // true when code looks ready but validation config/environment blocked closure
   implementationCandidateReason?: string;
+  executionMetrics?: TaskExecutionMetrics;
+  failureClass?: TaskFailureType;
 }
 
 // ── Plan types ───────────────────────────────────────────────────────
@@ -269,6 +302,7 @@ export interface CloudyConfig {
   maxCostPerRunUsd: number;    // abort entire run if cumulative cost exceeds this (0 = unlimited)
   worktrees: boolean;          // use git worktrees for parallel task isolation
   runBranch: boolean;          // create a dedicated cloudy/run-* branch before executing tasks
+  strictBatch?: boolean;       // deterministic batch mode: stop on terminal failures and avoid creative recovery
   approval: ApprovalConfig;
   engine: Engine;              // execution engine for task implementation
   provider?: Provider;         // provider/auth route (e.g. claude, codex, openai)

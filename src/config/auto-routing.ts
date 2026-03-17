@@ -1,4 +1,5 @@
 import type { ClaudeModel, Task } from '../core/types.js';
+import { getExecutionDefaults, inferExecutionMode } from '../core/task-shape.js';
 
 /**
  * Weights for each complexity factor when computing the task score.
@@ -51,6 +52,11 @@ export function computeComplexityScore(task: Task): number {
  *   - score >= 25  ->  opus    (complex tasks)
  */
 export function routeModelForTask(task: Task): ClaudeModel {
+  const mode = inferExecutionMode(task);
+  if (mode !== 'generic') {
+    return getExecutionDefaults(task).model;
+  }
+
   const score = computeComplexityScore(task);
 
   if (score < 10) return 'haiku';

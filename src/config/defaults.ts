@@ -30,6 +30,7 @@ export const DEFAULT_CONFIG: CloudyConfig = {
   maxCostPerRunUsd: 0,
   worktrees: true,
   runBranch: false,
+  strictBatch: false,
   approval: { mode: 'never', timeoutSec: 300, autoAction: 'continue' },
   engine: 'claude-code',
   provider: 'claude',
