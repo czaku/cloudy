@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Task, ValidationConfig } from '../../src/core/types.js';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 
 // Mock all external calls
 vi.mock('../../src/validator/strategies/type-check.js', () => ({
@@ -180,6 +183,37 @@ describe('validateTask — full pipeline integration', () => {
     const report = await validateTask({ task, config: ALL_ON, model: 'haiku', cwd: '/tmp' });
     expect(report.passed).toBe(true);
     expect(report.alreadySatisfied).toBe(true);
+  });
+
+  it('passes enough existing file content into already-done review for large context files', async () => {
+    const { getGitDiff } = await import('../../src/git/git.js');
+    vi.mocked(getGitDiff).mockResolvedValueOnce('');
+
+    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'cloudy-validate-existing-'));
+    const relPath = 'src/BigFile.kt';
+    await fs.mkdir(path.join(tmpDir, 'src'), { recursive: true });
+    const tailMarker = 'trainingPlansListStateOverride = defaultTrainingPlansListState()';
+    await fs.writeFile(
+      path.join(tmpDir, relPath),
+      `${'a'.repeat(9000)}\n${tailMarker}\n${'b'.repeat(9000)}`,
+      'utf-8',
+    );
+
+    await validateTask({
+      task: makeTask({
+        acceptanceCriteria: ['Existing override path remains present'],
+        contextPatterns: [relPath],
+      }),
+      config: ALL_ON,
+      model: 'haiku',
+      cwd: tmpDir,
+    });
+
+    const reviewCall = vi.mocked(runAiReview).mock.calls.at(-1);
+    const fileSections = reviewCall?.[5] as Array<{ path: string; content: string }> | undefined;
+    expect(fileSections?.find((file) => file.path === relPath)?.content).toContain(tailMarker);
+
+    await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
   it('runs task-level validation override commands in addition to config commands', async () => {

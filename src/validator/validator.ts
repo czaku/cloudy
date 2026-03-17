@@ -393,7 +393,9 @@ export async function validateTask(
           if (['.ts', '.tsx', '.py', '.js', '.jsx', '.go', '.rs', '.swift', '.kt', '.prisma', '.sql', '.graphql'].includes(ext)) {
             fileSections.push({
               path: relPath,
-              content: content.length > 8000 ? content.slice(0, 8000) + '\n... (truncated)' : content,
+              content: content.length > MAX_SECTION_CHARS
+                ? content.slice(0, MAX_SECTION_CHARS) + '\n... (truncated)'
+                : content,
               note: 'existing file — no diff (agent found work already complete)',
             });
           }
