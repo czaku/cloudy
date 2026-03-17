@@ -890,6 +890,9 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
 
     // Resolve initial context files with token budget
     let contextFiles = await resolveContextFiles(currentPatterns, taskCwd, budget, budgetMode);
+    const providedContextPaths = new Set(
+      contextFiles.map((file) => normalizePathForScope(file.path, taskCwd)),
+    );
 
     await log.info(`Starting task "${task.id}": ${task.title}`);
     this.onEvent({
@@ -1191,7 +1194,14 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
               subagentCalls++;
               discoveryOps += 2;
             } else if (DISCOVERY_READ_TOOL_NAMES.has(toolName)) {
-              discoveryOps++;
+              const readTarget = typeof (toolInput as { file_path?: unknown; path?: unknown })?.file_path === 'string'
+                ? normalizePathForScope((toolInput as { file_path: string }).file_path, taskCwd)
+                : typeof (toolInput as { path?: unknown })?.path === 'string'
+                  ? normalizePathForScope((toolInput as { path: string }).path, taskCwd)
+                  : null;
+              if (!readTarget || !providedContextPaths.has(readTarget)) {
+                discoveryOps++;
+              }
             }
             if (
               scopedImplementationTask &&

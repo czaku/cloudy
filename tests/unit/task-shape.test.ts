@@ -116,6 +116,25 @@ describe('task tool policy', () => {
     expect(policy.allowedTools).toBeUndefined();
     expect(policy.disallowedTools).toEqual(['Agent']);
   });
+
+  it('allows strict tool fences for two-file tasks with larger concrete context', () => {
+    const policy = getTaskToolPolicy(makeTask({
+      title: 'Create foundation files',
+      description: 'Add a repository and view model using exact existing analog files',
+      allowedWritePaths: ['src/TrainingPlansRepository.kt', 'src/TrainingPlansViewModel.kt'],
+      contextPatterns: [
+        'src/VaultRepository.kt',
+        'src/VaultViewModel.kt',
+        'src/TrainingPlansScreen.kt',
+        'src/TrainingPlanDetailScreen.kt',
+        'src/RootNavigation.kt',
+      ],
+      implementationSteps: ['Mirror the repository pattern', 'Mirror the view-model pattern'],
+    }));
+
+    expect(policy.allowedTools).toEqual(['Read', 'Edit', 'MultiEdit', 'Write']);
+    expect(policy.disallowedTools).toContain('Bash');
+  });
 });
 
 describe('task risk assessment', () => {

@@ -18,6 +18,10 @@ export interface TaskToolPolicy {
   disallowedTools?: string[];
 }
 
+function isConcreteContextPattern(pattern: string): boolean {
+  return !/[*?[\]{}]/.test(pattern);
+}
+
 function normalizedText(task: Task): string {
   return `${task.title}\n${task.description}\n${task.acceptanceCriteria.join('\n')}`.toLowerCase();
 }
@@ -101,7 +105,8 @@ export function getTaskToolPolicy(task: Task): TaskToolPolicy {
     (task.allowedWritePaths?.length ?? 0) > 0 &&
     (task.allowedWritePaths?.length ?? 0) <= 2 &&
     (task.contextPatterns?.length ?? 0) > 0 &&
-    (task.contextPatterns?.length ?? 0) <= 2 &&
+    (task.contextPatterns?.length ?? 0) <= 10 &&
+    task.contextPatterns.every(isConcreteContextPattern) &&
     (task.implementationSteps?.length ?? 0) > 0;
 
   if (tightlyScopedImplementation) {

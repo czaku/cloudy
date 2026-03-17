@@ -485,6 +485,46 @@ describe('Orchestrator', () => {
     }));
   });
 
+  it('does not count provided context reads as exploration before first write', async () => {
+    const { runEngine } = await import('../../src/executor/engine.js');
+    const mockedRunEngine = vi.mocked(runEngine);
+
+    mockedRunEngine.mockImplementationOnce(async ({ onToolUse, onToolResult }) => {
+      onToolUse?.('Read', { file_path: 'src/VaultRepository.kt' });
+      onToolUse?.('Read', { file_path: 'src/VaultViewModel.kt' });
+      onToolUse?.('Read', { file_path: 'src/TrainingPlansScreen.kt' });
+      onToolUse?.('Edit', { file_path: 'src/TrainingPlansRepository.kt' });
+      onToolResult?.('Edit', 'applied', false);
+      return {
+        success: true,
+        output: 'done',
+        usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        durationMs: 100,
+        costUsd: 0,
+      };
+    });
+
+    const task = makeTask('task-2');
+    task.title = 'Create foundation files';
+    task.description = 'Add a repository and view model using exact analog files';
+    task.allowedWritePaths = ['src/TrainingPlansRepository.kt', 'src/TrainingPlansViewModel.kt'];
+    task.contextPatterns = ['src/VaultRepository.kt', 'src/VaultViewModel.kt', 'src/TrainingPlansScreen.kt'];
+    task.implementationSteps = ['Mirror the repository pattern', 'Mirror the view-model pattern'];
+    task.maxRetries = 0;
+    const state = makeState([task]);
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: makeConfig(),
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(state.plan?.tasks[0].status).toBe('completed');
+    expect(state.plan?.tasks[0].failureClass).toBeUndefined();
+  });
+
   it('treats a successful edit tool result as first-write progress for scoped tasks', async () => {
     const { runEngine } = await import('../../src/executor/engine.js');
     const mockedRunEngine = vi.mocked(runEngine);
