@@ -66,6 +66,20 @@ describe('runEngine', () => {
     );
   });
 
+  it('passes pre-write read fences through to the runner', async () => {
+    await runEngine({
+      prompt: 'hello',
+      engine: 'claude-code',
+      claudeModel: 'sonnet',
+      cwd: '/tmp',
+      allowedReadPathsBeforeWrite: ['/tmp/src/Foo.kt'],
+    });
+
+    expect(mockRunModel).toHaveBeenCalledWith(
+      expect.objectContaining({ allowedReadPathsBeforeWrite: ['/tmp/src/Foo.kt'] }),
+    );
+  });
+
   it('defaults claudeModel to sonnet for claude-code when not specified', async () => {
     await runEngine({ prompt: 'hello', engine: 'claude-code', cwd: '/tmp' });
 

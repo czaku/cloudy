@@ -901,6 +901,10 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
     const providedContextPaths = new Set(
       contextFiles.map((file) => normalizePathForScope(file.path, taskCwd)),
     );
+    const allowedReadPathsBeforeWrite = [
+      ...providedContextPaths,
+      ...allowedWritePaths.map((candidate) => normalizePathForScope(candidate, taskCwd)),
+    ];
 
     await log.info(`Starting task "${task.id}": ${task.title}`);
     this.onEvent({
@@ -1155,6 +1159,7 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
           disallowedTools: VERIFY_FIRST_TASK_TYPES.has(taskType)
             ? ['Agent']
             : toolPolicy.disallowedTools,
+          allowedReadPathsBeforeWrite: scopedImplementationTask ? allowedReadPathsBeforeWrite : undefined,
           cwd: taskCwd,
           onOutput: (text) => {
             _lastOutputMs = Date.now(); // reset silence timer on any stdout activity

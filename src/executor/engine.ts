@@ -22,6 +22,7 @@ export interface EngineRunOptions {
   thinking?: ThinkingLevel;
   allowedTools?: string[];
   disallowedTools?: string[];
+  allowedReadPathsBeforeWrite?: string[];
 }
 
 export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunResult> {
@@ -44,6 +45,7 @@ export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunRes
     thinking,
     allowedTools,
     disallowedTools,
+    allowedReadPathsBeforeWrite,
   } = options;
 
   const resolvedModelId =
@@ -69,5 +71,6 @@ export async function runEngine(options: EngineRunOptions): Promise<ClaudeRunRes
     thinking,
     allowedTools,
     disallowedTools,
+    allowedReadPathsBeforeWrite,
   });
 }

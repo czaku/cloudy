@@ -1,4 +1,5 @@
 import { selectViaDaemon, type RunOptions, type FnHook, type ThinkingLevel } from 'omnai';
+import path from 'node:path';
 import type { ClaudeModel, ClaudeRunResult, Engine, Provider, TokenUsage } from '../core/types.js';
 import { resolveModelId } from '../config/model-config.js';
 
@@ -33,6 +34,7 @@ export interface ClaudeRunOptions {
   thinking?: ThinkingLevel;
   allowedTools?: string[];
   disallowedTools?: string[];
+  allowedReadPathsBeforeWrite?: string[];
 }
 
 export type ModelRunOptions = ClaudeRunOptions;
@@ -66,6 +68,7 @@ export interface OmnaiRunOptions {
   taskType?: 'coding' | 'analysis' | 'planning' | 'review' | 'chat' | 'research';
   allowedTools?: string[];
   disallowedTools?: string[];
+  allowedReadPathsBeforeWrite?: string[];
 }
 
 // ── Dangerous command guard ──────────────────────────────────────────────────
@@ -157,6 +160,7 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
     taskType,
     allowedTools,
     disallowedTools,
+    allowedReadPathsBeforeWrite,
   } = options;
 
   const runtime = await resolveRuntimeAccount({
@@ -223,6 +227,13 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
   const mainRepoCwd = clawdashIdx !== -1 ? cwd.slice(0, clawdashIdx) : null;
   const allowedToolSet = allowedTools ? new Set(allowedTools) : undefined;
   const disallowedToolSet = disallowedTools ? new Set(disallowedTools) : undefined;
+  const allowedReadBeforeWriteSet = allowedReadPathsBeforeWrite?.length
+    ? new Set(
+        allowedReadPathsBeforeWrite.map((candidate) =>
+          path.normalize(path.isAbsolute(candidate) ? candidate : path.join(cwd, candidate)),
+        ),
+      )
+    : undefined;
 
   const preToolUseHook: FnHook = async (input: unknown) => {
     const h = input as any;
@@ -240,6 +251,22 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
         decision: 'block' as const,
         reason: `Tool ${toolName} is disallowed for this task.`,
       };
+    }
+    if (
+      allowedReadBeforeWriteSet &&
+      filesWritten.length === 0 &&
+      toolName === 'Read' &&
+      typeof ti.file_path === 'string'
+    ) {
+      const normalizedReadPath = path.normalize(
+        path.isAbsolute(ti.file_path) ? ti.file_path : path.join(cwd, ti.file_path),
+      );
+      if (!allowedReadBeforeWriteSet.has(normalizedReadPath)) {
+        return {
+          decision: 'block' as const,
+          reason: `Pre-write reads for this task must stay inside the provided context files and target files. Blocked: ${normalizedReadPath}`,
+        };
+      }
     }
 
     // Redirect absolute paths that land in the main repo instead of the worktree.

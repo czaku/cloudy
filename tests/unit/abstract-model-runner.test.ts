@@ -88,6 +88,51 @@ describe('abstract model runner', () => {
     expect(result.success).toBe(true);
   });
 
+  it('blocks pre-write reads outside the provided context fence', async () => {
+    const run = vi.fn(async function* (_prompt: string, opts: any) {
+      const preToolHooks = opts.hooks?.PreToolUse?.[0]?.hooks ?? [];
+      expect(preToolHooks).toHaveLength(1);
+
+      const blocked = await preToolHooks[0]({
+        tool_name: 'Read',
+        tool_input: { file_path: '/tmp/project/Other.kt' },
+      });
+      expect(blocked).toEqual(
+        expect.objectContaining({
+          decision: 'block',
+        }),
+      );
+
+      const allowed = await preToolHooks[0]({
+        tool_name: 'Read',
+        tool_input: { file_path: '/tmp/project/Allowed.kt' },
+      });
+      expect(allowed).toEqual({});
+
+      yield {
+        type: 'result',
+        output: 'done',
+        usage: { inputTokens: 10, outputTokens: 5, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        costUsd: 0,
+        durationMs: 1,
+      };
+    });
+    mockSelectViaDaemon.mockResolvedValueOnce(makeRunner('claude-code', run as any) as any);
+
+    const result = await runOmnai({
+      prompt: 'do work',
+      cwd: '/tmp/project',
+      engine: 'claude-code',
+      provider: 'claude',
+      taskType: 'coding',
+      allowedTools: ['Read', 'Edit'],
+      disallowedTools: ['Bash', 'ToolSearch'],
+      allowedReadPathsBeforeWrite: ['/tmp/project/Allowed.kt'],
+    });
+
+    expect(result.success).toBe(true);
+  });
+
   it('does not attach Claude hooks for non-claude engines', async () => {
     const run = vi.fn(async function* (_prompt: string, opts: any) {
       expect(opts.model).toBe('o3');
