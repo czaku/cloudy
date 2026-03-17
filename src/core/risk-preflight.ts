@@ -15,7 +15,13 @@ export function analyzeTaskRisk(task: Task): TaskRiskPreflight {
   const mode = inferExecutionMode(task);
   const shouldBlock =
     assessment.level === 'high' &&
-    (mode === 'implement_ui_surface' || mode === 'refactor_bounded' || mode === 'write_or_stop');
+    (
+      mode === 'implement_ui_surface'
+      || mode === 'implement_api_endpoint'
+      || mode === 'implement_cli_command'
+      || mode === 'refactor_bounded'
+      || mode === 'write_or_stop'
+    );
 
   return {
     taskId: task.id,

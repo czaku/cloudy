@@ -12,6 +12,8 @@ export type TaskStatus =
 export type TaskExecutionMode =
   | 'generic'
   | 'implement_ui_surface'
+  | 'implement_api_endpoint'
+  | 'implement_cli_command'
   | 'verify_proof'
   | 'closeout_keel'
   | 'refactor_bounded'
@@ -73,6 +75,11 @@ export interface Task {
   description: string;
   executionMode?: TaskExecutionMode;
   acceptanceCriteria: string[];
+  proofRequirements?: string[];
+  nonGoals?: string[];
+  surfaceScope?: string[];
+  collisionRisks?: string[];
+  definitionOfDone?: string[];
   dependencies: string[];
   status: TaskStatus;
   retries: number;

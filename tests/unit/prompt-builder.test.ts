@@ -53,6 +53,26 @@ describe('buildExecutionPrompt', () => {
     expect(prompt).toContain('- Has submit button');
   });
 
+  it('includes proof requirements, non-goals, and surface scope when present', () => {
+    const prompt = buildExecutionPrompt(makeTask({
+      proofRequirements: ['Capture the updated command output'],
+      nonGoals: ['Do not change auth persistence'],
+      surfaceScope: ['apps/cli/src/commands/login.ts'],
+      collisionRisks: ['shared auth session handling'],
+      definitionOfDone: ['Login command passes integration tests'],
+    }), makePlan(), []);
+    expect(prompt).toContain('# Proof Requirements');
+    expect(prompt).toContain('Capture the updated command output');
+    expect(prompt).toContain('# Non-Goals');
+    expect(prompt).toContain('Do not change auth persistence');
+    expect(prompt).toContain('# Surface Scope');
+    expect(prompt).toContain('apps/cli/src/commands/login.ts');
+    expect(prompt).toContain('# Collision Risks');
+    expect(prompt).toContain('shared auth session handling');
+    expect(prompt).toContain('# Definition of Done');
+    expect(prompt).toContain('Login command passes integration tests');
+  });
+
   it('includes completed task titles', () => {
     const prompt = buildExecutionPrompt(makeTask(), makePlan(), [
       'Set up project structure',
@@ -89,6 +109,26 @@ describe('buildExecutionPrompt', () => {
     expect(prompt).toContain('If the task is primarily proof, parity, verification, or task closure, start by checking the required artifacts');
     expect(prompt).toContain('If all acceptance criteria are already satisfied, do not invent code changes.');
     expect(prompt).toContain('Do not delegate repo discovery to subagents.');
+  });
+
+  it('includes API-specific execution guidance for endpoint work', () => {
+    const prompt = buildExecutionPrompt(makeTask({
+      title: 'Implement app version-check API endpoint',
+      description: 'Add route, DTO, and tests.',
+      allowedWritePaths: ['api/src/version'],
+    }), makePlan(), []);
+    expect(prompt).toContain('API implementation policy');
+    expect(prompt).toContain('Do not broaden into UI');
+  });
+
+  it('includes CLI-specific execution guidance for command work', () => {
+    const prompt = buildExecutionPrompt(makeTask({
+      title: 'Implement doctor CLI command',
+      description: 'Add flags, help output, and tests.',
+      allowedWritePaths: ['apps/cli/src/commands/doctor.ts'],
+    }), makePlan(), []);
+    expect(prompt).toContain('CLI implementation policy');
+    expect(prompt).toContain('stdout/stderr');
   });
 
   it('omits acceptance criteria section when empty', () => {

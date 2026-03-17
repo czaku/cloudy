@@ -73,6 +73,8 @@ export type TaskType =
 export type TaskExecutionMode =
   | 'generic'
   | 'implement_ui_surface'
+  | 'implement_api_endpoint'
+  | 'implement_cli_command'
   | 'verify_proof'
   | 'closeout_keel'
   | 'refactor_bounded'
@@ -139,6 +141,11 @@ export interface Task {
   type?: TaskType;
   executionMode?: TaskExecutionMode;
   acceptanceCriteria: string[];
+  proofRequirements?: string[];
+  nonGoals?: string[];
+  surfaceScope?: string[];
+  collisionRisks?: string[];
+  definitionOfDone?: string[];
   dependencies: string[]; // task IDs this task depends on
   contextPatterns: string[]; // file globs relevant to this task
   status: TaskStatus;

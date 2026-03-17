@@ -22,6 +22,12 @@ export function inferExecutionMode(task: Task): TaskExecutionMode {
   const text = normalizedText(task);
   if (task.type === 'verify' || /screenshot|proof|parity|verify|artifact/.test(text)) return 'verify_proof';
   if (task.type === 'closeout' || /keel|note|close the task|mark the task done/.test(text)) return 'closeout_keel';
+  if (/api|endpoint|route|controller|handler|dto|schema|migration/.test(text) && (task.allowedWritePaths?.length ?? 0) > 0) {
+    return 'implement_api_endpoint';
+  }
+  if (/cli|command|subcommand|flag|stdout|stderr|exit code|help output/.test(text) && (task.allowedWritePaths?.length ?? 0) > 0) {
+    return 'implement_cli_command';
+  }
   if (/ui|screen|view|swiftui|compose|surface|card|layout/.test(text) && (task.allowedWritePaths?.length ?? 0) > 0) {
     return 'implement_ui_surface';
   }
@@ -65,6 +71,8 @@ export function getExecutionDefaults(task: Task): TaskExecutionDefaults {
     case 'closeout_keel':
       return { executionMode: mode, model: 'haiku', effort: 'low', disallowSubagents: true, requireFirstWrite: false };
     case 'implement_ui_surface':
+    case 'implement_api_endpoint':
+    case 'implement_cli_command':
       return { executionMode: mode, model: 'sonnet', effort: 'low', disallowSubagents: true, requireFirstWrite: true };
     case 'refactor_bounded':
       return { executionMode: mode, model: 'sonnet', effort: 'low', disallowSubagents: true, requireFirstWrite: true };

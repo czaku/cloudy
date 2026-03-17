@@ -56,7 +56,15 @@ export function buildExecutionPrompt(
   }
 
   const executionMode = inferExecutionMode(task);
-  const boundedContextModes = new Set(['implement_ui_surface', 'refactor_bounded', 'write_or_stop', 'verify_proof', 'closeout_keel']);
+  const boundedContextModes = new Set([
+    'implement_ui_surface',
+    'implement_api_endpoint',
+    'implement_cli_command',
+    'refactor_bounded',
+    'write_or_stop',
+    'verify_proof',
+    'closeout_keel',
+  ]);
   const effectiveContextFiles = boundedContextModes.has(executionMode)
     ? contextFiles.slice(0, 8)
     : contextFiles;
@@ -130,6 +138,48 @@ export function buildExecutionPrompt(
     parts.push('');
   }
 
+  if ((task.proofRequirements?.length ?? 0) > 0) {
+    parts.push('# Proof Requirements');
+    for (const requirement of task.proofRequirements!) {
+      parts.push(`- ${requirement}`);
+    }
+    parts.push('');
+  }
+
+  if ((task.definitionOfDone?.length ?? 0) > 0) {
+    parts.push('# Definition of Done');
+    for (const criterion of task.definitionOfDone!) {
+      parts.push(`- ${criterion}`);
+    }
+    parts.push('');
+  }
+
+  if ((task.nonGoals?.length ?? 0) > 0) {
+    parts.push('# Non-Goals');
+    parts.push('Do not broaden the task into the following areas:');
+    for (const item of task.nonGoals!) {
+      parts.push(`- ${item}`);
+    }
+    parts.push('');
+  }
+
+  if ((task.surfaceScope?.length ?? 0) > 0) {
+    parts.push('# Surface Scope');
+    for (const item of task.surfaceScope!) {
+      parts.push(`- ${item}`);
+    }
+    parts.push('');
+  }
+
+  if ((task.collisionRisks?.length ?? 0) > 0) {
+    parts.push('# Collision Risks');
+    parts.push('Be careful not to break or overwrite the following areas while implementing this task:');
+    for (const item of task.collisionRisks!) {
+      parts.push(`- ${item}`);
+    }
+    parts.push('');
+  }
+
   if (task.outputArtifacts && task.outputArtifacts.length > 0) {
     parts.push('# Required Output Files');
     parts.push('You MUST create ALL of the following files. Do not skip or omit any:');
@@ -189,12 +239,32 @@ export function buildExecutionPrompt(
   parts.push('');
   parts.push('**CRITICAL — Repo boundary:** Stay inside this project repo. Do not inspect or modify sibling repos or Cloudy internals unless the task explicitly requires cross-repo work.');
   parts.push('');
-  if (executionMode === 'implement_ui_surface' || executionMode === 'refactor_bounded' || executionMode === 'write_or_stop') {
+  if (
+    executionMode === 'implement_ui_surface'
+    || executionMode === 'implement_api_endpoint'
+    || executionMode === 'implement_cli_command'
+    || executionMode === 'refactor_bounded'
+    || executionMode === 'write_or_stop'
+  ) {
     parts.push('**CRITICAL — First-action policy:**');
     parts.push('- Start with the exact target files from context, not broad repo discovery.');
     parts.push('- Do not use subagents for exploration.');
     parts.push('- Make a concrete write attempt quickly after reading the target files.');
     parts.push('- If you still do not know what to edit after the target-file read, stop and explain the blocker instead of roaming the repo.');
+    parts.push('');
+  }
+  if (executionMode === 'implement_api_endpoint') {
+    parts.push('**CRITICAL — API implementation policy:**');
+    parts.push('- Keep the task bounded to the named endpoint, contract, validation, and tests.');
+    parts.push('- Prefer deterministic contract and integration verification over speculative architecture changes.');
+    parts.push('- Do not broaden into UI or unrelated transport layers.');
+    parts.push('');
+  }
+  if (executionMode === 'implement_cli_command') {
+    parts.push('**CRITICAL — CLI implementation policy:**');
+    parts.push('- Keep the task bounded to the named command, flags, output shape, and tests.');
+    parts.push('- Preserve deterministic help text, exit codes, stdout/stderr behaviour, and fixture-driven tests.');
+    parts.push('- Do not broaden into unrelated runtime plumbing unless the task explicitly requires it.');
     parts.push('');
   }
   if (executionMode === 'verify_proof') {

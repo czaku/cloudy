@@ -35,6 +35,22 @@ describe('inferExecutionMode', () => {
     }))).toBe('implement_ui_surface');
   });
 
+  it('classifies bounded api work as implement_api_endpoint', () => {
+    expect(inferExecutionMode(makeTask({
+      title: 'Implement version-check API endpoint',
+      description: 'Add the route, DTO validation, and handler.',
+      allowedWritePaths: ['api/src/version-check'],
+    }))).toBe('implement_api_endpoint');
+  });
+
+  it('classifies bounded cli work as implement_cli_command', () => {
+    expect(inferExecutionMode(makeTask({
+      title: 'Implement doctor CLI command',
+      description: 'Add the command, help output, and exit code behaviour.',
+      allowedWritePaths: ['apps/cli/src/commands/doctor.ts'],
+    }))).toBe('implement_cli_command');
+  });
+
   it('classifies bounded generic implementation as write_or_stop', () => {
     expect(inferExecutionMode(makeTask({
       title: 'Implement shared repository update',
@@ -51,6 +67,20 @@ describe('task execution defaults', () => {
       allowedWritePaths: ['android/app/src/main'],
     }))).toMatchObject({
       executionMode: 'implement_ui_surface',
+      model: 'sonnet',
+      effort: 'low',
+      disallowSubagents: true,
+      requireFirstWrite: true,
+    });
+  });
+
+  it('uses low-effort sonnet with no subagents for bounded api work', () => {
+    expect(getExecutionDefaults(makeTask({
+      title: 'Implement account endpoint',
+      description: 'Add API route and DTOs',
+      allowedWritePaths: ['api/src/account'],
+    }))).toMatchObject({
+      executionMode: 'implement_api_endpoint',
       model: 'sonnet',
       effort: 'low',
       disallowSubagents: true,
