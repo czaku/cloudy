@@ -54,13 +54,14 @@ const VERIFY_FIRST_TASK_TYPES = new Set(['verify', 'review', 'closeout']);
 const SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT = 8;
 const SCOPED_IMPLEMENT_FIRST_WRITE_TIME_MS = 75_000;
 const SCOPED_IMPLEMENT_FIRST_WRITE_MIN_DISCOVERY_OPS = 6;
+const SCOPED_IMPLEMENT_PREWRITE_SHELL_DISCOVERY_LIMIT = 2;
 function classifyRetryFailure(error: string | undefined): RetryHistoryEntry['failureType'] {
   const message = (error ?? '').toLowerCase();
   if (message.includes('out-of-scope') || message.includes('outside allowed task scope')) return 'out_of_scope_drift';
   if (message.includes('validation configuration') || message.includes('validator mismatch') || message.includes('build override required')) {
     return 'validation_problem';
   }
-  if (message.includes('over-exploration') || message.includes('no file writes after')) return 'executor_nonperformance';
+  if (message.includes('over-exploration') || message.includes('no file writes after') || message.includes('pre-write shell discovery')) return 'executor_nonperformance';
   if (message.includes('already satisf') || message.includes('already complete')) return 'already_satisfied';
   if (message.includes('task spec') || message.includes('missing validation override') || message.includes('risk preflight refused')) return 'task_spec_problem';
   if (message.includes('timed out') || message.includes('hung engine')) return 'timeout';
@@ -1121,12 +1122,32 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
               }
               if (isBroadDiscoveryCommand(command)) {
                 discoveryOps++;
+                if (
+                  scopedImplementationTask &&
+                  !(task.filesWritten?.length) &&
+                  verificationOps === 0 &&
+                  discoveryOps >= SCOPED_IMPLEMENT_PREWRITE_SHELL_DISCOVERY_LIMIT
+                ) {
+                  forcedAbortReason = `Pre-write shell discovery is disallowed for scoped implementation tasks: ${discoveryOps} shell discovery operations without any file write`;
+                  abortController.abort();
+                  return;
+                }
               }
             } else if (toolName === 'Agent' && scopedImplementationTask) {
               subagentCalls++;
               discoveryOps += 2;
             } else if (DISCOVERY_READ_TOOL_NAMES.has(toolName)) {
               discoveryOps++;
+            }
+            if (
+              scopedImplementationTask &&
+              discoveryOps >= SCOPED_IMPLEMENT_FIRST_WRITE_DISCOVERY_LIMIT &&
+              verificationOps === 0 &&
+              !(task.filesWritten?.length)
+            ) {
+              forcedAbortReason = `Over-exploration detected: ${discoveryOps} discovery operations before any file write for a scoped implementation task`;
+              abortController.abort();
+              return;
             }
             if (VERIFY_FIRST_TASK_TYPES.has(taskType) && discoveryOps > maxDiscoveryOps && verificationOps === 0 && !(task.filesWritten?.length)) {
               forcedAbortReason = `Over-exploration detected: ${discoveryOps} discovery operations before any verification or file writes`;

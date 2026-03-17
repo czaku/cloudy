@@ -415,6 +415,41 @@ describe('Orchestrator', () => {
     expect(state.plan?.tasks[0].retryHistory?.[0]?.failureType).toBe('executor_nonperformance');
   });
 
+  it('fails scoped tasks fast on repeated shell discovery before any write', async () => {
+    const { runEngine } = await import('../../src/executor/engine.js');
+    const mockedRunEngine = vi.mocked(runEngine);
+
+    mockedRunEngine.mockImplementationOnce(async ({ onToolUse }: { onToolUse?: (toolName: string, toolInput: unknown) => void; abortSignal?: AbortSignal }) => {
+      onToolUse?.('Bash', { command: 'find apple/FitKind/Features/Vault -name "*.swift" | head -20' });
+      onToolUse?.('Bash', { command: 'grep -rn "TrainingPlan" apple/FitKind/Features/Vault' });
+      return {
+        success: false,
+        output: '',
+        error: 'Pre-write shell discovery is disallowed for scoped implementation tasks: 2 shell discovery operations without any file write',
+        usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0 },
+        durationMs: 100,
+        costUsd: 0,
+      };
+    });
+
+    const task = makeTask('task-1');
+    task.allowedWritePaths = ['apple/FitKind/Features/Vault', 'apple/FitKind/Features/Journey'];
+    task.maxRetries = 0;
+    const state = makeState([task]);
+    const orchestrator = new Orchestrator({
+      cwd: testCwd,
+      state,
+      config: makeConfig(),
+      onEvent: () => {},
+    });
+
+    await orchestrator.run();
+
+    expect(state.plan?.tasks[0].status).toBe('failed');
+    expect(state.plan?.tasks[0].failureClass).toBe('executor_nonperformance');
+    expect(state.plan?.tasks[0].error).toContain('Pre-write shell discovery is disallowed');
+  });
+
   it('does not let holistic review rerun terminal failure tasks', async () => {
     const { runEngine } = await import('../../src/executor/engine.js');
     const { runHolisticReview } = await import('../../src/reviewer.js');
