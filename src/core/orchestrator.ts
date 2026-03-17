@@ -3,6 +3,7 @@ import path from 'node:path';
 import type {
   CloudyConfig,
   ClaudeModel,
+  Engine,
   OrchestratorEventHandler,
   Plan,
   ProjectState,
@@ -202,6 +203,61 @@ export class Orchestrator {
 
   get aborted(): boolean {
     return this.abortController.signal.aborted;
+  }
+
+  private async finalizeSuccessfulTask(
+    task: Task,
+    queue: TaskQueue,
+    plan: Plan,
+    taskCwd: string,
+    checkpointSha: string | undefined,
+    report: Awaited<ReturnType<typeof validateTask>>,
+    attempt: number,
+    taskStartTime: number,
+    engineModel: string,
+    engine: Engine,
+  ): Promise<void> {
+    task.durationMs = Date.now() - taskStartTime;
+    queue.updateStatus(task.id, report.alreadySatisfied ? 'completed_without_changes' : 'completed');
+    this.onEvent({
+      type: 'task_completed',
+      taskId: task.id,
+      title: task.title,
+      durationMs: task.durationMs,
+      resultSummary: task.resultSummary,
+    });
+    this.emitProgress(queue);
+    await log.info(`  Task "${task.id}" completed successfully`);
+
+    const filesChanged = await getChangedFiles(taskCwd, checkpointSha).catch(() => []);
+    await writeHandoff(
+      task.id,
+      task.title,
+      `${task.resultSummary ?? ''}${report.alreadySatisfied ? '\nAlready satisfied: verified existing implementation/proof without code changes.' : ''}`,
+      task.acceptanceCriteriaResults ?? [],
+      this.cwd,
+      filesChanged,
+    ).catch(() => {});
+
+    const taskCostUsd = this.costTracker.getSummary().totalEstimatedUsd
+      - (this.taskStartCostUsd.get(task.id) ?? 0);
+    await this.runLogger.logTaskCompleted({
+      taskId: task.id,
+      title: task.title,
+      attempt,
+      durationMs: task.durationMs ?? 0,
+      costUsd: Math.round(taskCostUsd * 10000) / 10000,
+      model: String(engineModel),
+      engine,
+      filesChanged,
+      criteriaResults: task.acceptanceCriteriaResults ?? [],
+      resultSummary: task.resultSummary ?? '',
+      validationStrategies: report.results.map((r) => r.strategy),
+    }).catch(() => {});
+
+    plan.tasks = queue.getAllTasks();
+    this.state.costSummary = this.costTracker.getSummary();
+    await saveState(this.cwd, this.state);
   }
 
   async run(): Promise<void> {
@@ -841,6 +897,31 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
         });
       }
 
+      if (attempt === 1 && VERIFY_FIRST_TASK_TYPES.has(taskType)) {
+        const preflightReport = await validateTask({
+          task,
+          config: this.config.validation,
+          model: this.config.models.validation,
+          qualityModel: this.config.models.qualityReview ?? this.config.models.validation,
+          runtime: getPhaseRuntime(this.config, 'validation'),
+          cwd: taskCwd,
+          checkpointSha,
+        });
+        this.onEvent({
+          type: 'validation_result',
+          taskId: task.id,
+          report: preflightReport,
+          criteriaResults: task.acceptanceCriteriaResults,
+        });
+
+        if (preflightReport.passed && preflightReport.alreadySatisfied) {
+          task.resultSummary = 'Already satisfied: verified existing artifacts and checks before execution.';
+          await log.info(`  Task "${task.id}" already satisfied before execution — skipping engine run`);
+          await this.finalizeSuccessfulTask(task, queue, plan, taskCwd, checkpointSha, preflightReport, attempt, taskStartTime, engineModel, engine);
+          return;
+        }
+      }
+
       // Build prompt with conventions + learnings + handoffs
       const prompt =
         lastValidationErrors && attempt > 1
@@ -1272,55 +1353,12 @@ Write a concise paragraph (max 150 words) covering: what files/modules were crea
       // has already finished successfully.
 
       if (report.passed) {
-        task.durationMs = Date.now() - taskStartTime;
-        queue.updateStatus(task.id, report.alreadySatisfied ? 'completed_without_changes' : 'completed');
-        this.onEvent({
-          type: 'task_completed',
-          taskId: task.id,
-          title: task.title,
-          durationMs: task.durationMs,
-          resultSummary: task.resultSummary,
-        });
-        this.emitProgress(queue);
-        await log.info(`  Task "${task.id}" completed successfully`);
-
-        // Write structured handoff with file list for downstream tasks
-        const filesChanged = await getChangedFiles(taskCwd, checkpointSha).catch(() => []);
-        await writeHandoff(
-          task.id,
-          task.title,
-          `${task.resultSummary ?? ''}${report.alreadySatisfied ? '\nAlready satisfied: verified existing implementation/proof without code changes.' : ''}`,
-          task.acceptanceCriteriaResults ?? [],
-          this.cwd,
-          filesChanged,
-        ).catch(() => {});
-
-        // Append to run log for AI post-analysis
-        const taskCostUsd = this.costTracker.getSummary().totalEstimatedUsd
-          - (this.taskStartCostUsd.get(task.id) ?? 0);
-        await this.runLogger.logTaskCompleted({
-          taskId: task.id,
-          title: task.title,
-          attempt,
-          durationMs: task.durationMs ?? 0,
-          costUsd: Math.round(taskCostUsd * 10000) / 10000,
-          model: String(engineModel),
-          engine,
-          filesChanged,
-          criteriaResults: task.acceptanceCriteriaResults ?? [],
-          resultSummary: task.resultSummary ?? '',
-          validationStrategies: report.results.map((r) => r.strategy),
-        }).catch(() => {});
+        await this.finalizeSuccessfulTask(task, queue, plan, taskCwd, checkpointSha, report, attempt, taskStartTime, engineModel, engine);
 
         const learning = extractLearning(result.output);
         if (learning) {
           await appendLearning(task.id, learning, this.cwd).catch(() => {});
         }
-
-        // Save state after each task
-        plan.tasks = queue.getAllTasks();
-        this.state.costSummary = this.costTracker.getSummary();
-        await saveState(this.cwd, this.state);
         return;
       }
 
