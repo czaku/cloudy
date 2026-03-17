@@ -50,6 +50,15 @@ export interface ModelConfig {
 export interface PhaseRuntimeConfig {
   engine?: Engine;
   provider?: Provider;
+  /**
+   * Named account/credential route within the provider.
+   *
+   * Examples:
+   * - `claude-ted`
+   * - `claude-rai`
+   * - `dashscope-prod`
+   */
+  account?: string;
   modelId?: string;
   effort?: ThinkingEffort;
   accountId?: string;
@@ -244,6 +253,7 @@ export interface CloudyConfig {
   approval: ApprovalConfig;
   engine: Engine;              // execution engine for task implementation
   provider?: Provider;         // provider/auth route (e.g. claude, codex, openai)
+  account?: string;           // named account route within the provider/runtime
   executionModelId?: string;   // provider-native execution model ID (e.g. o3, codex-mini)
   executionEffort?: ThinkingEffort; // execution thinking budget (CLI --effort overrides)
   executionAccountId?: string; // provider account/profile ID from omnai estate (e.g. claude-main)

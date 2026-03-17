@@ -72,6 +72,7 @@ Respond with ONLY valid JSON:
       cwd,
       engine: runtime?.engine,
       provider: runtime?.provider,
+      account: runtime?.account,
       modelId: runtime?.modelId,
       abortSignal: AbortSignal.timeout(30_000),
       taskType: 'planning',

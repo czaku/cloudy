@@ -183,6 +183,7 @@ export const initCommand = new Command('plan')
   .option('--plan-model <model>', 'Model for plan phase')
   .option('--plan-engine <engine>', 'Plan engine (e.g. claude-code, codex, pi-mono)')
   .option('--plan-provider <provider>', 'Plan provider/auth route (e.g. claude subscription, codex subscription, openai API)')
+  .option('--plan-account <account>', 'Plan account route within the provider/runtime')
   .option('--plan-model-id <id>', 'Provider-native plan model ID')
   .option('--plan-effort <level>', 'Plan effort: low|medium|high|max')
   .option('--plan-account-id <id>', 'Plan provider account/profile ID from omnai estate')
@@ -199,6 +200,7 @@ export const initCommand = new Command('plan')
     planModel?: string;
     planEngine?: string;
     planProvider?: string;
+    planAccount?: string;
     planModelId?: string;
     planEffort?: string;
     planAccountId?: string;
@@ -228,6 +230,7 @@ export const initCommand = new Command('plan')
     const config = await loadConfig(cwd);
     if (opts.planEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planEngine as typeof config.engine };
     if (opts.planProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planProvider };
+    if (opts.planAccount) config.planningRuntime = { ...config.planningRuntime, account: opts.planAccount };
     if (opts.planModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planModelId };
     if (opts.planEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planEffort as any };
     if (opts.planAccountId) config.planningRuntime = { ...config.planningRuntime, accountId: opts.planAccountId };

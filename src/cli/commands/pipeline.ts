@@ -75,6 +75,7 @@ Keep each bullet to one line. Omit sections that are empty.`;
       cwd,
       engine: runtime?.engine,
       provider: runtime?.provider,
+      account: runtime?.account,
       modelId: runtime?.modelId,
       taskType: 'review',
     });
@@ -94,16 +95,20 @@ export const pipelineCommand = new Command('chain')
   .option('--quality-review-model <model>', 'Model for Phase 2b code quality review (default: same as --task-review-model)')
   .option('--plan-engine <engine>', 'Plan engine for all phases')
   .option('--plan-provider <provider>', 'Plan provider/auth route for all phases (e.g. claude subscription, codex subscription, openai API)')
+  .option('--plan-account <account>', 'Plan account route within the provider/runtime for all phases')
   .option('--plan-model-id <id>', 'Provider-native plan model ID for all phases')
   .option('--plan-effort <level>', 'Plan effort for all phases: low|medium|high|max')
   .option('--task-review-engine <engine>', 'Per-task review engine for all phases')
   .option('--task-review-provider <provider>', 'Per-task review provider/auth route for all phases (e.g. claude subscription, codex subscription, openai API)')
+  .option('--task-review-account <account>', 'Per-task review account route within the provider/runtime for all phases')
   .option('--task-review-model-id <id>', 'Provider-native per-task review model ID for all phases')
   .option('--task-review-effort <level>', 'Per-task review effort for all phases: low|medium|high|max')
   .option('--run-review-engine <engine>', 'Holistic run-review engine for all phases')
   .option('--run-review-provider <provider>', 'Holistic run-review provider/auth route for all phases (e.g. claude subscription, codex subscription, openai API)')
+  .option('--run-review-account <account>', 'Holistic run-review account route within the provider/runtime for all phases')
   .option('--run-review-model-id <id>', 'Provider-native holistic run-review model ID for all phases')
   .option('--run-review-effort <level>', 'Holistic run-review effort for all phases: low|medium|high|max')
+  .option('--build-account <account>', 'Build account route within the provider/runtime for all phases')
   .option('--build-effort <level>', 'Build effort for all phases: low|medium|high|max')
   .option('--keel-slug <slug>', 'Keel project slug to write outcomes back to')
   .option('--keel-task <id>', 'Keel task ID to read runtime defaults from and update on completion')
@@ -123,16 +128,20 @@ export const pipelineCommand = new Command('chain')
     planModel?: string;
     planEngine?: string;
     planProvider?: string;
+    planAccount?: string;
     planModelId?: string;
     planEffort?: string;
     taskReviewEngine?: string;
     taskReviewProvider?: string;
+    taskReviewAccount?: string;
     taskReviewModelId?: string;
     taskReviewEffort?: string;
     runReviewEngine?: string;
     runReviewProvider?: string;
+    runReviewAccount?: string;
     runReviewModelId?: string;
     runReviewEffort?: string;
+    buildAccount?: string;
     buildEffort?: string;
     keelSlug?: string;
     keelTask?: string;
@@ -151,16 +160,20 @@ export const pipelineCommand = new Command('chain')
     const config = applyKeelTaskRuntime(baseConfig, keelTaskRuntime);
     if (opts.planEngine) config.planningRuntime = { ...config.planningRuntime, engine: opts.planEngine as typeof config.engine };
     if (opts.planProvider) config.planningRuntime = { ...config.planningRuntime, provider: opts.planProvider };
+    if (opts.planAccount) config.planningRuntime = { ...config.planningRuntime, account: opts.planAccount };
     if (opts.planModelId) config.planningRuntime = { ...config.planningRuntime, modelId: opts.planModelId };
     if (opts.planEffort) config.planningRuntime = { ...config.planningRuntime, effort: opts.planEffort as any };
     if (opts.taskReviewEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.taskReviewEngine as typeof config.engine };
     if (opts.taskReviewProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.taskReviewProvider };
+    if (opts.taskReviewAccount) config.validationRuntime = { ...config.validationRuntime, account: opts.taskReviewAccount };
     if (opts.taskReviewModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.taskReviewModelId };
     if (opts.taskReviewEffort) config.validationRuntime = { ...config.validationRuntime, effort: opts.taskReviewEffort as any };
     if (opts.runReviewEngine) config.reviewRuntime = { ...config.reviewRuntime, engine: opts.runReviewEngine as typeof config.engine };
     if (opts.runReviewProvider) config.reviewRuntime = { ...config.reviewRuntime, provider: opts.runReviewProvider };
+    if (opts.runReviewAccount) config.reviewRuntime = { ...config.reviewRuntime, account: opts.runReviewAccount };
     if (opts.runReviewModelId) config.reviewRuntime = { ...config.reviewRuntime, modelId: opts.runReviewModelId };
     if (opts.runReviewEffort) config.reviewRuntime = { ...config.reviewRuntime, effort: opts.runReviewEffort as any };
+    if (opts.buildAccount) config.account = opts.buildAccount;
     if (opts.buildEffort) config.executionEffort = opts.buildEffort as typeof config.executionEffort;
     if (opts.planAccountId) config.planningRuntime = { ...config.planningRuntime, accountId: opts.planAccountId };
     if (opts.taskReviewAccountId) config.validationRuntime = { ...config.validationRuntime, accountId: opts.taskReviewAccountId };
@@ -241,6 +254,7 @@ export const pipelineCommand = new Command('chain')
           '--plan-model', planningModel,
           ...(config.planningRuntime?.engine ? ['--plan-engine', config.planningRuntime.engine] : []),
           ...(config.planningRuntime?.provider ? ['--plan-provider', config.planningRuntime.provider] : []),
+          ...(config.planningRuntime?.account ? ['--plan-account', config.planningRuntime.account] : []),
           ...(config.planningRuntime?.modelId ? ['--plan-model-id', config.planningRuntime.modelId] : []),
           ...(config.planningRuntime?.effort ? ['--plan-effort', config.planningRuntime.effort] : []),
           ...(config.planningRuntime?.accountId ? ['--plan-account-id', config.planningRuntime.accountId] : []),
@@ -292,15 +306,18 @@ export const pipelineCommand = new Command('chain')
         ...(config.executionEffort ? ['--build-effort', config.executionEffort] : []),
         ...(config.engine ? ['--build-engine', config.engine] : []),
         ...(config.provider ? ['--build-provider', config.provider] : []),
+        ...(config.account ? ['--build-account', config.account] : []),
         ...(config.executionModelId ? ['--build-model-id', config.executionModelId] : []),
         ...(config.executionAccountId ? ['--build-account-id', config.executionAccountId] : []),
         ...(config.validationRuntime?.engine ? ['--task-review-engine', config.validationRuntime.engine] : []),
         ...(config.validationRuntime?.provider ? ['--task-review-provider', config.validationRuntime.provider] : []),
+        ...(config.validationRuntime?.account ? ['--task-review-account', config.validationRuntime.account] : []),
         ...(config.validationRuntime?.modelId ? ['--task-review-model-id', config.validationRuntime.modelId] : []),
         ...(config.validationRuntime?.effort ? ['--task-review-effort', config.validationRuntime.effort] : []),
         ...(config.validationRuntime?.accountId ? ['--task-review-account-id', config.validationRuntime.accountId] : []),
         ...(config.reviewRuntime?.engine ? ['--run-review-engine', config.reviewRuntime.engine] : []),
         ...(config.reviewRuntime?.provider ? ['--run-review-provider', config.reviewRuntime.provider] : []),
+        ...(config.reviewRuntime?.account ? ['--run-review-account', config.reviewRuntime.account] : []),
         ...(config.reviewRuntime?.modelId ? ['--run-review-model-id', config.reviewRuntime.modelId] : []),
         ...(config.reviewRuntime?.effort ? ['--run-review-effort', config.reviewRuntime.effort] : []),
         ...(config.reviewRuntime?.accountId ? ['--run-review-account-id', config.reviewRuntime.accountId] : []),

@@ -97,6 +97,7 @@ export function applyKeelTaskRuntime(config: CloudyConfig, runtime: KeelTaskClou
     },
     engine: runtime.execution?.engine ?? config.engine,
     provider: runtime.execution?.provider ?? config.provider,
+    account: runtime.execution?.account ?? config.account,
     executionModelId: runtime.execution?.modelId ?? config.executionModelId,
     executionEffort: runtime.execution?.effort ?? config.executionEffort,
     planningRuntime: {

@@ -33,6 +33,7 @@ export const DEFAULT_CONFIG: CloudyConfig = {
   approval: { mode: 'never', timeoutSec: 300, autoAction: 'continue' },
   engine: 'claude-code',
   provider: 'claude',
+  account: undefined,
   executionEffort: undefined,
   planningRuntime: {},
   validationRuntime: {},

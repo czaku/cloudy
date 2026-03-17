@@ -327,6 +327,7 @@ export async function runHolisticReview(
     cwd,
     engine: runtime?.engine,
     provider: runtime?.provider,
+    account: runtime?.account,
     modelId: runtime?.modelId,
     effort: runtime?.effort,
     onOutput,
@@ -622,6 +623,7 @@ Respond ONLY with valid JSON (no markdown):
       cwd,
       engine: runtime?.engine,
       provider: runtime?.provider,
+      account: runtime?.account,
       modelId: runtime?.modelId,
       taskType: 'review',
     });

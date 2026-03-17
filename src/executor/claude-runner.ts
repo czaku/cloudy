@@ -38,6 +38,7 @@ export type ModelRunOptions = ClaudeRunOptions;
 export interface AbstractModelRunOptions extends ClaudeRunOptions {
   engine?: Engine;
   provider?: Provider;
+  account?: string;
   modelId?: string;
   accountId?: string;
   configDir?: string;
@@ -49,6 +50,7 @@ export interface OmnaiRunOptions {
   cwd: string;
   engine?: Engine;
   provider?: Provider;
+  account?: string;
   modelId?: string;
   accountId?: string;
   configDir?: string;
@@ -138,6 +140,7 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
     cwd,
     engine,
     provider,
+    account,
     modelId,
     accountId,
     configDir,
@@ -161,9 +164,9 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
   });
 
   const runner = await selectViaDaemon({
-    provider: runtime.provider,
-    engine: runtime.engine,
-    account: accountId,
+    provider: runtime.provider ?? provider,
+    engine: runtime.engine ?? engine,
+    account: account ?? accountId,
     taskType: taskType ?? 'coding',
   });
   const rewrittenPrompt = rewritePromptForWorktree(prompt, cwd);
@@ -262,13 +265,13 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
   const runOpts: RunOptions = {
     cwd,
     model: modelId,
+    account: account ?? accountId,
     permissionMode: 'bypass',
     abortSignal,
     resumeSessionId,
     maxBudgetUsd,
     effort,
     thinking,
-    account: accountId,
     env: runtime.env,
   };
 
@@ -370,6 +373,7 @@ export async function runAbstractModel(
     cwd: options.cwd,
     engine: options.engine ?? 'claude-code',
     provider: options.provider ?? 'claude',
+    account: options.account,
     modelId: resolvedModelId,
     accountId: options.accountId,
     configDir: options.configDir,

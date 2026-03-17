@@ -13,11 +13,13 @@ export const validateCommand = new Command('check')
   .option('--no-ai-review', 'Skip AI review phase, run deterministic checks only (typecheck, lint, build, test)')
   .option('--task-review-engine <engine>', 'Per-task review engine')
   .option('--task-review-provider <provider>', 'Per-task review provider/auth route (e.g. claude subscription, codex subscription, openai API)')
+  .option('--task-review-account <account>', 'Per-task review account route within the provider/runtime')
   .option('--task-review-model-id <id>', 'Provider-native per-task review model ID')
   .action(async (taskId: string | undefined, opts: {
     aiReview: boolean;
     taskReviewEngine?: string;
     taskReviewProvider?: string;
+    taskReviewAccount?: string;
     taskReviewModelId?: string;
   }) => {
     const cwd = process.cwd();
@@ -35,6 +37,7 @@ export const validateCommand = new Command('check')
     }
     if (opts.taskReviewEngine) config.validationRuntime = { ...config.validationRuntime, engine: opts.taskReviewEngine as typeof config.engine };
     if (opts.taskReviewProvider) config.validationRuntime = { ...config.validationRuntime, provider: opts.taskReviewProvider };
+    if (opts.taskReviewAccount) config.validationRuntime = { ...config.validationRuntime, account: opts.taskReviewAccount };
     if (opts.taskReviewModelId) config.validationRuntime = { ...config.validationRuntime, modelId: opts.taskReviewModelId };
 
     if (config.validation.aiReview) {
@@ -42,6 +45,7 @@ export const validateCommand = new Command('check')
         await selectViaDaemon({
           engine: config.validationRuntime?.engine,
           provider: config.validationRuntime?.provider,
+          account: config.validationRuntime?.account,
           taskType: 'review',
         });
       } catch (err) {

@@ -6,6 +6,34 @@
 
 Cloudy breaks a project goal into a dependency-ordered task graph, then works through each task using local agent CLIs or API-backed runtimes via `omnai` — with validation, automatic retry, and real-time feedback. Works with any language or stack.
 
+## Runtime routing model
+
+Cloudy routes every AI phase with four dimensions:
+
+- `engine`: how the phase is executed
+- `provider`: which backend or auth family is used
+- `account`: which named identity inside that provider/runtime should be used
+- `modelId`: which concrete provider-native model should be used
+
+Use them for different decisions:
+
+- pick `engine` when you care about the execution surface: `claude-code`, `codex`, `pi-mono`
+- pick `provider` when you care about the backend family: `claude`, `codex`, `openai`, `dashscope`, `ollama`
+- pick `account` when you care about the named quota or credential route: `claude-ted`, `claude-rai`, `openai-main`
+- pick `modelId` when you care about the exact model: `claude-sonnet-4-6`, `o3`, `gpt-5`
+
+Example:
+
+```bash
+cloudy run \
+  --build-engine claude-code \
+  --build-provider claude \
+  --build-account claude-ted \
+  --build-model-id claude-sonnet-4-6
+```
+
+For local Claude/Codex named accounts, `account` assumes Sweech is installed and managing those identities. Without Sweech, Cloudy still works with `engine + provider + modelId`, but named local account routing is not supported.
+
 ```
 ☁️  cloudy  ·  10 tasks
     🤖 exec:sonnet  ·  validate:sonnet  ·  sequential
@@ -159,7 +187,7 @@ cloudy plan --spec ./PRD.md --no-review
 cloudy plan --spec ./PRD.md --plan-model sonnet
 
 # Override the plan runtime
-cloudy plan --spec ./PRD.md --plan-engine codex --plan-provider codex --plan-model-id o3-mini
+cloudy plan --spec ./PRD.md --plan-engine codex --plan-provider codex --plan-account codex-luke --plan-model-id o3-mini
 ```
 
 The planner uses the configured plan runtime to decompose your goal into concrete, ordered tasks — each with a title, description, acceptance criteria, context file patterns, expected output artifacts, and a time estimate. If you don't pass `--no-review`, you can approve the plan or describe changes in plain English and iterate before running.
@@ -176,9 +204,9 @@ cloudy run --build-model sonnet --task-review-model haiku --run-review-model opu
 
 # Override planning / validation / review runtimes
 cloudy run \
-  --plan-engine codex --plan-provider codex --plan-model-id o3-mini \
-  --task-review-engine codex --task-review-provider codex --task-review-model-id o4-mini \
-  --run-review-engine codex --run-review-provider codex --run-review-model-id gpt-4.1
+  --plan-engine codex --plan-provider codex --plan-account codex-luke --plan-model-id o3-mini \
+  --task-review-engine codex --task-review-provider codex --task-review-account codex-luke --task-review-model-id o4-mini \
+  --run-review-engine codex --run-review-provider codex --run-review-account codex-luke --run-review-model-id gpt-4.1
 
 # Show live agent output as each task runs
 cloudy run --verbose
@@ -217,12 +245,12 @@ cloudy run --no-dashboard
 | `--build-model <m>` | Model for execution phase |
 | `--task-review-model <m>` | Model for per-task validation |
 | `--run-review-model <m>` | Model for holistic post-run review |
-| `--plan-engine <e>` / `--plan-provider <p>` / `--plan-model-id <id>` | Plan runtime override |
+| `--plan-engine <e>` / `--plan-provider <p>` / `--plan-account <a>` / `--plan-model-id <id>` | Plan runtime override |
 | `--non-interactive` | Skip all prompts, disable dashboard (also `--ni`) |
 | `--model-auto` | Auto-route model by task complexity |
-| `--build-engine <e>` / `--build-provider <p>` / `--build-model-id <id>` | Build runtime override |
-| `--task-review-engine <e>` / `--task-review-provider <p>` / `--task-review-model-id <id>` | Per-task AI task-review runtime override |
-| `--run-review-engine <e>` / `--run-review-provider <p>` / `--run-review-model-id <id>` | Run-review runtime override |
+| `--build-engine <e>` / `--build-provider <p>` / `--build-account <a>` / `--build-model-id <id>` | Build runtime override |
+| `--task-review-engine <e>` / `--task-review-provider <p>` / `--task-review-account <a>` / `--task-review-model-id <id>` | Per-task AI task-review runtime override |
+| `--run-review-engine <e>` / `--run-review-provider <p>` / `--run-review-account <a>` / `--run-review-model-id <id>` | Run-review runtime override |
 
 ---
 
@@ -698,10 +726,10 @@ You can also put Cloudy runtime preferences directly on a Keel task. When `--kee
       "runReview": "sonnet",
       "qualityReview": "haiku"
     },
-    "plan": { "engine": "codex", "provider": "codex", "modelId": "o3-mini" },
-    "build": { "engine": "codex", "provider": "codex", "modelId": "o3" },
-    "taskReview": { "engine": "codex", "provider": "codex", "modelId": "o4-mini" },
-    "runReview": { "engine": "pi-mono", "provider": "openai", "modelId": "gpt-5" }
+    "plan": { "engine": "codex", "provider": "codex", "account": "codex-luke", "modelId": "o3-mini" },
+    "build": { "engine": "codex", "provider": "codex", "account": "codex-luke", "modelId": "o3" },
+    "taskReview": { "engine": "codex", "provider": "codex", "account": "codex-luke", "modelId": "o4-mini" },
+    "runReview": { "engine": "pi-mono", "provider": "openai", "account": "openai-main", "modelId": "gpt-5" }
   }
 }
 ```
@@ -742,21 +770,25 @@ Full config reference (`.cloudy/config.json`):
   },
   "buildEngine": "claude-code",
   "buildProvider": "claude",
+  "buildAccount": "claude-ted",
   "buildModelId": "",
   "buildEffort": "high",
   "planRuntime": {
     "engine": "codex",
     "provider": "codex",
+    "account": "codex-luke",
     "modelId": "o3-mini"
   },
   "taskReviewRuntime": {
     "engine": "claude-code",
     "provider": "claude",
+    "account": "claude-review",
     "modelId": "claude-sonnet-4-6"
   },
   "runReviewRuntime": {
     "engine": "pi-mono",
     "provider": "openai",
+    "account": "openai-main",
     "modelId": "gpt-5"
   },
   "piMono": {

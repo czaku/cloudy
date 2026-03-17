@@ -70,6 +70,8 @@ export const configCommand = new Command('config')
         config.engine = value as typeof config.engine;
       } else if (key === 'buildProvider') {
         config.provider = value;
+      } else if (key === 'buildAccount') {
+        config.account = value;
       } else if (key === 'buildModelId') {
         config.executionModelId = value;
       } else if (key === 'buildEffort') {
@@ -143,6 +145,7 @@ export const configCommand = new Command('config')
     console.log('\nExecution:');
     console.log(`  buildEngine:         ${config.engine}`);
     console.log(`  buildProvider:       ${config.provider ?? '(auto)'}`);
+    console.log(`  buildAccount:        ${config.account ?? '(auto)'}`);
     console.log(`  buildModelId:        ${config.executionModelId ?? '(engine default)'}`);
     console.log(`  buildEffort:         ${config.executionEffort ?? '(engine default)'}`);
     console.log(`  planRuntime:         ${JSON.stringify(config.planningRuntime ?? {})}`);

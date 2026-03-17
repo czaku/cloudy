@@ -327,16 +327,19 @@ function getRunningProcess(projectId: string, type?: ActiveProcess['type']): Act
 interface RuntimeRouteFields {
   planEngine?: string;
   planProvider?: string;
+  planAccount?: string;
   planModelId?: string;
   planEffort?: string;
   planAccountId?: string;
   taskReviewEngine?: string;
   taskReviewProvider?: string;
+  taskReviewAccount?: string;
   taskReviewModelId?: string;
   taskReviewEffort?: string;
   taskReviewAccountId?: string;
   runReviewEngine?: string;
   runReviewProvider?: string;
+  runReviewAccount?: string;
   runReviewModelId?: string;
   runReviewEffort?: string;
   runReviewAccountId?: string;
@@ -345,6 +348,7 @@ interface RuntimeRouteFields {
 interface RunRuntimeRouteFields extends RuntimeRouteFields {
   buildEngine?: string;
   buildProvider?: string;
+  buildAccount?: string;
   buildModelId?: string;
   buildEffort?: string;
   buildAccountId?: string;
@@ -360,10 +364,10 @@ interface RuntimePreflight {
 }
 
 interface RuntimeDefaults {
-  build?: Pick<RunRuntimeRouteFields, 'buildEngine' | 'buildProvider' | 'buildModelId' | 'buildEffort' | 'buildAccountId'>;
-  plan?: Pick<RuntimeRouteFields, 'planEngine' | 'planProvider' | 'planModelId' | 'planEffort' | 'planAccountId'>;
-  taskReview?: Pick<RuntimeRouteFields, 'taskReviewEngine' | 'taskReviewProvider' | 'taskReviewModelId' | 'taskReviewEffort' | 'taskReviewAccountId'>;
-  runReview?: Pick<RuntimeRouteFields, 'runReviewEngine' | 'runReviewProvider' | 'runReviewModelId' | 'runReviewEffort' | 'runReviewAccountId'>;
+  build?: Pick<RunRuntimeRouteFields, 'buildEngine' | 'buildProvider' | 'buildAccount' | 'buildModelId' | 'buildEffort' | 'buildAccountId'>;
+  plan?: Pick<RuntimeRouteFields, 'planEngine' | 'planProvider' | 'planAccount' | 'planModelId' | 'planEffort' | 'planAccountId'>;
+  taskReview?: Pick<RuntimeRouteFields, 'taskReviewEngine' | 'taskReviewProvider' | 'taskReviewAccount' | 'taskReviewModelId' | 'taskReviewEffort' | 'taskReviewAccountId'>;
+  runReview?: Pick<RuntimeRouteFields, 'runReviewEngine' | 'runReviewProvider' | 'runReviewAccount' | 'runReviewModelId' | 'runReviewEffort' | 'runReviewAccountId'>;
   models?: {
     planModel?: string;
     buildModel?: string;
@@ -381,6 +385,7 @@ function buildPlanRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   const args: string[] = [];
   appendOptionalFlag(args, '--plan-engine', runtime.planEngine);
   appendOptionalFlag(args, '--plan-provider', runtime.planProvider);
+  appendOptionalFlag(args, '--plan-account', runtime.planAccount);
   appendOptionalFlag(args, '--plan-model-id', runtime.planModelId);
   appendOptionalFlag(args, '--plan-effort', runtime.planEffort);
   appendOptionalFlag(args, '--plan-account-id', runtime.planAccountId);
@@ -391,6 +396,7 @@ function buildTaskReviewRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   const args: string[] = [];
   appendOptionalFlag(args, '--task-review-engine', runtime.taskReviewEngine);
   appendOptionalFlag(args, '--task-review-provider', runtime.taskReviewProvider);
+  appendOptionalFlag(args, '--task-review-account', runtime.taskReviewAccount);
   appendOptionalFlag(args, '--task-review-model-id', runtime.taskReviewModelId);
   appendOptionalFlag(args, '--task-review-effort', runtime.taskReviewEffort);
   appendOptionalFlag(args, '--task-review-account-id', runtime.taskReviewAccountId);
@@ -401,6 +407,7 @@ function buildRunReviewRuntimeArgs(runtime: RuntimeRouteFields): string[] {
   const args: string[] = [];
   appendOptionalFlag(args, '--run-review-engine', runtime.runReviewEngine);
   appendOptionalFlag(args, '--run-review-provider', runtime.runReviewProvider);
+  appendOptionalFlag(args, '--run-review-account', runtime.runReviewAccount);
   appendOptionalFlag(args, '--run-review-model-id', runtime.runReviewModelId);
   appendOptionalFlag(args, '--run-review-effort', runtime.runReviewEffort);
   appendOptionalFlag(args, '--run-review-account-id', runtime.runReviewAccountId);
@@ -411,6 +418,7 @@ function buildRunRuntimeArgs(runtime: RunRuntimeRouteFields): string[] {
   const args: string[] = [];
   appendOptionalFlag(args, '--build-engine', runtime.buildEngine);
   appendOptionalFlag(args, '--build-provider', runtime.buildProvider);
+  appendOptionalFlag(args, '--build-account', runtime.buildAccount);
   appendOptionalFlag(args, '--build-model-id', runtime.buildModelId);
   appendOptionalFlag(args, '--build-effort', runtime.buildEffort);
   appendOptionalFlag(args, '--build-account-id', runtime.buildAccountId);
@@ -465,6 +473,7 @@ async function loadRuntimeDefaults(projectPath: string, keelTaskId?: string): Pr
     build: {
       buildEngine: config.engine,
       buildProvider: config.provider,
+      buildAccount: config.account,
       buildModelId: config.executionModelId,
       buildEffort: config.executionEffort,
       buildAccountId: config.executionAccountId,
@@ -472,6 +481,7 @@ async function loadRuntimeDefaults(projectPath: string, keelTaskId?: string): Pr
     plan: {
       planEngine: config.planningRuntime?.engine,
       planProvider: config.planningRuntime?.provider,
+      planAccount: config.planningRuntime?.account,
       planModelId: config.planningRuntime?.modelId,
       planEffort: config.planningRuntime?.effort,
       planAccountId: config.planningRuntime?.accountId,
@@ -479,6 +489,7 @@ async function loadRuntimeDefaults(projectPath: string, keelTaskId?: string): Pr
     taskReview: {
       taskReviewEngine: config.validationRuntime?.engine,
       taskReviewProvider: config.validationRuntime?.provider,
+      taskReviewAccount: config.validationRuntime?.account,
       taskReviewModelId: config.validationRuntime?.modelId,
       taskReviewEffort: config.validationRuntime?.effort,
       taskReviewAccountId: config.validationRuntime?.accountId,
@@ -486,6 +497,7 @@ async function loadRuntimeDefaults(projectPath: string, keelTaskId?: string): Pr
     runReview: {
       runReviewEngine: config.reviewRuntime?.engine,
       runReviewProvider: config.reviewRuntime?.provider,
+      runReviewAccount: config.reviewRuntime?.account,
       runReviewModelId: config.reviewRuntime?.modelId,
       runReviewEffort: config.reviewRuntime?.effort,
       runReviewAccountId: config.reviewRuntime?.accountId,

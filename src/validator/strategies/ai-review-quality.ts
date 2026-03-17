@@ -21,6 +21,7 @@ export async function runAiQualityReview(
       cwd,
       engine: runtime?.engine,
       provider: runtime?.provider,
+      account: runtime?.account,
       modelId: runtime?.modelId,
       effort: runtime?.effort,
       taskType: 'review',

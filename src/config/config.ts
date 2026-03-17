@@ -30,11 +30,12 @@ type ExternalModelConfig = {
 
 type ExternalCloudyConfig = Omit<
   Partial<CloudyConfig>,
-  'models' | 'engine' | 'provider' | 'executionModelId' | 'executionEffort' | 'planningRuntime' | 'validationRuntime' | 'reviewRuntime'
+  'models' | 'engine' | 'provider' | 'account' | 'executionModelId' | 'executionEffort' | 'planningRuntime' | 'validationRuntime' | 'reviewRuntime'
 > & {
   models?: ExternalModelConfig;
   buildEngine?: CloudyConfig['engine'];
   buildProvider?: CloudyConfig['provider'];
+  buildAccount?: CloudyConfig['account'];
   buildModelId?: CloudyConfig['executionModelId'];
   buildAccountId?: CloudyConfig['executionAccountId'];
   buildEffort?: CloudyConfig['executionEffort'];
@@ -135,6 +136,7 @@ export function toExternalConfig(config: CloudyConfig): ExternalCloudyConfig {
     approval: config.approval,
     buildEngine: config.engine,
     buildProvider: config.provider,
+    buildAccount: config.account,
     buildModelId: config.executionModelId,
     buildAccountId: config.executionAccountId,
     buildEffort: config.executionEffort,
@@ -205,6 +207,7 @@ export async function loadConfig(cwd: string): Promise<CloudyConfig> {
     approval: { ...effectiveDefaults.approval, ...saved.approval },
     engine: saved.buildEngine ?? effectiveDefaults.engine,
     provider: saved.buildProvider ?? effectiveDefaults.provider,
+    account: saved.buildAccount ?? effectiveDefaults.account,
     executionModelId: saved.buildModelId ?? effectiveDefaults.executionModelId,
     executionEffort: saved.buildEffort ?? effectiveDefaults.executionEffort,
     planningRuntime: { ...effectiveDefaults.planningRuntime, ...saved.planRuntime },
