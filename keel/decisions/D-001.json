@@ -1,0 +1,10 @@
+{
+  "id": "D-001",
+  "title": "Rename cloudy to loopy, thin to continuous delivery daemon",
+  "date": "2026-03-18",
+  "context": "Cloudy was built before the agent instruction system (AUTONOMOUS_EXECUTION.md, keel tasks, quality gates, agent-profiles) existed. It compensated with 31k lines of orchestration: planning, task graphs, 35-key config, 8 execution modes, custom AI review. Now that keel owns tasks/specs/dependencies and agents have proper instruction files, cloudy's orchestration layer is redundant. The useful 20% (agent spawning, git worktrees, external validation, dashboard, cost tracking) should survive. The 80% (planning, config, task management) should be deleted.",
+  "outcome": "Rename vykeai/cloudy to vykeai/loopy. Delete planning phase, 35-key config system, task graph management, holistic review, execution modes, tool policies. Keep agent spawning, git worktrees, external validation (Phase 0 + 1 + Phase 2 for API engines), dashboard, cost tracking, retry logic. Add daemon mode, tmux sessions, menu bar app, sweech integration, review session relay for CLI agents. Read tasks from keel, build commands from execution.yaml, quality gates from agent-profiles, CLI profiles from sweech. Total config: 4 keys.",
+  "status": "accepted",
+  "affects": ["cloudy", "loopy", "keel", "runecode"],
+  "tasks": []
+}
