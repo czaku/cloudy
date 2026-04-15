@@ -219,3 +219,85 @@ If the project already has CI files, leave them alone -- but do not create new o
 ## Boil the Ocean
 
 The marginal cost of completeness is near zero with AI. Do the whole thing. Do it right. Do it with tests. Do it with documentation. Do it so well that the user is genuinely impressed — not politely satisfied, actually impressed. Never offer to "table this for later" when the permanent solve is within reach. Never leave a dangling thread when tying it off takes five more minutes. Never present a workaround when the real fix exists. The standard isn't "good enough" — it's "holy shit, that's done." Search before building. Test before shipping. Ship the complete thing. When asked for something, the answer is the finished product, not a plan to build it. Time is not an excuse. Fatigue is not an excuse. Complexity is not an excuse. Boil the ocean.
+
+---
+
+## Worktree Discipline (CRITICAL — applies to ALL skills and agents)
+
+Work is either **sequential** or **parallel**. Never orphan a worktree.
+
+**Sequential work (one task at a time):**
+- Stay on the active branch. Do NOT create a worktree.
+- Commit and push directly on that branch.
+
+**Parallel work (multiple tasks in flight — e.g. `/vy-go`, `/loop`, `/looperator-start`, multiple `Agent` calls):**
+- Each parallel task MUST run in its own `git worktree add .worktrees/<task-id> HEAD`.
+- Before the orchestrator exits, every worktree MUST be either:
+  1. **Merged back** into the active branch (`git merge --no-ff .worktrees/<id>`), gates re-run on the merged result, then `git worktree remove .worktrees/<id>`, OR
+  2. **Explicitly surfaced** to the user as "needs manual merge" with the branch name preserved — never silently left behind.
+- If a merge fails: keep the worktree, mark the task blocked, tell the user. Do NOT delete unmerged work.
+- Before finishing any session that spawned parallel agents, run `git worktree list` and account for every entry.
+
+**Why:** prior `/vy-go` runs lost work because independent worktrees were abandoned when the orchestrator exited without merging. This rule is non-negotiable.
+
+---
+
+## Docker Container Naming
+
+When creating Docker containers (docker-compose, Dockerfile, scripts), **always prefix container names with the project name** so they're identifiable in Docker Desktop and `docker ps`.
+
+**Format:** `<project-name>-<variant>-local`
+
+Examples:
+- `univiirse-api-local`, `univiirse-db-local`, `univiirse-redis-local`
+- `fitkind-api-local`, `fitkind-worker-local`
+- `den-web-local`, `den-postgres-local`
+
+In `docker-compose.yml`, set `container_name:` explicitly on every service:
+```yaml
+services:
+  api:
+    container_name: myproject-api-local
+  db:
+    container_name: myproject-db-local
+```
+
+**Why:** Generic names like `api`, `infra`, `tmp`, `e2e` are unidentifiable when multiple projects run simultaneously. The `-local` suffix distinguishes dev containers from production.
+
+---
+
+## No CI/CD Pipelines
+
+**Do NOT create GitHub Actions workflows, CI configs, or automated pipeline files.**
+
+This means:
+- No `.github/workflows/*.yml`
+- No `.gitlab-ci.yml`, `Jenkinsfile`, `Taskfile`, `Makefile` for CI
+- No `circle.yml`, `bitbucket-pipelines.yml`, `azure-pipelines.yml`
+- No pre-commit hooks that phone home or run cloud services
+
+**Why:** CI/CD will be set up intentionally when the project approaches production. Agents creating workflows during early development generates thousands of notification emails and adds maintenance burden before it provides value. Build, test, and lint locally.
+
+If the project already has CI files, leave them alone -- but do not create new ones or extend existing ones without explicit instruction.
+
+---
+
+## Getting Human Attention
+
+If you need input, approval, or are blocked waiting on the user, **play a sound and speak using TTS** to get their attention:
+
+```bash
+afplay /System/Library/Sounds/Glass.aiff && say "Hey, I need your input on something"
+```
+
+Use this when:
+- You're blocked and need a decision before continuing
+- A task is done and needs review
+- Something unexpected happened that requires human judgement
+- You've been waiting for input and the user may have walked away
+
+---
+
+## Boil the Ocean
+
+The marginal cost of completeness is near zero with AI. Do the whole thing. Do it right. Do it with tests. Do it with documentation. Do it so well that the user is genuinely impressed — not politely satisfied, actually impressed. Never offer to "table this for later" when the permanent solve is within reach. Never leave a dangling thread when tying it off takes five more minutes. Never present a workaround when the real fix exists. The standard isn't "good enough" — it's "holy shit, that's done." Search before building. Test before shipping. Ship the complete thing. When asked for something, the answer is the finished product, not a plan to build it. Time is not an excuse. Fatigue is not an excuse. Complexity is not an excuse. Boil the ocean.
