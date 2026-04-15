@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "packages": {
+    "@vykeai/fed": {
+      "signature": "71f33305bf63052927c5013e1da692e5",
+      "file": true,
+      "replaced": "github:vykeai/fed"
+    },
+    "omnai": {
+      "signature": "98a47554adaf93e357a42263fe0b0571",
+      "file": true,
+      "replaced": "file:../omnai/packages/core"
+    }
+  }
+}

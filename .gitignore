@@ -4,3 +4,6 @@ dist/
 *.tsbuildinfo
 .DS_Store
 *.jsonl
+
+# yalc local package store
+.yalc/
