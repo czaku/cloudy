@@ -2497,7 +2497,20 @@ export async function startDaemonServer(port: number, bundleDir: string): Promis
         identity,
         version: '0.1.0',
         capabilities: ['projects', 'runs'],
-        getInfo: async () => ({ projectCount: (await listProjects().catch(() => [])).length }),
+        getInfo: async () => ({
+          projectCount: (await listProjects().catch(() => [])).length,
+          tools: [{
+            id: 'cloudy',
+            name: 'Cloudy',
+            version: '0.1.0',
+            actions: [
+              { name: 'listProjects', method: 'GET', path: '/api/projects', description: 'List cloud projects' },
+              { name: 'listRuns', method: 'GET', path: '/api/runs', description: 'List project runs' },
+            ],
+            docsUrl: 'https://github.com/vykeai/cloudy',
+            healthPath: '/health',
+          }],
+        }),
         getRuns: async () => {
           const projects = await listProjects().catch(() => [] as ProjectMeta[]);
           return Promise.all(
