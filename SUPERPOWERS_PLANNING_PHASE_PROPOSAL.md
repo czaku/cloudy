@@ -34,7 +34,7 @@ Each item below notes its non-interactive behaviour explicitly.
 ## Item 1 — Codebase Exploration Before Planning
 
 ### Current State
-`createPlan()` in `src/planner/planner.ts` calls `buildPlanningPrompt(goal, specContent, claudeMdContent, runInsights)` and sends it straight to Claude. Claude plans blind — it has no knowledge of the actual repo structure, existing services, import paths, or test baseline.
+`createPlan()` in `src/planner/planner.ts` calls `buildPlanningPrompt(goal, specContent, claudeMdContent, runInsights)` and sends it straight to the planning engine. The planner runs blind — it has no knowledge of the actual repo structure, existing services, import paths, or test baseline.
 
 **Symptom**: tasks reference wrong file paths, import things that don't exist, or duplicate functionality that's already there.
 
@@ -168,7 +168,7 @@ Skip the checkpoint entirely, log `[auto-approved: non-interactive mode]`, proce
 `buildPlanningPrompt()` in `src/planner/prompts.ts:34` says:
 > "TDD note: if the task produces testable units... the description should remind the executor to write failing tests first..."
 
-This is a description note. Claude ignores it roughly 40% of the time because it's buried in prose.
+This is a description note. The executing engine ignores it roughly 40% of the time because it's buried in prose.
 
 ### What Superpowers Does
 When a task produces testable units, superpowers adds an explicit numbered `implementationSteps` array to the task JSON:
@@ -251,7 +251,7 @@ Generate and write the file, don't display it interactively. Same as interactive
 ## Item 6 — Sequential Clarifying Questions
 
 ### Current State
-`buildPlanningPrompt()` instructs Claude to return 0–3 questions in a batch array. The CLI asks all of them at once. This means question 3 may be irrelevant given the answer to question 1 (e.g., "which auth method?" answered "JWT" makes "should we use session expiry?" moot).
+`buildPlanningPrompt()` instructs the planning engine to return 0–3 questions in a batch array. The CLI asks all of them at once. This means question 3 may be irrelevant given the answer to question 1 (e.g., "which auth method?" answered "JWT" makes "should we use session expiry?" moot).
 
 ### What Superpowers Does
 Questions are asked one at a time. After each answer, the planner re-evaluates whether the next question is still necessary. This typically reduces total questions asked and improves answer quality (users answer more carefully when not facing a wall of prompts).
@@ -282,7 +282,7 @@ Skip all questions, use AI-assumed defaults (already the current behaviour — n
 ## Item 7 — Git Worktree Isolation Per Task
 
 ### Current State
-All tasks in a run execute in the same working directory (`cwd`). Parallel tasks (when dependency graph allows) write to the same files simultaneously. Sequential tasks accumulate changes in the same tree, so a half-applied task 3 can confuse Claude when task 4 starts.
+All tasks in a run execute in the same working directory (`cwd`). Parallel tasks (when dependency graph allows) write to the same files simultaneously. Sequential tasks accumulate changes in the same tree, so a half-applied task 3 can confuse the executing engine when task 4 starts.
 
 ### What Superpowers Does
 Each task runs in a dedicated git worktree:
@@ -357,9 +357,9 @@ No change — guidance is baked into the planner prompt.
 ## Item 9 — Testing Anti-Patterns in Executor Context
 
 ### Current State
-`buildExecutionPrompt()` in `src/executor/prompt-builder.ts:159` has an `## Anti-Patterns — Do Not Do These` section. It covers general Claude execution anti-patterns (claiming done without verifying, simulator ≠ device, etc.) but says nothing about testing anti-patterns.
+`buildExecutionPrompt()` in `src/executor/prompt-builder.ts:159` has an `## Anti-Patterns — Do Not Do These` section. It covers general execution anti-patterns (claiming done without verifying, simulator ≠ device, etc.) but says nothing about testing anti-patterns.
 
-**Symptom**: Claude writes tests that test mock wiring rather than real behaviour — tests always pass because they only verify that mocks return what they're configured to return.
+**Symptom**: the executing engine writes tests that test mock wiring rather than real behaviour — tests always pass because they only verify that mocks return what they're configured to return.
 
 ### What Superpowers Does
 The execution prompt includes a `## Testing Anti-Patterns` section:
@@ -392,7 +392,7 @@ No change — built into the execution prompt.
 ## Item 10 — Pre-Planning Brainstorming Gate
 
 ### Current State
-When a user runs `cloudy run "build X"`, `createPlan()` fires immediately. There is no phase where multiple approaches are considered before one is committed to. The first thing Claude produces is the execution plan.
+When a user runs `cloudy run "build X"`, `createPlan()` fires immediately. There is no phase where multiple approaches are considered before one is committed to. The first thing the planning engine produces is the execution plan.
 
 ### What Superpowers Does
 Before `createPlan()`, superpowers runs a brainstorming skill (a lightweight Haiku prompt) that produces:
@@ -473,7 +473,7 @@ Skip the brainstorm gate entirely. No approaches are generated, no selection is 
 | Tasks reference wrong file paths | Item 1 |
 | Can't distinguish pre-existing broken tests from newly broken | Item 2 |
 | Architecture committed before user can weigh in | Items 3, 10 |
-| TDD reminder ignored by Claude | Item 4 |
+| TDD reminder ignored by the executing engine | Item 4 |
 | No record of why decisions were made | Item 5 |
 | Question 3 is moot after answer to question 1 | Item 6 |
 | Parallel/sequential tasks stomp each other | Item 7 |

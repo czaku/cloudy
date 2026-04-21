@@ -62,7 +62,7 @@ cloudy run \
   --build-model-id claude-sonnet-4-6
 ```
 
-For local Claude/Codex named accounts, `account` assumes Sweech is installed and managing those identities. Without Sweech, Cloudy still works with `engine + provider + modelId`, but named local account routing is not supported.
+For named local CLI accounts (e.g. the `claude` or `codex` subscription login on your machine), `account` assumes Sweech is installed and managing those identities. Without Sweech, Cloudy still works with `engine + provider + modelId`, but named local account routing is not supported. <!-- provider-lock:allow arch-comparison -->
 
 ```
 ☁️  cloudy  ·  10 tasks
@@ -107,9 +107,9 @@ cloudy run --goal "add user authentication with JWT"
 
 ---
 
-## 🔗 Running from inside a Claude Code session
+## 🔗 Running from inside a nested agent-CLI session
 
-If you invoke `cloudy` from within an active Claude Code session (e.g. via a Bash tool call), the `claude` subprocess will refuse to launch because it inherits the `CLAUDECODE` env var and detects a nested session.
+If you invoke `cloudy` from within an active agent-CLI session (e.g. a Claude Code session via a Bash tool call), the nested subprocess will refuse to launch because it inherits parent-process env vars (e.g. `CLAUDECODE` for the Claude Code CLI) and detects a nested session. <!-- provider-lock:allow arch-comparison -->
 
 **Fix — unset both vars before running:**
 
@@ -134,7 +134,7 @@ cloudy run --model sonnet
 | `--no-dashboard` | Don't open the web UI at `http://localhost:1510` |
 | `--ni` / `--non-interactive` | Skip all TTY prompts |
 
-The cloudy daemon already strips `CLAUDECODE` and `CLAUDE_CODE_ENTRYPOINT` automatically when spawning subprocesses — this only affects manual `cloudy` CLI invocations from inside a Claude Code session.
+The cloudy daemon already strips engine-specific nested-session env vars (e.g. `CLAUDECODE`, `CLAUDE_CODE_ENTRYPOINT`) automatically when spawning subprocesses — this only affects manual `cloudy` CLI invocations from inside a nested agent-CLI session. <!-- provider-lock:allow arch-comparison -->
 
 ---
 
@@ -172,8 +172,8 @@ npm run build
 npm link
 ```
 
-**Requirements:** Node.js 18+ and at least one supported runtime route.
-Examples: `claude` on your PATH for Claude Code, Codex CLI for `codex`, or API credentials for supported `omnai` providers.
+**Requirements:** Node.js 18+ and at least one supported runtime route via `<supervisorSweechProfile>`.
+Examples: a local agent-CLI binary on your PATH (e.g. `claude`, `codex`), or API credentials for supported `omnai` providers. <!-- provider-lock:allow arch-comparison -->
 
 ---
 
@@ -405,7 +405,7 @@ The dashboard has six tabs per project:
 | Tab | What it does |
 |-----|-------------|
 | 📊 **Dashboard** | Project overview — cost, last activity, status |
-| 💬 **Chat** | Chat with Claude · view Claude Code CLI session history |
+| 💬 **Chat** | Chat with the configured engine · view agent-CLI session history |
 | 📋 **Plan** | Pick spec files → `cloudy plan` → Q&A → approve plan |
 | ▶️ **Run** | Launch `cloudy run` · live output streaming |
 | 📜 **History** | Browse past runs, costs, task outcomes |
@@ -432,7 +432,7 @@ cloudy run \
 
 ### 💬 Chat tab
 
-The Chat tab shows both Cloudy sessions (started from the web) and Claude Code CLI sessions (from your terminal). CLI sessions are read-only while the CLI is active. Once you close the terminal, inactive CC sessions unlock — type to resume the exact conversation via `claude --resume`.
+The Chat tab shows both Cloudy sessions (started from the web) and agent-CLI sessions (from your terminal). CLI sessions are read-only while the CLI is active. Once you close the terminal, inactive agent-CLI sessions unlock — type to resume the exact conversation via the engine's resume command (e.g. `claude --resume` for the Claude Code CLI). <!-- provider-lock:allow arch-comparison -->
 
 **Slash commands** (type `/` to autocomplete):
 
@@ -526,7 +526,7 @@ cloudy run --tui          # force on even in non-TTY contexts
 
 ## ⚙️ Engines And Providers
 
-### Claude Code (default)
+### Claude Code (default binding for the `claude-code` engine) <!-- provider-lock:allow arch-comparison -->
 
 Uses your local Claude Code subscription/login.
 
@@ -595,7 +595,7 @@ cloudy config --set models.runReview=opus
 | 🔍 Task review | `--task-review-model` | haiku | Per-task diff review, runs every task |
 | 🔭 Run review | `--run-review-model` | opus | Holistic post-run review, runs once at the end |
 
-These abstract model flags map cleanly to Claude-style runtimes. For non-Claude providers, use the phase runtime `*ModelId` flags/config keys instead.
+These abstract model flags (`opus`/`sonnet`/`haiku`) map cleanly to Anthropic-family runtimes. For other providers, use the phase runtime `*ModelId` flags/config keys instead to name the exact provider-native model. <!-- provider-lock:allow arch-comparison -->
 
 With `--model-auto`, task complexity (acceptance criteria count, description length, dep count, context size) determines the build model automatically.
 

@@ -10,8 +10,8 @@ These patterns from superpowers are already implemented — do not re-propose th
 
 - **Two-stage AI review** — Phase 2a spec compliance (`runAiReview`) → Phase 2b code quality (`runAiQualityReview`), ordered gate in `src/validator/validator.ts`
 - **"No extras" enforcement** — `buildValidationPrompt()` has a SCOPE CHECK section; spec reviewer returns `extras[]` field flagging over-building (`src/planner/prompts.ts:110`)
-- **LEARNINGS accumulation** — `extractLearnings()` parses `## LEARNINGS` from Claude output and passes `accumulatedLearnings` into each subsequent iteration prompt (`src/core/loop-runner.ts:65`)
-- **Verification gate** — execution prompt has a mandatory "Verification Gate" section requiring Claude to run a command before summarising (`src/executor/prompt-builder.ts:139`)
+- **LEARNINGS accumulation** — `extractLearnings()` parses `## LEARNINGS` from engine output and passes `accumulatedLearnings` into each subsequent iteration prompt (`src/core/loop-runner.ts:65`)
+- **Verification gate** — execution prompt has a mandatory "Verification Gate" section requiring the engine to run a command before summarising (`src/executor/prompt-builder.ts:139`)
 - **Finishing workflow** — after a successful run, CLI presents merge/push-PR/keep/discard options; dashboard shows a modal; server has a `/finish` endpoint (`src/cli/commands/run.ts:32`, `src/daemon/server.ts`)
 - **`qualityReviewModel`** — separate per-phase model config field for Phase 2b (`src/config/model-config.ts`, `src/core/types.ts`)
 
@@ -19,9 +19,9 @@ These patterns from superpowers are already implemented — do not re-propose th
 
 ## Autonomy Constraint — Critical for All Implementations
 
-Cloudy runs **fully unattended**. Any improvement that could cause Claude to pause, ask questions, or block execution must degrade gracefully in non-interactive mode. The rule:
+Cloudy runs **fully unattended**. Any improvement that could cause the executing engine (per `<supervisorSweechProfile>`) to pause, ask questions, or block execution must degrade gracefully in non-interactive mode. The rule:
 
-> **When running with `--non-interactive` (or `isNonInteractive === true` in `src/cli/commands/run.ts:162`), Claude must prefer a reasonable assumption over blocking for clarification.**
+> **When running with `--non-interactive` (or `isNonInteractive === true` in `src/cli/commands/run.ts:162`), the executing engine must prefer a reasonable assumption over blocking for clarification.**
 
 Where relevant, each item below notes how to handle non-interactive mode.
 
@@ -29,7 +29,7 @@ Where relevant, each item below notes how to handle non-interactive mode.
 
 ## Quick Wins — Prompt-only, zero execution risk
 
-These are pure text additions to existing prompt functions. Worst case: Claude ignores them or gets slightly more verbose. They cannot break execution.
+These are pure text additions to existing prompt functions. Worst case: the executing engine ignores them or gets slightly more verbose. They cannot break execution.
 
 ---
 
@@ -39,7 +39,7 @@ These are pure text additions to existing prompt functions. Worst case: Claude i
 
 Superpowers' spec-reviewer prompt explicitly warns: *"The implementer finished suspiciously quickly. Their report may be incomplete, inaccurate, or optimistic. You MUST verify everything independently."*
 
-Cloudy's `buildValidationPrompt()` has no skepticism directive, leaving the AI free to trust a confident diff summary rather than reading actual code.
+Cloudy's `buildValidationPrompt()` has no skepticism directive, leaving the reviewing engine free to trust a confident diff summary rather than reading actual code.
 
 **Implementation:** Add near the top of the prompt body:
 ```
@@ -49,7 +49,7 @@ line-by-line against what you can see in the code — not against what you would
 expect to see. If evidence is absent, the criterion is not met.
 ```
 
-**Ted's take:** Highest-ROI item in the entire list. Without this, a confident Claude summary can breeze past a broken implementation. The existing `buildValidationPrompt()` already has good structure (file sections, command results, scope check) but no skepticism directive — this fills the gap perfectly. Ship first.
+**Ted's take:** Highest-ROI item in the entire list. Without this, a confident engine summary can breeze past a broken implementation. The existing `buildValidationPrompt()` already has good structure (file sections, command results, scope check) but no skepticism directive — this fills the gap perfectly. Ship first.
 
 ---
 
@@ -71,7 +71,7 @@ ask a clarifying question NOW before writing any code.
 
 **Non-interactive note:** When `isNonInteractive` is true, append: *"If running non-interactively, make the most reasonable assumption and document it in your summary instead of asking."* This preserves autonomy.
 
-**Ted's take:** Nice in theory, but cloudy is almost always non-interactive. So this becomes "make a reasonable assumption and document it" — which is still useful for the documentation benefit. The real value is that when Claude does document assumptions, they show up in the task summary and can be caught in review. Note: `buildExecutionPrompt()` currently has no access to `isNonInteractive` — you'll need to thread it through `ExecutionPromptOptions` or just always include the non-interactive note (since that's the common case anyway).
+**Ted's take:** Nice in theory, but cloudy is almost always non-interactive. So this becomes "make a reasonable assumption and document it" — which is still useful for the documentation benefit. The real value is that when the engine does document assumptions, they show up in the task summary and can be caught in review. Note: `buildExecutionPrompt()` currently has no access to `isNonInteractive` — you'll need to thread it through `ExecutionPromptOptions` or just always include the non-interactive note (since that's the common case anyway).
 
 ---
 
@@ -79,7 +79,7 @@ ask a clarifying question NOW before writing any code.
 **File:** `src/executor/prompt-builder.ts:20` → `buildExecutionPrompt()`
 **Risk:** None
 
-Superpowers TDD and testing skills both have dedicated "Common Rationalizations" sections listing specific bad thoughts by name. Naming an anti-pattern makes it harder to act on unconsciously.
+The superpowers project's TDD and testing skills both have dedicated "Common Rationalizations" sections listing specific bad thoughts by name. Naming an anti-pattern makes it harder to act on unconsciously.
 
 **Implementation:** Add to the Instructions section:
 ```
@@ -157,7 +157,7 @@ your overall approach is correct — not just the last fix.
 
 The retry count is available on the `task` object passed to `buildRetryPrompt()`.
 
-**Ted's take:** The single most impactful change for retry success rate. Random fix-guessing is the #1 reason tasks burn all 3 retries. The "state your root cause hypothesis" instruction forces structured thinking. The escalation at attempt 3+ ("question your overall approach") is critical — without it, Claude keeps patching the same broken approach. Note: `task.retries` is already available in `buildRetryPrompt()` — just use it directly.
+**Ted's take:** The single most impactful change for retry success rate. Random fix-guessing is the #1 reason tasks burn all 3 retries. The "state your root cause hypothesis" instruction forces structured thinking. The escalation at attempt 3+ ("question your overall approach") is critical — without it, the executing engine keeps patching the same broken approach. Note: `task.retries` is already available in `buildRetryPrompt()` — just use it directly.
 
 ---
 
@@ -196,7 +196,7 @@ if (currentBranch === 'main' || currentBranch === 'master') {
 **File:** `src/core/loop-runner.ts:151` → `runLoop()`
 **Risk:** Medium — changing bail-out logic could abort runs that would have eventually converged. Use a conservative threshold and keep existing diff-change check as primary signal.
 
-Superpowers `condition-based-waiting.md` replaces fixed iteration counts with condition polling. Current stale check at `src/core/loop-runner.ts:212` uses `newDiff.trim() !== prevDiff.trim()`. If Claude touches comments or unrelated files, `madeChanges = true` even though no progress was made toward the goal.
+The superpowers project's `condition-based-waiting.md` replaces fixed iteration counts with condition polling. Current stale check at `src/core/loop-runner.ts:212` uses `newDiff.trim() !== prevDiff.trim()`. If the executing engine touches comments or unrelated files, `madeChanges = true` even though no progress was made toward the goal.
 
 **Implementation:** Track `prevFailureLineCount` alongside `prevDiff`:
 ```typescript
@@ -293,7 +293,7 @@ Initially expose as an opt-in flag (`--double-review` or `holistic.doublePass: t
 **File:** `src/core/orchestrator.ts` or `src/cli/commands/run.ts:694`
 **Risk:** Low — only activates if the file exists, zero impact on existing projects
 
-Superpowers `hooks/session-start` injects extra context into every session via `additionalContext`. Project authors use it to prime Claude with tooling notes, recent git log, environment state — anything that changes between runs.
+The superpowers project's `hooks/session-start` injects extra context into every session via `additionalContext`. Project authors use it to prime the executing engine with tooling notes, recent git log, environment state — anything that changes between runs.
 
 Cloudy loads `conventionsContent` (CLAUDE.md) per-task from disk. There is no extension point for dynamic context injection.
 
