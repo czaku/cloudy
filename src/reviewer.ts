@@ -245,7 +245,7 @@ Respond ONLY with valid JSON (no markdown wrapper):
 }
 
 /**
- * Run a holistic post-batch review using Claude.
+ * Run a holistic post-batch review using Claude. // provider-lock:allow arch-comparison
  */
 export async function runHolisticReview(
   cwd: string,

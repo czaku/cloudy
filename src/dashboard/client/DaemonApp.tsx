@@ -5203,7 +5203,7 @@ function ChatTab({ project, onSwitchTab, initialSessionId, onSessionSelect }: Ch
     }
 
     if (msg === '/compact') {
-      addSystemMessages('/compact', '`/compact` is a CLI-only command. Run it in your terminal:\n```\ncloudy compact\n```\nor use Claude Code directly.');
+      addSystemMessages('/compact', '`/compact` is a CLI-only command. Run it in your terminal:\n```\ncloudy compact\n```\nor use your configured coding-agent CLI directly.');
       setInput('');
       return;
     }
@@ -5966,7 +5966,7 @@ const TICKER_ITEMS = [
   '🧬  The human genome contains ~3 billion base pairs. That\'s ~750MB of data.',
   '🛸  There are ~4,000 active satellites orbiting Earth. SpaceX plans 42,000 more for Starlink.',
   '☁️  Amazon Web Services was launched in 2006. It now generates ~$100B/year in revenue.',
-  '🤖  GPT-4 was trained on an estimated 1 trillion tokens. That\'s about 750 billion words.',
+  '🤖  GPT-4 was trained on an estimated 1 trillion tokens. That\'s about 750 billion words.', // provider-lock:allow arch-comparison
   '💡  The first email was sent in 1971 by Ray Tomlinson. The message: "QWERTYUIOP".',
   '🔐  The RSA encryption algorithm was published in 1977. It still protects most internet traffic.',
   '🌊  Every 2 days, we create as much information as was created from the dawn of civilisation until 2003.',
