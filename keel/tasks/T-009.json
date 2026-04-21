@@ -1,0 +1,40 @@
+{
+  "id": "T-009",
+  "title": "Provider-lock cleanup — cloudy README + SUPERPOWERS proposals",
+  "description": "Child of vykean-hq/T-VHQ-092. Smallest per-repo scope: README.md (7 hits) + SUPERPOWERS_IMPROVEMENTS_PROPOSAL.md (2 hits) + SUPERPOWERS_PLANNING_PHASE_PROPOSAL.md (1 hit). Install pre-commit enforcement.",
+  "product": "cloudy",
+  "wave": "wave-4",
+  "space": "engineering",
+  "status": "todo",
+  "priority": "high",
+  "dependsOn": [],
+  "spec": null,
+  "parentId": null,
+  "dueDate": null,
+  "context": [
+    {
+      "at": "2026-04-21T12:15:00.000Z",
+      "by": "claude-opus-4-7",
+      "text": "Cross-repo parent: vykean-hq/T-VHQ-092. Sweep report: vykean-hq/PROVIDER_LOCK_SWEEP.md. Cloudy is the execution layer — it doesn't own engine selection (omnai does), so any reference to a specific engine in cloudy docs is either (a) describing the default sweech binding — move to a 'configurable via sweechProfile' note, or (b) a legacy hardcoded expectation that needs rewriting. SCOPE: README.md + 2 SUPERPOWERS proposals only — do NOT edit src/ (the audit sweep did not flag src hits for this task)."
+    }
+  ],
+  "acceptanceCriteria": [
+    "scripts/check-provider-lock.sh + scripts/install-hooks.sh copied from vykean-hq; pre-commit hook installed",
+    "`bash scripts/check-provider-lock.sh .` on this repo exits 0 on default pattern",
+    "README.md rewrite: 7 flagged hits neutralised — any 'Claude does X' becomes '<engine per sweechProfile> does X' OR inline-hatched arch-comparison when it's a genuine architectural point",
+    "SUPERPOWERS_IMPROVEMENTS_PROPOSAL.md + SUPERPOWERS_PLANNING_PHASE_PROPOSAL.md: proposal language made engine-agnostic",
+    "Historical SESSION_NOTES / HANDOFF not edited",
+    "If cloudy has its own `cloudy.yaml` or similar runtime config that hardcodes a profile name, leave it with an inline `provider-lock:allow user-config-pending-T-VHQ-095` hatch (same pattern as vykean-hq/loopy.yaml)"
+  ],
+  "quality_gates": [
+    "Zero new hardcoded providers introduced",
+    "Pre-commit hook live; negative smoke passes"
+  ],
+  "cloudy_run": null,
+  "statusHistory": [{ "status": "todo", "ts": "2026-04-21T12:15:00.000Z" }],
+  "attachments": [],
+  "stage": null,
+  "runStatus": null,
+  "stageHistory": [],
+  "recurring": null
+}
