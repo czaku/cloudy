@@ -5,7 +5,7 @@
   "product": "cloudy",
   "wave": "wave-4",
   "space": "engineering",
-  "status": "todo",
+  "status": "done",
   "priority": "medium",
   "dependsOn": [],
   "spec": null,
@@ -32,7 +32,10 @@
     "Code-reviewer subagent clean on the diff"
   ],
   "cloudy_run": null,
-  "statusHistory": [{ "status": "todo", "ts": "2026-04-21T13:30:00.000Z" }],
+  "statusHistory": [
+    { "status": "todo", "ts": "2026-04-21T13:30:00.000Z" },
+    { "status": "done", "ts": "2026-04-18T13:56:00.000Z" }
+  ],
   "attachments": [],
   "stage": null,
   "runStatus": null,
