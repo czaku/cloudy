@@ -1,0 +1,41 @@
+{
+  "id": "T-010",
+  "title": "Provider-lock cleanup — cloudy src/ remaining 3 hits (follow-up to T-009)",
+  "description": "Follow-up carve-out from T-009. The T-009 scope restricted to docs (NEVER touch src/ per safety guard), but full-repo gate AC #2 requires check-provider-lock.sh . to exit 0. Three src/ hits remain.",
+  "product": "cloudy",
+  "wave": "wave-4",
+  "space": "engineering",
+  "status": "todo",
+  "priority": "medium",
+  "dependsOn": [],
+  "spec": null,
+  "parentId": null,
+  "dueDate": null,
+  "context": [
+    {
+      "at": "2026-04-21T13:30:00.000Z",
+      "by": "claude-opus-4-7",
+      "text": "Remaining hits after T-009 shipped: src/reviewer.ts:248 JSDoc 'using Claude.', src/dashboard/client/DaemonApp.tsx:5206 user-facing error string 'use Claude Code directly', src/dashboard/client/DaemonApp.tsx:5969 GPT-4 trivia Easter egg. Each needs either an inline provider-lock:allow hatch (when legitimately arch-comparison) or a rewrite to engine-agnostic wording (when prescriptive). User-facing error text at :5206 should be rewritten, not hatched."
+    }
+  ],
+  "acceptanceCriteria": [
+    "src/reviewer.ts:248 — review JSDoc context; if describing one engine family's reviewing style, hatch as arch-comparison; if prescriptive, rewrite",
+    "src/dashboard/client/DaemonApp.tsx:5206 — user-facing error text REWRITTEN to engine-agnostic language (e.g. 'Use a configured coding-agent CLI directly')",
+    "src/dashboard/client/DaemonApp.tsx:5969 — Easter egg: if it's trivia/fun content referencing a model name, hatch as arch-comparison; if it prescribes routing, rewrite",
+    "`bash scripts/check-provider-lock.sh .` exits 0 (AC #2 from T-009 now fully met)",
+    "Full typecheck + test suite green after edits",
+    "Commit + push on main with pre-commit hook active"
+  ],
+  "quality_gates": [
+    "User-facing error strings rewritten (not hatched) — Luke could see these",
+    "No --no-verify",
+    "Code-reviewer subagent clean on the diff"
+  ],
+  "cloudy_run": null,
+  "statusHistory": [{ "status": "todo", "ts": "2026-04-21T13:30:00.000Z" }],
+  "attachments": [],
+  "stage": null,
+  "runStatus": null,
+  "stageHistory": [],
+  "recurring": null
+}
