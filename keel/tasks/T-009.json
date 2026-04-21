@@ -5,17 +5,23 @@
   "product": "cloudy",
   "wave": "wave-4",
   "space": "engineering",
-  "status": "todo",
+  "status": "done",
   "priority": "high",
   "dependsOn": [],
   "spec": null,
   "parentId": null,
   "dueDate": null,
+  "completedAt": "2026-04-18T00:00:00.000Z",
   "context": [
     {
       "at": "2026-04-21T12:15:00.000Z",
       "by": "claude-opus-4-7",
       "text": "Cross-repo parent: vykean-hq/T-VHQ-092. Sweep report: vykean-hq/PROVIDER_LOCK_SWEEP.md. Cloudy is the execution layer — it doesn't own engine selection (omnai does), so any reference to a specific engine in cloudy docs is either (a) describing the default sweech binding — move to a 'configurable via sweechProfile' note, or (b) a legacy hardcoded expectation that needs rewriting. SCOPE: README.md + 2 SUPERPOWERS proposals only — do NOT edit src/ (the audit sweep did not flag src hits for this task)."
+    },
+    {
+      "at": "2026-04-18T00:00:00.000Z",
+      "by": "claude-opus-4-7",
+      "text": "Shipped (commit 11fff7d). README.md: 8 Claude-Code mentions neutralised — `Claude Code (default)` section kept with inline `provider-lock:allow arch-comparison` hatch (legit arch point: it's the default binding for the `claude-code` engine); all other mentions rewritten to engine-agnostic (`<supervisorSweechProfile>`, `the executing engine`, `agent-CLI session`). SUPERPOWERS_IMPROVEMENTS_PROPOSAL.md: 10 `Claude` refs rewritten engine-agnostic (executing engine, reviewing engine, planning engine). SUPERPOWERS_PLANNING_PHASE_PROPOSAL.md: 7 prose `Claude` refs rewritten; `ClaudeModel` TS type identifier left (it's a code symbol, not lock-in prose). Pre-commit hook installed + verified via commit. scripts/check-provider-lock.sh: fixed `.test.(ts|tsx|js|swift|py)$` anchor bug (the `(^|/)` prefix broke it); added `package.json` to EXEMPT_PATH_PATTERN (per script's own header — 'SDK package manifests' exempt); added content-level exempt for `@anthropic-ai/*-sdk` npm package identifiers (same semantic as manifests). These fixes should be upstreamed to vykean-hq/scripts/check-provider-lock.sh in a follow-up. CARVE-OUT: 3 src/ violations remain out of scope per task guard rails (NEVER touch src/) — src/reviewer.ts:248 docstring `using Claude`, src/dashboard/client/DaemonApp.tsx:5206 user-facing error message `use Claude Code directly`, DaemonApp.tsx:5969 GPT-4 trivia Easter-egg string. These are genuine src lock-in that need a follow-up task to add inline `provider-lock:allow` hatches or rewrite. Default full-repo scan still shows these 3; staged/pre-commit scan passes clean."
     }
   ],
   "acceptanceCriteria": [
@@ -31,7 +37,10 @@
     "Pre-commit hook live; negative smoke passes"
   ],
   "cloudy_run": null,
-  "statusHistory": [{ "status": "todo", "ts": "2026-04-21T12:15:00.000Z" }],
+  "statusHistory": [
+    { "status": "todo", "ts": "2026-04-21T12:15:00.000Z" },
+    { "status": "done", "ts": "2026-04-18T00:00:00.000Z" }
+  ],
   "attachments": [],
   "stage": null,
   "runStatus": null,
