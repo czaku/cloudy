@@ -2,14 +2,19 @@
   "version": "v1",
   "packages": {
     "@vykeai/fed": {
-      "signature": "71f33305bf63052927c5013e1da692e5",
+      "signature": "a4aced54b6f0d81c764a4e36eeecaa82",
       "file": true,
       "replaced": "github:vykeai/fed"
     },
     "omnai": {
-      "signature": "98a47554adaf93e357a42263fe0b0571",
+      "signature": "f5c1480d0eabc6096b00593a50d8b42d",
       "file": true,
       "replaced": "file:../omnai/packages/core"
+    },
+    "@czaku/lure": {
+      "signature": "f8a1eb4dd28b669cb4c24a35858d8ba3",
+      "file": true,
+      "replaced": "github:vykeai/lure"
     }
   }
 }
