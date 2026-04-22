@@ -39,7 +39,7 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-const ARTIFACT_PATH_RE = /(?:~\/[^\s,;:'"`]+|(?:\/[^\s,;:'"`]+)+|(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.[A-Za-z0-9]{2,8}|[A-Za-z0-9_.-]+\.(?:png|jpg|jpeg|webp|gif|pdf|json|md|txt|html|csv|xml|svg))/g;
+const ARTIFACT_PATH_RE = /(?:~\/[^\s,;:'"`]+|(?<![A-Za-z0-9_.])(?:\/[^\s,;:'"`]+)+|(?:[A-Za-z0-9_.-]+\/)+[A-Za-z0-9_.-]+\.[A-Za-z0-9]{2,8}|[A-Za-z0-9_.-]+\.(?:png|jpg|jpeg|webp|gif|pdf|json|md|txt|html|csv|xml|svg))/g;
 
 function normalizeRepoAbsolutePath(value: string, cwd: string): string {
   if (!value.includes(cwd)) return value;
