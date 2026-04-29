@@ -3,7 +3,7 @@ import path from 'node:path';
 import { Command } from 'commander';
 import * as p from '@clack/prompts';
 import { loadConfig } from '../../config/config.js';
-import { selectViaDaemon } from 'omnai';
+import { selectViaDaemon } from '@sweech/engine';
 import { createStreamFormatter } from '../../utils/stream-formatter.js';
 import type { ApprovalRequest, ApprovalAction } from '../../core/approval.js';
 import { mergeModelConfig, parseModelFlag } from '../../config/model-config.js';

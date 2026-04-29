@@ -45,7 +45,7 @@ vi.mock('../../src/core/state.js', () => ({
   updatePlan: vi.fn(),
 }));
 
-vi.mock('omnai', () => ({
+vi.mock('@sweech/engine', () => ({
   selectViaDaemon: mockSelectViaDaemon,
 }));
 

@@ -1,6 +1,6 @@
 import type { ClaudeModel, ClaudeRunResult, Engine, Provider } from '../core/types.js';
 import { runModel } from './model-runner.js';
-import type { ThinkingLevel } from 'omnai';
+import type { ThinkingLevel } from '@sweech/engine';
 import { resolveModelId } from '../config/model-config.js';
 
 export interface EngineRunOptions {

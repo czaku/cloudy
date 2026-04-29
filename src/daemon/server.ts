@@ -1,6 +1,6 @@
 import http from 'node:http';
 import { registerTool, discoverTools as fedDiscoverTools, type Peer } from '@vykeai/fed';
-import { selectViaDaemon, type EngineId as OmnaiEngineId, type Provider as OmnaiProvider } from 'omnai';
+import { selectViaDaemon, type EngineId, type Provider } from '@sweech/engine';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import { execFile } from 'node:child_process';
@@ -441,8 +441,8 @@ function buildRunRuntimeArgs(runtime: RunRuntimeRouteFields): string[] {
 async function preflightRuntime(runtime: RuntimePreflight): Promise<void> {
   if (!runtime.engine && !runtime.provider) return;
   await selectViaDaemon({
-    engine: runtime.engine as OmnaiEngineId | undefined,
-    provider: runtime.provider as OmnaiProvider | undefined,
+    engine: runtime.engine as EngineId | undefined,
+    provider: runtime.provider as Provider | undefined,
     account: runtime.account,
     taskType: runtime.taskType,
   });

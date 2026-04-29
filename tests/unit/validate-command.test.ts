@@ -32,7 +32,7 @@ vi.mock('../../src/utils/logger.js', () => ({
   initLogger: mockInitLogger,
 }));
 
-vi.mock('omnai', () => ({
+vi.mock('@sweech/engine', () => ({
   selectViaDaemon: mockSelectViaDaemon,
 }));
 

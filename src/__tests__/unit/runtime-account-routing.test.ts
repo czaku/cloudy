@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('omnai', () => ({
+vi.mock('@sweech/engine', () => ({
   selectViaDaemon: async () => ({ engine: 'claude-code' }),
   OmnaiClient: class {
     async getEstate() {

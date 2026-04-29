@@ -1,13 +1,13 @@
 export type {
   ModelRunOptions,
   AbstractModelRunOptions,
-  OmnaiRunOptions,
+  SweechRunOptions,
 } from './claude-runner.js';
 
 export {
   runModel,
   runPhaseModel,
-  runOmnai,
+  runSweech,
   runAbstractModel,
   runClaude,
 } from './claude-runner.js';

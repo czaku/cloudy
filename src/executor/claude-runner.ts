@@ -1,4 +1,4 @@
-import { selectViaDaemon, type RunOptions, type FnHook, type ThinkingLevel } from 'omnai';
+import { selectViaDaemon, type RunOptions, type FnHook, type ThinkingLevel } from '@sweech/engine';
 import path from 'node:path';
 import type { ClaudeModel, ClaudeRunResult, Engine, Provider, TokenUsage } from '../core/types.js';
 import { resolveModelId } from '../config/model-config.js';
@@ -48,7 +48,7 @@ export interface AbstractModelRunOptions extends ClaudeRunOptions {
   taskType?: 'coding' | 'analysis' | 'planning' | 'review' | 'chat' | 'research';
 }
 
-export interface OmnaiRunOptions {
+export interface SweechRunOptions {
   prompt: string;
   cwd: string;
   engine?: Engine;
@@ -104,7 +104,7 @@ async function resolveRuntimeAccount(options: {
 
   if (options.account && !resolvedConfigDir) {
     try {
-      const { OmnaiClient, loadEstate } = await import('omnai');
+      const { OmnaiClient, loadEstate } = await import('@sweech/engine');
       const client = new OmnaiClient();
       const estate = await client.getEstate().catch(() => loadEstate());
       const account = estate.accounts?.[options.account];
@@ -139,7 +139,7 @@ async function resolveRuntimeAccount(options: {
   };
 }
 
-export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResult> {
+export async function runSweech(options: SweechRunOptions): Promise<ClaudeRunResult> {
   const {
     prompt,
     cwd,
@@ -397,7 +397,7 @@ export async function runOmnai(options: OmnaiRunOptions): Promise<ClaudeRunResul
   };
 }
 
-export const runModel = runOmnai;
+export const runModel = runSweech;
 export { rewritePromptForWorktree };
 
 export async function runClaude(
@@ -415,7 +415,7 @@ export async function runAbstractModel(
       ? resolveModelId(options.model)
       : undefined);
 
-  return runOmnai({
+  return runSweech({
     prompt: options.prompt,
     cwd: options.cwd,
     engine: options.engine ?? 'claude-code',

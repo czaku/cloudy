@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('omnai', () => ({
+vi.mock('@sweech/engine', () => ({
   selectViaDaemon: vi.fn(),
 }));
 
-import { selectViaDaemon } from 'omnai';
-import { rewritePromptForWorktree, runAbstractModel, runOmnai } from '../../src/executor/claude-runner.js';
+import { selectViaDaemon } from '@sweech/engine';
+import { rewritePromptForWorktree, runAbstractModel, runSweech } from '../../src/executor/claude-runner.js';
 
 const mockSelectViaDaemon = vi.mocked(selectViaDaemon);
 
@@ -75,7 +75,7 @@ describe('abstract model runner', () => {
     });
     mockSelectViaDaemon.mockResolvedValueOnce(makeRunner('claude-code', run as any) as any);
 
-    const result = await runOmnai({
+    const result = await runSweech({
       prompt: 'do work',
       cwd: '/tmp',
       engine: 'claude-code',
@@ -119,7 +119,7 @@ describe('abstract model runner', () => {
     });
     mockSelectViaDaemon.mockResolvedValueOnce(makeRunner('claude-code', run as any) as any);
 
-    const result = await runOmnai({
+    const result = await runSweech({
       prompt: 'do work',
       cwd: '/tmp/project',
       engine: 'claude-code',
@@ -147,7 +147,7 @@ describe('abstract model runner', () => {
     });
     mockSelectViaDaemon.mockResolvedValueOnce(makeRunner('codex', run as any) as any);
 
-    const result = await runOmnai({
+    const result = await runSweech({
       prompt: 'do work',
       cwd: '/tmp',
       engine: 'codex',
@@ -178,7 +178,7 @@ describe('abstract model runner', () => {
     });
     mockSelectViaDaemon.mockResolvedValueOnce(makeRunner('codex', run as any) as any);
 
-    const result = await runOmnai({
+    const result = await runSweech({
       prompt: 'Run `cd /tmp/project && test -f /tmp/project/SMOKE_RESULT.md`.',
       cwd: '/tmp/project/.cloudy/worktrees/task-1',
       engine: 'codex',

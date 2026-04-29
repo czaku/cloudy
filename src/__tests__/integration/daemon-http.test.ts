@@ -62,7 +62,7 @@ vi.mock('@vykeai/fed', () => ({
   discoverTools: vi.fn(() => stopBrowsing),
 }));
 
-vi.mock('omnai', () => ({
+vi.mock('@sweech/engine', () => ({
   selectViaDaemon: selectViaDaemonMock,
 }));
 

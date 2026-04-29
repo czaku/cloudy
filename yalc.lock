@@ -15,6 +15,10 @@
       "signature": "f8a1eb4dd28b669cb4c24a35858d8ba3",
       "file": true,
       "replaced": "github:vykeai/lure"
+    },
+    "@sweech/engine": {
+      "signature": "bc861907013cbddfaf09226b4cc6e251",
+      "file": true
     }
   }
 }

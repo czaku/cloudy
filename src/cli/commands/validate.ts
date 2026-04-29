@@ -5,7 +5,7 @@ import { validateTask, formatValidationErrors } from '../../validator/validator.
 import { initLogger } from '../../utils/logger.js';
 import { c, bold, dim, green, red, yellow } from '../../utils/colors.js';
 import { getPhaseRuntime } from '../../config/phase-runtime.js';
-import { selectViaDaemon } from 'omnai';
+import { selectViaDaemon } from '@sweech/engine';
 
 export const validateCommand = new Command('check')
   .description('Re-run acceptance criteria against already-completed work')
