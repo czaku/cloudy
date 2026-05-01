@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@sweech/engine', () => ({
   selectViaDaemon: async () => ({ engine: 'claude-code' }),
-  OmnaiClient: class {
+  SweechClient: class {
     async getEstate() {
       return {
         accounts: {

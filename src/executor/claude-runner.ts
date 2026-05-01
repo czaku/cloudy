@@ -104,8 +104,8 @@ async function resolveRuntimeAccount(options: {
 
   if (options.account && !resolvedConfigDir) {
     try {
-      const { OmnaiClient, loadEstate } = await import('@sweech/engine');
-      const client = new OmnaiClient();
+      const { SweechClient, loadEstate } = await import('@sweech/engine');
+      const client = new SweechClient();
       const estate = await client.getEstate().catch(() => loadEstate());
       const account = estate.accounts?.[options.account];
       if (account) {
