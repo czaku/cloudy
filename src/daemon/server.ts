@@ -17,15 +17,7 @@ import { readJson, ensureDir, writeJson } from '../utils/fs.js';
 import { applyKeelTaskRuntime, loadKeelTaskRuntime } from '../integrations/keel-task-runtime.js';
 
 // ── Fed event client (lazy — cloudy works fine without fed) ──────────
-
-const FED_URL = 'http://localhost:7840';
-function fedPublish(type: string, data: Record<string, unknown>): void {
-  fetch(`${FED_URL}/fed/events`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type, source: 'cloudy', data }),
-  }).catch(() => {});
-}
+// (lazy fedPublish is defined further down, after readFedConfig)
 
 // ── Stuck task cleanup ────────────────────────────────────────────────
 
@@ -1188,6 +1180,31 @@ async function readFedConfig(): Promise<FedConfig | null> {
   } catch {
     return null;
   }
+}
+
+const FALLBACK_FED_PORT = 7840;
+
+async function readFedPort(): Promise<number> {
+  const cfg = await readFedConfig();
+  const fedPort = cfg?.tools?.['fed']?.dash;
+  return typeof fedPort === 'number' && fedPort > 0 ? fedPort : FALLBACK_FED_PORT;
+}
+
+let _fedPort: number | null = null;
+async function getFedUrl(): Promise<string> {
+  if (_fedPort === null) {
+    _fedPort = await readFedPort();
+  }
+  return `http://localhost:${_fedPort}`;
+}
+
+async function fedPublish(type: string, data: Record<string, unknown>): Promise<void> {
+  const fedUrl = await getFedUrl();
+  await fetch(`${fedUrl}/fed/events`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, source: 'cloudy', data }),
+  }).catch(() => {});
 }
 
 // ── Federation peer registry ──────────────────────────────────────────
