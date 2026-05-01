@@ -765,7 +765,7 @@ function spawnCloudyProcess(
           const jsonStr = line.slice(line.indexOf('CLOUDY_TASK_VALIDATED:') + 'CLOUDY_TASK_VALIDATED:'.length).trim();
           try {
             const v = JSON.parse(jsonStr) as { taskId: string; title: string };
-            fedPublish('cloudy.task.validated', { runId: processId, project: projectId, taskId: v.taskId, title: v.title });
+            fedPublish('cloudy.task.validated', { runId: processId, project: projectId, taskId: v.taskId, title: v.title }).catch(() => {});
           } catch { /* malformed — ignore */ }
           continue;
         }
@@ -818,7 +818,7 @@ function spawnCloudyProcess(
       // For run/pipeline: clean up any in_progress tasks left dangling by a crash
       cleanupStuckTasks(projectPath).then((stuckCount) => {
         broadcastSse({ type: code === 0 ? 'run_completed_daemon' : 'run_failed_daemon', projectId, processId, code });
-        fedPublish(code === 0 ? 'cloudy.run.completed' : 'cloudy.run.failed', { runId: processId, project: projectId, exitCode: code });
+        fedPublish(code === 0 ? 'cloudy.run.completed' : 'cloudy.run.failed', { runId: processId, project: projectId, exitCode: code }).catch(() => {});
         if (stuckCount > 0) {
           broadcastSse({ type: 'tasks_stuck', projectId, processId, count: stuckCount });
         }
@@ -1727,7 +1727,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         ]);
         if (body.planIds?.length) proc.planIds = body.planIds;
         broadcastSse({ type: 'run_started', projectId });
-        fedPublish('cloudy.run.started', { runId: proc.id, project: projectId });
+        fedPublish('cloudy.run.started', { runId: proc.id, project: projectId }).catch(() => {});
         sendJson(res, 200, { ok: true, started: true });
       } catch (err) {
         sendJson(res, 500, { error: String(err) });
@@ -2023,7 +2023,7 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
           ...extraArgs,
         ]);
         broadcastSse({ type: 'run_started', projectId });
-        fedPublish('cloudy.run.started', { runId: proc.id, project: projectId });
+        fedPublish('cloudy.run.started', { runId: proc.id, project: projectId }).catch(() => {});
         sendJson(res, 200, { ok: true });
       } catch (err) {
         sendJson(res, 500, { error: String(err) });
