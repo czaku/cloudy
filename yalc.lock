@@ -2,7 +2,7 @@
   "version": "v1",
   "packages": {
     "@vykeai/fed": {
-      "signature": "a4aced54b6f0d81c764a4e36eeecaa82",
+      "signature": "ece896505edf36c3d85af961d05a9375",
       "file": true,
       "replaced": "github:vykeai/fed"
     },
@@ -17,7 +17,7 @@
       "replaced": "github:vykeai/lure"
     },
     "@sweech/engine": {
-      "signature": "bc861907013cbddfaf09226b4cc6e251",
+      "signature": "b0bdd4ab0946abdcc39ee0868784e448",
       "file": true
     }
   }
